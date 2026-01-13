@@ -85,8 +85,8 @@
     }
   ],
   "apis": {
-    "aviationstack": "TU_CLAVE_AVIATIONSTACK_AQUI",
-    "serpapi": "TU_CLAVE_SERPAPI_AQUI"
+    "aviationstack": "cf33c5341fad0bd359d8c41d6902ce1c",
+    "serpapi": "KGGvesNWaiWBew83i2MD2C7w"
   },
   "alert_min": 500,
   "business_class_thresholds": {
@@ -132,8 +132,22 @@
     "2": "Máximo 2 escalas",
     "any": "Cualquier opción (directos o con escalas)"
   },
+  "_api_info": {
+    "aviationstack": {
+      "plan": "Free tier",
+      "limite_mensual": "100 requests/month",
+      "nota": "Clave API real activa - Usar con moderación"
+    },
+    "serpapi": {
+      "plan": "Free tier",
+      "limite_mensual": "100 searches/month",
+      "nota": "Clave API real activa - Usar con moderación"
+    },
+    "warning": "⚠️ Las APIs gratuitas tienen límites estrictos. El bot usará ML estimates cuando se agoten."
+  },
   "_notes": {
     "business_pricing": "Los precios de Business Class son 3-5x más que Economy. Un chollo en Business es cuando está a menos del 60% del precio normal.",
-    "customization": "Puedes ajustar los umbrales en 'business_class_thresholds' según tus preferencias y presupuesto."
+    "customization": "Puedes ajustar los umbrales en 'business_class_thresholds' según tus preferencias y presupuesto.",
+    "api_usage": "Con las APIs reales configuradas, el bot intentará primero AviationStack, luego SerpAPI, y finalmente ML estimates como fallback."
   }
 }
