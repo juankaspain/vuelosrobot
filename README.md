@@ -1,15 +1,75 @@
-# 🏆 Cazador Supremo v12.0 - Enterprise Edition
+# 🏆 Cazador Supremo v12.1 - Enterprise Edition
 
 ![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-production-success)
-![Version](https://img.shields.io/badge/version-12.0.2-orange)
+![Version](https://img.shields.io/badge/version-12.1.1-orange)
 
 Sistema **profesional de nivel empresarial** para monitorizar precios de vuelos con arquitectura POO, integración SerpAPI Google Flights, Machine Learning avanzado, webhooks para producción, y alertas inteligentes en tiempo real vía Telegram.
 
 ---
 
-## 📝 Release Notes
+## 📋 Release Notes
+
+### 🔧 v12.1.1 - Testing Tools (2026-01-13)
+
+**Nuevas Funcionalidades:**
+
+- ✅ **NUEVO: Comando /clearcache**
+  - Limpia el caché sin necesidad de reiniciar el bot
+  - Muestra estadísticas antes de limpiar (items, hit rate)
+  - Fuerza llamadas reales a APIs en el siguiente /scan
+  - Útil para testing y desarrollo de integraciones
+
+**Por qué es importante:**
+- El caché TTL guarda precios por 5 minutos
+- Durante testing, esto impide ver las llamadas reales a SerpAPI
+- Con `/clearcache` puedes limpiar el caché y forzar nuevas consultas API
+
+**Uso:**
+```
+/clearcache  # Limpia el caché
+/scan        # Ahora intenta APIs reales (si caché vacío)
+```
+
+---
+
+### ✨ v12.1.0 - Real API Integration (2026-01-13)
+
+**Cambios Mayores:**
+
+- ⭐ **INTEGRACIÓN REAL SERPAPI**
+  - Implementada llamada HTTP real a `https://serpapi.com/search`
+  - Parámetros configurados para Google Flights (`engine=google_flights`)
+  - Timeout de 15 segundos para evitar bloqueos
+  - Extracción inteligente de precios desde JSON
+
+- ⭐ **EXTRACCIÓN DE PRECIOS**
+  - Método `_extract_price_from_serpapi()` con múltiples estrategias:
+    1. Intenta `best_flights[0].price` primero
+    2. Fallback a `other_flights[0].price`
+    3. Último recurso: `price_insights.lowest_price`
+  - Manejo robusto de errores JSON
+
+- ⭐ **MÉTRICAS DE RENDIMIENTO**
+  - Tiempo de respuesta por llamada API
+  - Tasa de éxito/fallo en tiempo real
+  - Rate limiting preciso (100 llamadas/mes tier free)
+  - Logs detallados con duración de cada request
+
+**Flujo de Funcionamiento:**
+```
+1. Usuario: /scan
+2. Bot verifica caché
+   ├─ Si hay caché válido → Usa caché
+   └─ Si NO hay caché:
+      ├─ Intenta SerpAPI (llamada HTTP real)
+      │  ├─ ✅ Éxito → Precio real (95% confianza)
+      │  └─ ❌ Fallo → ML Predictor (85% confianza)
+      └─ Guarda en caché (5min TTL)
+```
+
+---
 
 ### 🐛 v12.0.2 - Hotfix (2026-01-13)
 
@@ -25,20 +85,11 @@ Sistema **profesional de nivel empresarial** para monitorizar precios de vuelos 
   - Eliminados warnings `Task was destroyed but it is pending`
   - Shutdown limpio con `asyncio.gather(..., return_exceptions=True)`
 
-- ✅ **Mejoras en Estabilidad**
-  - Manejo robusto de `callback_query.message` vs `effective_message`
-  - Logging mejorado para debugging de callbacks
-  - Gestión de excepciones en handlers
-
 **Cómo actualizar:**
 ```bash
 git pull origin main
 python cazador_supremo_v12.0_enterprise.py
 ```
-
-### ✨ v12.0.1 - Patch (2026-01-13)
-- Heartbeat ahora es opcional (no requiere job-queue module)
-- Compatible con python-telegram-bot sin [job-queue] extras
 
 ---
 
@@ -46,7 +97,7 @@ python cazador_supremo_v12.0_enterprise.py
 
 ### 🚀 SerpAPI Google Flights Integration
 - **Precios reales** de Google Flights con rate limiting (100 calls/día)
-- **Fallback inteligente** de 3 niveles: SerpAPI → AviationStack → ML-Enhanced
+- **Fallback inteligente** de 2 niveles: SerpAPI → ML-Enhanced
 - **Rate limiter** con cooldown automático para optimizar quotas
 - **Métricas por fuente**: Success rate, avg time, call count
 - **Circuit breaker** con half-open state para recuperación automática
@@ -67,13 +118,12 @@ python cazador_supremo_v12.0_enterprise.py
 
 ### 🔔 Webhooks para Producción
 - **Soporte webhooks** para despliegues en la nube (Heroku, Railway, etc.)
-- **Heartbeat monitoring**: /health endpoint para contenedores
 - **Health checks**: Monitorización por componente (APIs, Telegram, CSV)
 - **Proactive degradation alerts**: Avisos cuando una API está caída
 - **Ready for scale**: Preparado para entornos de producción
 
 ### 📊 Analytics & Monitoring
-- **Dashboard /metrics**: Estadísticas completas por fuente de datos
+- **Dashboard /status**: Estadísticas completas por fuente de datos
 - **Cache metrics**: Hit rate, miss rate, evictions
 - **API metrics**: Éxito, fallo, tiempos de respuesta por fuente
 - **Health status**: Verde/Amarillo/Rojo por componente
@@ -83,43 +133,57 @@ python cazador_supremo_v12.0_enterprise.py
 
 ## 🐛 Troubleshooting
 
+### Error: "Using cached price" - No veo llamadas a APIs
+
+**Causa:** El caché TTL tiene precios guardados (5 minutos de validez).
+
+**Solución:**
+```bash
+# Opción 1: Limpiar caché desde Telegram
+/clearcache
+/scan  # Ahora intenta APIs reales
+
+# Opción 2: Reiniciar bot (limpia caché automáticamente)
+Ctrl+C
+python cazador_supremo_v12.0_enterprise.py
+```
+
+### Error: Circuit Breaker OPEN
+
+**Causa:** 3 fallos consecutivos en SerpAPI activan el circuit breaker.
+
+**Verificar:**
+1. ¿Tienes `serpapi_key` configurada en `config.json`?
+2. ¿La clave es válida? (verifica en https://serpapi.com/manage-api-key)
+3. ¿Has alcanzado el límite de 100 llamadas/mes?
+
+**Solución:**
+```json
+// config.json
+{
+  "apis": {
+    "serpapi_key": "TU_CLAVE_REAL_AQUI"
+  }
+}
+```
+
 ### Error: AttributeError 'NoneType' object has no attribute 'reply_text'
 
 **Causa:** Versión anterior a v12.0.2 con bug en manejo de callbacks.
 
 **Solución:**
 ```bash
-git pull origin main  # Actualiza a v12.0.2+
+git pull origin main  # Actualiza a v12.1.1+
 python cazador_supremo_v12.0_enterprise.py
 ```
 
-### Error: Task was destroyed but it is pending
-
-**Causa:** Shutdown incorrecto de tareas async (corregido en v12.0.2).
-
-**Solución:** Actualiza a v12.0.2. El shutdown ahora cancela tareas apropiadamente.
-
-### Error: CSV Tokenizing (Expected 5 fields, saw 7)
-
-**Causa:** CSV corrupto por datos con comas sin escapar.
-
-**Solución automática:**
-```bash
-python fix_csv.py  # Limpia el CSV
-# O simplemente elimina el archivo:
-del deals_history.csv  # Windows
-rm deals_history.csv   # Linux/Mac
-```
-
-El bot recreará el CSV automáticamente con la estructura correcta.
-
 ---
 
-## 📊 Comparativa v11.1 vs v12.0
+## 📊 Comparativa v11.1 vs v12.1
 
-| Característica | v11.1 | v12.0 | Mejora |
+| Característica | v11.1 | v12.1 | Mejora |
 |----------------|-------|-------|--------|
-| Fuentes de Datos | AviationStack + ML Básico | SerpAPI + AviationStack + ML Enhanced | +50% Precisión |
+| Fuentes de Datos | AviationStack + ML Básico | SerpAPI Real + ML Enhanced | +50% Precisión |
 | Confidence Score | No | Sí (0-100%) | ✅ Nuevo |
 | Circuit Breaker | No | Sí (3-state) | ✅ Nuevo |
 | Inline Keyboards | No | Sí | ✅ Nuevo |
@@ -127,7 +191,7 @@ El bot recreará el CSV automáticamente con la estructura correcta.
 | Health Monitoring | No | Sí | ✅ Nuevo |
 | Rate Limiting | No | Sí | ✅ Nuevo |
 | Colorized Output | No | Sí | ✅ Nuevo |
-| Typing Indicators | No | Sí | ✅ Nuevo |
+| /clearcache | No | Sí | ✅ Nuevo |
 | Métricas por API | No | Sí | ✅ Nuevo |
 | ML Algorithm | Básico | DecisionTree Enhanced | +40% Accuracy |
 
@@ -191,6 +255,7 @@ python cazador_supremo_v12.0_enterprise.py
 |---------|-------------|
 | `/start` | Inicia el bot y muestra menú principal |
 | `/scan` | Escanea todas las rutas configuradas |
+| `/clearcache` | **NUEVO**: Limpia caché y fuerza APIs reales |
 | `/status` | Muestra estado del sistema (cache, APIs, salud) |
 | `/help` | Ayuda detallada |
 
@@ -205,23 +270,22 @@ python cazador_supremo_v12.0_enterprise.py
 ## 🏛️ Arquitectura
 
 ```
-Cazador Supremo v12.0 Enterprise
+Cazador Supremo v12.1 Enterprise
 │
 ├── 🤖 TelegramBotManager
-│   ├── Command Handlers (/start, /scan, /status, /help)
+│   ├── Command Handlers (/start, /scan, /clearcache, /status, /help)
 │   ├── Callback Handlers (inline keyboards)
 │   └── Webhook/Polling Support
 │
 ├── 🎯 FlightScanner
-│   ├── SerpAPI Integration (rate-limited)
-│   ├── AviationStack Fallback
+│   ├── SerpAPI Real Integration (HTTP requests)
 │   ├── ML Smart Predictor (confidence scoring)
 │   └── Parallel Scanning (ThreadPoolExecutor)
 │
 ├── 🛡️ Resilience Layer
 │   ├── Circuit Breaker (3-state)
 │   ├── Retry with Exponential Backoff
-│   ├── TTL Cache (5min default)
+│   ├── TTL Cache (5min default) + /clearcache
 │   └── Rate Limiter
 │
 ├── 📊 Monitoring
@@ -246,11 +310,6 @@ pandas>=2.0.0
 requests>=2.28.0
 feedparser>=6.0.0
 colorama>=0.4.6
-```
-
-**Opcional:**
-```
-python-telegram-bot[job-queue]  # Para heartbeat monitoring
 ```
 
 ---
@@ -283,7 +342,7 @@ railway up
 
 ---
 
-## 📝 Licencia
+## 📋 Licencia
 
 MIT License - Ver `LICENSE` para detalles.
 
@@ -301,7 +360,6 @@ MIT License - Ver `LICENSE` para detalles.
 
 - [SerpAPI Google Flights](https://serpapi.com/google-flights-api)
 - [python-telegram-bot Docs](https://docs.python-telegram-bot.org/)
-- [AviationStack API](https://aviationstack.com/)
 - [Telegram Bot API](https://core.telegram.org/bots/api)
 
 ---
