@@ -40,24 +40,51 @@ def safe_print(text):
     """Imprime texto manejando errores de encoding"""
     try:
         print(text)
+        sys.stdout.flush()  # Forzar escritura inmediata
     except UnicodeEncodeError:
         # Fallback sin emojis
         print(text.encode('ascii', 'ignore').decode('ascii'))
+        sys.stdout.flush()
+
+def print_header(title, char="="):
+    """Imprime un encabezado profesional"""
+    width = 70
+    safe_print(f"\n{char * width}")
+    safe_print(f"{title.center(width)}")
+    safe_print(f"{char * width}\n")
+
+def print_section(title):
+    """Imprime una sección con formato"""
+    safe_print(f"\n{'─' * 70}")
+    safe_print(f"📍 {title}")
+    safe_print(f"{'─' * 70}\n")
+
+def print_status(emoji, message, status="INFO"):
+    """Imprime un mensaje de estado con formato"""
+    timestamp = datetime.now().strftime('%H:%M:%S')
+    safe_print(f"[{timestamp}] {emoji} {message}")
+
+def print_result(label, value, emoji=""):
+    """Imprime un resultado con formato"""
+    safe_print(f"   {emoji} {label}: {value}")
 
 # Cargar configuración
 def load_config(config_file='config.json'):
     """Carga la configuración desde archivo JSON"""
+    print_status("📂", "Cargando archivo de configuración...", "INFO")
     try:
         with open(config_file, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            config = json.load(f)
+        print_status("✅", f"Configuración cargada correctamente desde {config_file}", "SUCCESS")
+        return config
     except FileNotFoundError:
         logging.error(f"Archivo {config_file} no encontrado")
-        safe_print(f"❌ ERROR: No se encontró {config_file}")
+        print_status("❌", f"ERROR: No se encontró {config_file}", "ERROR")
         safe_print("📝 Crea el archivo config.json con tu configuración.")
         raise
     except json.JSONDecodeError:
         logging.error(f"Error al parsear {config_file}")
-        safe_print(f"❌ ERROR: {config_file} tiene formato JSON inválido")
+        print_status("❌", f"ERROR: {config_file} tiene formato JSON inválido", "ERROR")
         raise
 
 CONFIG = load_config()
@@ -69,39 +96,60 @@ ALERT_MIN = CONFIG.get('alert_min', 500)
 async def supreme_scan_batch():
     """Escanea múltiples vuelos en paralelo usando APIs reales"""
     results = []
+    print_section("ESCANEO BATCH DE VUELOS")
+    print_status("🚀", f"Iniciando escaneo de {len(FLIGHTS)} vuelos en paralelo...")
     logging.info(f"Iniciando scan batch de {len(FLIGHTS)} vuelos")
     
+    print_status("⚙️", "Configurando ThreadPoolExecutor con 20 workers...")
     with ThreadPoolExecutor(max_workers=20) as executor:
+        print_status("📡", "Enviando peticiones a las APIs...")
         futures = [executor.submit(api_price, f['origin'], f['dest'], f['name']) for f in FLIGHTS]
-        results = [f.result() for f in futures]
+        
+        completed = 0
+        for future in futures:
+            result = future.result()
+            completed += 1
+            print_status("✓", f"Procesado [{completed}/{len(FLIGHTS)}]: {result['route']} - €{result['price']:.0f} ({result['source']})")
+            results.append(result)
     
+    print_status("📊", "Procesando resultados y generando DataFrame...")
     df = pd.DataFrame(results)
     hot_deals = df[df['price'] < ALERT_MIN]
     
+    print_status("💾", "Guardando datos en historial CSV...")
     # Guardar histórico
     csv_file = 'deals_history.csv'
     df['timestamp'] = datetime.now().isoformat()
     if os.path.exists(csv_file):
         df.to_csv(csv_file, mode='a', header=False, index=False, encoding='utf-8')
+        print_status("✅", f"Datos añadidos a {csv_file}")
     else:
         df.to_csv(csv_file, index=False, encoding='utf-8')
+        print_status("✅", f"Archivo {csv_file} creado con éxito")
     
     # Alertas Telegram para chollos
     if not hot_deals.empty:
+        print_status("🔥", f"¡{len(hot_deals)} CHOLLOS DETECTADOS!", "ALERT")
+        print_section("ENVIANDO ALERTAS TELEGRAM")
         bot = Bot(token=BOT_TOKEN)
-        for _, deal in hot_deals.iterrows():
+        for idx, (_, deal) in enumerate(hot_deals.iterrows(), 1):
+            print_status("📨", f"Enviando alerta [{idx}/{len(hot_deals)}]: {deal['route']} - €{deal['price']:.0f}")
             msg = f"🚨 *¡ALERTA DE CHOLLO DETECTADA!*\n\n"
-            msg += f"━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += f"─────────────────────────\n"
             msg += f"✈️ *Ruta:* {deal['route']}\n"
             msg += f"💰 *Precio:* **€{deal['price']:.0f}**\n"
             msg += f"📊 *Fuente:* {deal['source']}\n"
-            msg += f"━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += f"─────────────────────────\n"
             msg += f"⚡ *Recomendación:* ¡Reserva rápido!\n"
             msg += f"🕐 *Detectado:* {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n\n"
             msg += f"_Precio por debajo del umbral de €{ALERT_MIN}_"
             await bot.send_message(CHAT_ID, msg, parse_mode='Markdown')
+            print_status("✅", f"Alerta enviada correctamente a Chat ID: {CHAT_ID}")
             logging.info(f"Alerta enviada: {deal['route']} €{deal['price']}")
+    else:
+        print_status("ℹ️", "No se detectaron chollos en este escaneo")
     
+    print_status("✅", "Escaneo batch completado exitosamente", "SUCCESS")
     return df
 
 def api_price(origin, dest, name):
@@ -169,32 +217,45 @@ def api_price(origin, dest, name):
 
 async def rss_deals():
     """Obtiene ofertas flash de feeds RSS"""
+    print_section("BÚSQUEDA DE OFERTAS RSS")
     bot = Bot(token=BOT_TOKEN)
     deals_found = 0
     
-    for feed_url in CONFIG.get('rss_feeds', []):
+    feeds = CONFIG.get('rss_feeds', [])
+    print_status("📰", f"Analizando {len(feeds)} feeds RSS...")
+    
+    for idx, feed_url in enumerate(feeds, 1):
         try:
+            print_status("🔍", f"Consultando feed [{idx}/{len(feeds)}]: {feed_url}")
             feed = feedparser.parse(feed_url)
+            print_status("✓", f"Feed parseado: {len(feed.entries)} entradas encontradas")
+            
             for entry in feed.entries[:3]:  # Top 3
                 if any(word in entry.title.lower() for word in ['sale', 'deal', 'cheap', 'error', 'fare']):
+                    print_status("🔥", f"Oferta detectada: {entry.title[:50]}...")
                     msg = f"📰 *OFERTA FLASH DETECTADA*\n\n"
-                    msg += f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                    msg += f"─────────────────────────\n"
                     msg += f"{entry.title}\n\n"
                     msg += f"🔗 [Ver oferta completa]({entry.link})\n"
-                    msg += f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                    msg += f"─────────────────────────\n"
                     msg += f"📡 *Fuente:* {feed.feed.title if hasattr(feed.feed, 'title') else 'RSS Feed'}\n"
                     msg += f"🕐 *Publicado:* {entry.published if hasattr(entry, 'published') else 'Reciente'}"
                     await bot.send_message(CHAT_ID, msg, parse_mode='Markdown')
+                    print_status("✅", "Oferta enviada a Telegram")
                     logging.info(f"RSS deal: {entry.title}")
                     deals_found += 1
         except Exception as e:
+            print_status("⚠️", f"Error al procesar feed: {e}", "WARNING")
             logging.error(f"Error RSS {feed_url}: {e}")
     
     if deals_found == 0:
+        print_status("ℹ️", "No se encontraron ofertas flash en este momento")
         msg = "ℹ️ *No se encontraron ofertas flash en este momento.*\n\n"
         msg += "El sistema continuará monitorizando los feeds RSS.\n"
         msg += "Te notificaremos cuando aparezcan nuevas ofertas."
         await bot.send_message(CHAT_ID, msg, parse_mode='Markdown')
+    else:
+        print_status("✅", f"Proceso RSS completado: {deals_found} ofertas encontradas", "SUCCESS")
 
 # ============================================
 # COMANDOS TELEGRAM BOT
@@ -202,9 +263,14 @@ async def rss_deals():
 
 async def supreme_start(update, context: ContextTypes.DEFAULT_TYPE):
     """Comando /start - Bienvenida"""
-    msg = """🏆 *BIENVENIDO A CAZADOR SUPREMO v9.0*
+    user = update.effective_user
+    print_section("COMANDO /START EJECUTADO")
+    print_status("👤", f"Usuario: {user.username or user.first_name} (ID: {user.id})")
+    print_status("📝", "Enviando mensaje de bienvenida...")
+    
+    msg = f"""🏆 *BIENVENIDO A CAZADOR SUPREMO v9.0*
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+─────────────────────────────────────────
 
 *Sistema Profesional de Monitorización de Vuelos*
 
@@ -216,7 +282,7 @@ Este bot te ayudará a encontrar las mejores ofertas de vuelos mediante:
 ✅ *Predicciones con Machine Learning*
 ✅ *Feeds RSS de ofertas flash*
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+─────────────────────────────────────────
 
 📋 *COMANDOS DISPONIBLES:*
 
@@ -235,7 +301,7 @@ Técnicas avanzadas para ahorrar en vuelos
 🛫 `/scan ORIGEN DESTINO` - Escanear ruta específica
 Ejemplo: `/scan MAD MGA`
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+─────────────────────────────────────────
 
 ⚙️ *CONFIGURACIÓN ACTUAL:*
 • Umbral de alerta: €{ALERT_MIN}
@@ -246,20 +312,27 @@ Ejemplo: `/scan MAD MGA`
 
 💬 ¿Listo para cazar ofertas? Usa `/supremo` para empezar
     """
-    await update.message.reply_text(msg.format(ALERT_MIN=ALERT_MIN, FLIGHTS=FLIGHTS), parse_mode='Markdown')
+    await update.message.reply_text(msg, parse_mode='Markdown')
+    print_status("✅", "Mensaje de bienvenida enviado correctamente", "SUCCESS")
 
 async def supremo_scan(update, context: ContextTypes.DEFAULT_TYPE):
     """Comando /supremo - Scan completo"""
+    user = update.effective_user
+    print_section("COMANDO /SUPREMO EJECUTADO")
+    print_status("👤", f"Usuario: {user.username or user.first_name} (ID: {user.id})")
+    print_status("📋", "Iniciando escaneo supremo completo...")
+    
     # Mensaje de inicio con animación
     initial_msg = await update.message.reply_text(
         "🔄 *INICIANDO ESCANEO SUPREMO...*\n\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "─────────────────────────\n"
         f"📡 Consultando {len(FLIGHTS)} rutas de vuelo\n"
         "⏳ Esto puede tomar unos segundos\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "─────────────────────────\n\n"
         "_Analizando precios con múltiples APIs..._",
         parse_mode='Markdown'
     )
+    print_status("📨", "Mensaje inicial enviado al usuario")
     
     df = await supreme_scan_batch()
     
@@ -268,13 +341,19 @@ async def supremo_scan(update, context: ContextTypes.DEFAULT_TYPE):
     best_route = df.loc[df['price'].idxmin(), 'route']
     avg_price = df['price'].mean()
     
+    print_status("📊", "Generando resumen de resultados...")
+    print_result("Vuelos escaneados", len(df), "✈️")
+    print_result("Hot deals detectados", hot_count, "🔥")
+    print_result("Mejor precio", f"€{best_price:.0f} ({best_route})", "💎")
+    print_result("Precio promedio", f"€{avg_price:.0f}", "📈")
+    
     # Determinar emojis según resultados
     hot_emoji = "🔥" if hot_count > 0 else "📊"
     alert_text = f"*¡{hot_count} CHOLLOS DETECTADOS!*" if hot_count > 0 else "Sin chollos en este momento"
     
     msg = f"""✅ *ESCANEO SUPREMO COMPLETADO*
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+────────────────────────────────────
 
 📊 *RESUMEN DEL ANÁLISIS:*
 
@@ -283,7 +362,7 @@ async def supremo_scan(update, context: ContextTypes.DEFAULT_TYPE):
 💎 *Mejor precio encontrado:* **€{best_price:.0f}** ({best_route})
 📈 *Precio promedio:* €{avg_price:.0f}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+────────────────────────────────────
 
 🏆 *TOP 5 MEJORES PRECIOS:*
 
@@ -297,7 +376,7 @@ async def supremo_scan(update, context: ContextTypes.DEFAULT_TYPE):
         msg += f"   💰 €{row['price']:.0f}{status_text}\n"
         msg += f"   📡 {row['source']}\n\n"
     
-    msg += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    msg += f"────────────────────────────────────\n\n"
     msg += f"🕐 *Análisis completado:* {datetime.now().strftime('%d/%m/%Y a las %H:%M:%S')}\n\n"
     
     if hot_count > 0:
@@ -305,15 +384,22 @@ async def supremo_scan(update, context: ContextTypes.DEFAULT_TYPE):
     else:
         msg += f"💡 *Tip:* Ejecuta `/status` para ver el histórico de precios o configura alertas con un umbral más alto."
     
+    print_status("📤", "Actualizando mensaje con resultados completos...")
     await initial_msg.edit_text(msg, parse_mode='Markdown')
+    print_status("✅", "Comando /supremo completado exitosamente", "SUCCESS")
 
 async def status(update, context: ContextTypes.DEFAULT_TYPE):
     """Comando /status - Dashboard completo"""
+    user = update.effective_user
+    print_section("COMANDO /STATUS EJECUTADO")
+    print_status("👤", f"Usuario: {user.username or user.first_name} (ID: {user.id})")
+    
     csv_file = 'deals_history.csv'
     
     if not os.path.exists(csv_file):
+        print_status("⚠️", f"Archivo {csv_file} no encontrado", "WARNING")
         msg = "📊 *DASHBOARD NO DISPONIBLE*\n\n"
-        msg += "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        msg += "─────────────────────────\n\n"
         msg += "ℹ️ Aún no hay datos históricos para mostrar.\n\n"
         msg += "📝 *¿Cómo generar datos?*\n"
         msg += "Ejecuta el comando `/supremo` para realizar tu primer escaneo.\n\n"
@@ -323,8 +409,10 @@ async def status(update, context: ContextTypes.DEFAULT_TYPE):
         msg += "• Mejores ofertas encontradas\n"
         msg += "• Tendencias de precios"
         await update.message.reply_text(msg, parse_mode='Markdown')
+        print_status("📨", "Mensaje de dashboard no disponible enviado")
         return
     
+    print_status("📂", f"Leyendo datos históricos de {csv_file}...")
     df = pd.read_csv(csv_file, encoding='utf-8')
     
     total_scans = len(df)
@@ -334,12 +422,18 @@ async def status(update, context: ContextTypes.DEFAULT_TYPE):
     hot_deals = len(df[df['price'] < ALERT_MIN])
     best_route = df.loc[df['price'].idxmin(), 'route']
     
+    print_status("📊", "Calculando estadísticas...")
+    print_result("Total escaneos", total_scans, "📋")
+    print_result("Precio promedio", f"€{avg_price:.2f}", "💰")
+    print_result("Precio mínimo", f"€{min_price:.0f}", "💎")
+    print_result("Chollos detectados", hot_deals, "🔥")
+    
     # Calcular porcentaje de chollos
     hot_percentage = (hot_deals / total_scans * 100) if total_scans > 0 else 0
     
     msg = f"""📈 *DASHBOARD SUPREMO v9.0*
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+────────────────────────────────────
 
 📊 *ESTADÍSTICAS GENERALES:*
 
@@ -349,7 +443,7 @@ async def status(update, context: ContextTypes.DEFAULT_TYPE):
 📈 *Precio máximo:* €{max_price:.0f}
 🔥 *Chollos detectados:* {hot_deals} ({hot_percentage:.1f}%)
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+────────────────────────────────────
 
 🏆 *MEJOR DEAL HISTÓRICO:*
 
@@ -357,7 +451,7 @@ async def status(update, context: ContextTypes.DEFAULT_TYPE):
 💰 *Precio:* **€{min_price:.0f}**
 📊 *Ahorro vs promedio:* €{avg_price - min_price:.0f} ({((avg_price - min_price)/avg_price * 100):.1f}%)
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+────────────────────────────────────
 
 ⚙️ *CONFIGURACIÓN ACTUAL:*
 
@@ -365,7 +459,7 @@ async def status(update, context: ContextTypes.DEFAULT_TYPE):
 📡 *Rutas monitorizadas:* {len(FLIGHTS)}
 📊 *Fuentes de datos:* APIs múltiples + ML
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+────────────────────────────────────
 
 🕐 *Última actualización:* {datetime.now().strftime('%d/%m/%Y a las %H:%M:%S')}
 
@@ -373,11 +467,16 @@ async def status(update, context: ContextTypes.DEFAULT_TYPE):
     """
     
     await update.message.reply_text(msg, parse_mode='Markdown')
+    print_status("✅", "Dashboard enviado correctamente", "SUCCESS")
 
 async def rss_command(update, context: ContextTypes.DEFAULT_TYPE):
     """Comando /rss - Ofertas flash"""
+    user = update.effective_user
+    print_section("COMANDO /RSS EJECUTADO")
+    print_status("👤", f"Usuario: {user.username or user.first_name} (ID: {user.id})")
+    
     msg = "📰 *BUSCANDO OFERTAS FLASH...*\n\n"
-    msg += "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    msg += "─────────────────────────\n\n"
     msg += "🔍 Analizando feeds RSS de:\n"
     msg += "• SecretFlying\n"
     msg += "• Fly4Free\n"
@@ -385,13 +484,20 @@ async def rss_command(update, context: ContextTypes.DEFAULT_TYPE):
     msg += "⏳ _Esto puede tomar unos segundos..._"
     
     await update.message.reply_text(msg, parse_mode='Markdown')
+    print_status("📨", "Mensaje inicial de RSS enviado")
     await rss_deals()
+    print_status("✅", "Comando /rss completado", "SUCCESS")
 
 async def chollos(update, context: ContextTypes.DEFAULT_TYPE):
     """Comando /chollos - Hacks profesionales"""
+    user = update.effective_user
+    print_section("COMANDO /CHOLLOS EJECUTADO")
+    print_status("👤", f"Usuario: {user.username or user.first_name} (ID: {user.id})")
+    print_status("📝", "Enviando lista de hacks profesionales...")
+    
     msg = """💡 *14 HACKS PROFESIONALES PARA AHORRAR*
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+────────────────────────────────────
 
 🎯 *ESTRATEGIAS DE BÚSQUEDA:*
 
@@ -412,7 +518,7 @@ async def chollos(update, context: ContextTypes.DEFAULT_TYPE):
    🎯 Vuela por acumular, no por destino
    💰 Valor: Millas gratis + categoría
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+────────────────────────────────────
 
 💳 *OPTIMIZACIÓN DE PAGOS:*
 
@@ -428,7 +534,7 @@ async def chollos(update, context: ContextTypes.DEFAULT_TYPE):
    💳 Compra-reventa estratégica
    💰 Millas infinitas legalmente
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+────────────────────────────────────
 
 🗺️ *OPTIMIZACIÓN DE RUTAS:*
 
@@ -444,7 +550,7 @@ async def chollos(update, context: ContextTypes.DEFAULT_TYPE):
    🌐 Kiwi.com hacker combos
    💰 Rutas imposibles a buen precio
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+────────────────────────────────────
 
 🤖 *HERRAMIENTAS AUTOMÁTICAS:*
 
@@ -464,14 +570,14 @@ async def chollos(update, context: ContextTypes.DEFAULT_TYPE):
    🎁 ExpertFlyer + AwardWallet
    💰 Maximiza valor de millas
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+────────────────────────────────────
 
 🎯 *TARGET PARA MAD-MGA:*
 💎 Precio objetivo: €337-€500
 📊 Precio actual promedio: €680
 💰 Ahorro potencial: €180-€343
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+────────────────────────────────────
 
 💡 *Consejo Pro:*
 Combina varias técnicas para maximizar el ahorro. Por ejemplo: Error Fare + VPN + Cashback puede darte hasta -95% en algunos casos.
@@ -480,12 +586,18 @@ Combina varias técnicas para maximizar el ahorro. Por ejemplo: Error Fare + VPN
 Algunas técnicas como skiplagging están en zona gris legal. Úsalas bajo tu responsabilidad y lee siempre los términos de las aerolíneas.
     """
     await update.message.reply_text(msg, parse_mode='Markdown')
+    print_status("✅", "Lista de hacks enviada correctamente", "SUCCESS")
 
 async def scan_route(update, context: ContextTypes.DEFAULT_TYPE):
     """Comando /scan ORIGEN DESTINO"""
+    user = update.effective_user
+    print_section("COMANDO /SCAN EJECUTADO")
+    print_status("👤", f"Usuario: {user.username or user.first_name} (ID: {user.id})")
+    
     if len(context.args) < 2:
+        print_status("⚠️", "Formato incorrecto - Faltan parámetros", "WARNING")
         msg = "❌ *FORMATO INCORRECTO*\n\n"
-        msg += "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        msg += "─────────────────────────\n\n"
         msg += "📝 *Uso correcto:*\n"
         msg += "`/scan ORIGEN DESTINO`\n\n"
         msg += "🔤 Usa códigos IATA de 3 letras\n\n"
@@ -493,7 +605,7 @@ async def scan_route(update, context: ContextTypes.DEFAULT_TYPE):
         msg += "• `/scan MAD MGA` (Madrid → Managua)\n"
         msg += "• `/scan BCN NYC` (Barcelona → Nueva York)\n"
         msg += "• `/scan LHR MIA` (Londres → Miami)\n\n"
-        msg += "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        msg += "─────────────────────────\n\n"
         msg += "ℹ️ *¿No conoces el código IATA?*\n"
         msg += "Busca \"código IATA + nombre ciudad\" en Google"
         await update.message.reply_text(msg, parse_mode='Markdown')
@@ -502,8 +614,11 @@ async def scan_route(update, context: ContextTypes.DEFAULT_TYPE):
     origin = context.args[0].upper()
     dest = context.args[1].upper()
     
+    print_status("🔍", f"Solicitado escaneo: {origin} → {dest}")
+    
     # Validación básica de códigos IATA
     if len(origin) != 3 or len(dest) != 3:
+        print_status("⚠️", f"Códigos IATA inválidos: {origin} ({len(origin)} chars), {dest} ({len(dest)} chars)", "WARNING")
         msg = "⚠️ *CÓDIGOS INVÁLIDOS*\n\n"
         msg += "Los códigos IATA deben tener exactamente 3 letras.\n\n"
         msg += f"Recibido: `{origin}` y `{dest}`\n\n"
@@ -513,19 +628,26 @@ async def scan_route(update, context: ContextTypes.DEFAULT_TYPE):
     
     initial_msg = await update.message.reply_text(
         f"🔄 *ESCANEANDO RUTA...*\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"─────────────────────────\n\n"
         f"✈️ *Origen:* {origin}\n"
         f"🛬 *Destino:* {dest}\n\n"
         f"⏳ _Consultando múltiples fuentes de datos..._",
         parse_mode='Markdown'
     )
+    print_status("📨", "Mensaje inicial enviado")
+    print_status("🔎", f"Consultando APIs para {origin}-{dest}...")
     
     result = api_price(origin, dest, f"{origin}-{dest}")
+    
+    print_status("✓", f"Resultado obtenido: €{result['price']:.0f} ({result['source']})")
     
     is_deal = result['price'] < ALERT_MIN
     status_emoji = "🔥" if is_deal else "📊"
     status_text = "*¡CHOLLO DETECTADO!*" if is_deal else "*Precio Normal*"
     action = "⚡ *¡RESERVA AHORA!* Esta es una excelente oportunidad." if is_deal else "💡 *Recomendación:* Espera o activa alertas para esta ruta."
+    
+    if is_deal:
+        print_status("🔥", f"¡CHOLLO DETECTADO! Precio por debajo del umbral (€{ALERT_MIN})", "ALERT")
     
     # Calcular ahorro estimado si es chollo
     savings_text = ""
@@ -536,7 +658,7 @@ async def scan_route(update, context: ContextTypes.DEFAULT_TYPE):
     
     msg = f"""✅ *ANÁLISIS DE RUTA COMPLETADO*
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+────────────────────────────────────
 
 🛫 *RUTA ANALIZADA:*
 
@@ -544,7 +666,7 @@ async def scan_route(update, context: ContextTypes.DEFAULT_TYPE):
 📍 *Destino:* {dest}
 🔗 *Ruta:* **{result['route']}**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+────────────────────────────────────
 
 💰 *INFORMACIÓN DE PRECIO:*
 
@@ -552,13 +674,13 @@ async def scan_route(update, context: ContextTypes.DEFAULT_TYPE):
 {savings_text}📊 *Fuente de datos:* {result['source']}
 {status_emoji} *Estado:* {status_text}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+────────────────────────────────────
 
 🤖 *ANÁLISIS Y RECOMENDACIÓN:*
 
 {action}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+────────────────────────────────────
 
 🕐 *Análisis realizado:* {datetime.now().strftime('%d/%m/%Y a las %H:%M:%S')}
 
@@ -566,6 +688,7 @@ async def scan_route(update, context: ContextTypes.DEFAULT_TYPE):
     """
     
     await initial_msg.edit_text(msg, parse_mode='Markdown')
+    print_status("✅", "Comando /scan completado exitosamente", "SUCCESS")
 
 # ============================================
 # MAIN - INICIALIZAR BOT
@@ -574,60 +697,63 @@ async def scan_route(update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     """Función principal para iniciar el bot"""
     safe_print("\n")
-    safe_print("="*70)
-    safe_print("║                                                                  ║")
-    safe_print("║        🏆  CAZADOR SUPREMO v9.0  🏆                             ║")
-    safe_print("║                                                                  ║")
-    safe_print("║     Sistema Profesional de Monitorización de Vuelos            ║")
-    safe_print("║                                                                  ║")
-    safe_print("="*70)
-    safe_print("\n")
-    safe_print("📋 CONFIGURACIÓN DEL SISTEMA")
-    safe_print("-" * 70)
-    safe_print(f"   🤖 Bot Token:           {BOT_TOKEN[:20]}... ✓")
-    safe_print(f"   👤 Chat ID:             {CHAT_ID} ✓")
-    safe_print(f"   ✈️  Vuelos configurados: {len(FLIGHTS)} rutas ✓")
-    safe_print(f"   💰 Umbral de alerta:    €{ALERT_MIN} ✓")
-    safe_print("-" * 70)
-    safe_print("\n")
-    safe_print("🚀 INICIALIZANDO BOT TELEGRAM...")
-    safe_print("\n")
+    print_header("🏆  CAZADOR SUPREMO v9.0  🏆")
+    safe_print("║     Sistema Profesional de Monitorización de Vuelos            ║".center(70))
+    print_header("", "=")
+    
+    print_section("CONFIGURACIÓN DEL SISTEMA")
+    print_result("Bot Token", f"{BOT_TOKEN[:20]}...", "🤖")
+    print_result("Chat ID", CHAT_ID, "👤")
+    print_result("Vuelos configurados", f"{len(FLIGHTS)} rutas", "✈️")
+    print_result("Umbral de alerta", f"€{ALERT_MIN}", "💰")
+    
+    # Mostrar rutas configuradas
+    safe_print("\n   📋 Rutas monitorizadas:")
+    for idx, flight in enumerate(FLIGHTS, 1):
+        safe_print(f"      {idx}. {flight['origin']} → {flight['dest']} ({flight['name']})")
+    
+    print_section("INICIALIZANDO BOT TELEGRAM")
+    print_status("🚀", "Creando aplicación de Telegram...")
     
     # Crear aplicación
     app = Application.builder().token(BOT_TOKEN).build()
     
+    print_status("📝", "Registrando comandos del bot...")
     # Registrar comandos
     app.add_handler(CommandHandler("start", supreme_start))
+    print_status("✓", "Comando /start registrado")
     app.add_handler(CommandHandler("supremo", supremo_scan))
+    print_status("✓", "Comando /supremo registrado")
     app.add_handler(CommandHandler("status", status))
+    print_status("✓", "Comando /status registrado")
     app.add_handler(CommandHandler("rss", rss_command))
+    print_status("✓", "Comando /rss registrado")
     app.add_handler(CommandHandler("chollos", chollos))
+    print_status("✓", "Comando /chollos registrado")
     app.add_handler(CommandHandler("scan", scan_route))
+    print_status("✓", "Comando /scan registrado")
     
     logging.info("Bot iniciado correctamente")
-    safe_print("✅ BOT ACTIVO Y LISTO")
-    safe_print("=" * 70)
-    safe_print("\n")
-    safe_print("📱 COMANDOS DISPONIBLES:")
-    safe_print("-" * 70)
-    safe_print("   /start                  - Mensaje de bienvenida y ayuda")
-    safe_print("   /supremo                - Escaneo completo de todas las rutas")
-    safe_print("   /status                 - Dashboard con estadísticas")
-    safe_print("   /rss                    - Búsqueda de ofertas flash")
-    safe_print("   /chollos                - 14 hacks profesionales")
-    safe_print("   /scan ORIGEN DESTINO    - Analizar ruta específica")
-    safe_print("-" * 70)
-    safe_print("\n")
-    safe_print("💡 INFORMACIÓN:")
-    safe_print(f"   • Las alertas automáticas se enviarán cuando el precio < €{ALERT_MIN}")
-    safe_print("   • Los datos se guardan en 'deals_history.csv'")
-    safe_print("   • Los logs se guardan en 'cazador_supremo.log'")
-    safe_print("\n")
-    safe_print("⏳ Esperando comandos de Telegram...")
-    safe_print("   (Presiona Ctrl+C para detener el bot)")
-    safe_print("\n")
-    safe_print("=" * 70)
-    safe_print("\n")
+    
+    print_section("BOT ACTIVO Y LISTO")
+    safe_print("   📱 COMANDOS DISPONIBLES:\n")
+    safe_print("      /start                  - Mensaje de bienvenida y ayuda")
+    safe_print("      /supremo                - Escaneo completo de todas las rutas")
+    safe_print("      /status                 - Dashboard con estadísticas")
+    safe_print("      /rss                    - Búsqueda de ofertas flash")
+    safe_print("      /chollos                - 14 hacks profesionales")
+    safe_print("      /scan ORIGEN DESTINO    - Analizar ruta específica")
+    
+    print_section("INFORMACIÓN DEL SISTEMA")
+    safe_print(f"   ℹ️  Las alertas automáticas se enviarán cuando el precio < €{ALERT_MIN}")
+    safe_print("   ℹ️  Los datos se guardan en 'deals_history.csv'")
+    safe_print("   ℹ️  Los logs se guardan en 'cazador_supremo.log'")
+    
+    print_header("⏳ ESPERANDO COMANDOS DE TELEGRAM", "=")
+    safe_print("   (Presiona Ctrl+C para detener el bot)\n")
+    print_header("", "=")
+    
+    print_status("👂", "Bot en modo escucha...", "INFO")
     
     # Ejecutar bot
     app.run_polling()
@@ -637,29 +763,31 @@ if __name__ == '__main__':
         main()
     except KeyboardInterrupt:
         safe_print("\n\n")
-        safe_print("=" * 70)
-        safe_print("🛑 BOT DETENIDO POR EL USUARIO")
-        safe_print("=" * 70)
-        safe_print("\n")
-        safe_print("✅ Sesión finalizada correctamente")
-        safe_print(f"🕐 Hora de cierre: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
-        safe_print("\n")
-        safe_print("💡 Para reiniciar el bot, ejecuta nuevamente el script")
-        safe_print("\n")
+        print_header("🛑 DETENCIÓN SOLICITADA", "=")
+        print_status("⏹️", "Cerrando conexiones...", "INFO")
+        print_status("💾", "Guardando estado...", "INFO")
+        print_header("✅ BOT DETENIDO CORRECTAMENTE", "=")
+        
+        safe_print("\n   📊 Resumen de la sesión:")
+        safe_print(f"   🕐 Hora de cierre: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+        safe_print(f"   💾 Logs guardados en: cazador_supremo.log")
+        
+        print_header("", "=")
+        safe_print("\n   💡 Para reiniciar el bot, ejecuta nuevamente el script\n")
+        
         logging.info("Bot detenido manualmente")
     except Exception as e:
         safe_print("\n\n")
-        safe_print("=" * 70)
-        safe_print("❌ ERROR CRÍTICO")
-        safe_print("=" * 70)
-        safe_print(f"\n⚠️  Descripción del error: {e}\n")
-        safe_print("📝 Revisa el archivo 'cazador_supremo.log' para más detalles")
-        safe_print("💡 Si el error persiste, verifica:")
-        safe_print("   1. Token de Telegram correcto en config.json")
-        safe_print("   2. Chat ID correcto en config.json")
-        safe_print("   3. Conexión a internet activa")
-        safe_print("   4. Dependencias instaladas: pip install -r requirements.txt")
-        safe_print("\n")
-        safe_print("=" * 70)
+        print_header("❌ ERROR CRÍTICO", "=")
+        print_status("⚠️", f"Descripción del error: {e}", "ERROR")
+        
+        safe_print("\n   📝 Revisa el archivo 'cazador_supremo.log' para más detalles")
+        safe_print("\n   💡 Si el error persiste, verifica:")
+        safe_print("      1. Token de Telegram correcto en config.json")
+        safe_print("      2. Chat ID correcto en config.json")
+        safe_print("      3. Conexión a internet activa")
+        safe_print("      4. Dependencias instaladas: pip install -r requirements.txt")
+        
+        print_header("", "=")
         safe_print("\n")
         logging.error(f"Error crítico: {e}", exc_info=True)
