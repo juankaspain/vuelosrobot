@@ -6,7 +6,7 @@
 ║   🚀 Sistema Profesional de Monitorización de Vuelos 2026 🚀           ║
 ═════════════════════════════════════════════════════════════════════════════
 
-👨‍💻 Autor: @Juanka_Spain | 🏷️ v12.1.1 Enterprise | 📅 2026-01-13 | 📋 MIT License
+👨‍💻 Autor: @Juanka_Spain | 🏷️ v12.1.2 Enterprise | 📅 2026-01-13 | 📋 MIT License
 
 🌟 ENTERPRISE FEATURES V12.1:
 ✅ SerpAPI Real Google Flights       ✅ Webhooks para Producción     ✅ ML Confidence Scores
@@ -16,17 +16,18 @@
 ✅ Typing Indicators UX              ✅ Markdown Estratégico         ✅ Console Coloreado
 ✅ Health Checks Avanzados           ✅ Status por Componente        ✅ Degradation Alerts
 
-🆕 NUEVO EN v12.1.1:
-⭐ /clearcache - Comando para limpiar caché manualmente
-⭐ Permite forzar llamadas reales a APIs sin reiniciar
+🆕 NUEVO EN v12.1.2:
+⭐ FIX: Corregido error 400 Bad Request en SerpAPI
+⭐ Soporte solo one-way flights (sin return_date requerido)
+⭐ Logs mejorados para debugging de parámetros API
 
-🐛 FIXES:
+🐛 FIXES ANTERIORES:
 - v12.1.1: Añade comando /clearcache para testing
 - v12.1.0: Implementa integración real SerpAPI Google Flights
 - v12.0.3: Agrega método UI.section() faltante
 
 📦 Dependencies: python-telegram-bot pandas requests feedparser colorama
-🚀 Usage: python cazador_supremo_v12.0_enterprise.py
+🚀 Usage: python cazador_supremo_enterprise.py
 ⚙️ Config: Edit config.json with your tokens
 """
 
@@ -66,7 +67,7 @@ if sys.platform == 'win32':
     except: pass
 
 # 🌐 GLOBAL CONFIG
-VERSION = "12.1.1 Enterprise"
+VERSION = "12.1.2 Enterprise"
 APP_NAME = "Cazador Supremo"
 CONFIG_FILE, LOG_FILE, CSV_FILE = "config.json", "cazador_supremo.log", "deals_history.csv"
 MAX_WORKERS, API_TIMEOUT = 25, 15
@@ -633,6 +634,7 @@ class FlightScanner:
     def _fetch_serpapi(self, route: FlightRoute) -> Optional[FlightPrice]:
         """
         ⭐ IMPLEMENTACIÓN REAL: Llamada real a SerpAPI Google Flights
+        🔧 FIX v12.1.2: Soporte solo one-way flights (sin return_date)
         """
         # Check rate limit
         if self.serpapi_last_reset != datetime.now().date():
@@ -647,7 +649,7 @@ class FlightScanner:
         if not api_key:
             raise Exception("SERPAPI key not configured")
         
-        # Prepare request
+        # Prepare request - ONE WAY FLIGHT ONLY
         departure_date = (datetime.now() + timedelta(days=45)).strftime('%Y-%m-%d')
         
         params = {
@@ -655,12 +657,16 @@ class FlightScanner:
             'departure_id': route.origin,
             'arrival_id': route.dest,
             'outbound_date': departure_date,
+            'type': '2',  # 2 = One way (no necesita return_date)
             'currency': 'EUR',
             'hl': 'es',
             'api_key': api_key
         }
         
         url = 'https://serpapi.com/search'
+        
+        # Log params para debugging
+        logger.debug(f"🔍 SerpAPI request: {url}?{params}")
         
         # Make request with timeout and metrics
         start_time = time.time()
@@ -670,6 +676,9 @@ class FlightScanner:
             
             response.raise_for_status()
             data = response.json()
+            
+            # Log respuesta para debugging
+            logger.debug(f"🔍 SerpAPI response keys: {data.keys()}")
             
             # Extract price from response
             price_value = self._extract_price_from_serpapi(data)
@@ -688,7 +697,8 @@ class FlightScanner:
                     metadata={
                         'api': 'serpapi',
                         'response_time': duration,
-                        'departure_date': departure_date
+                        'departure_date': departure_date,
+                        'type': 'one-way'
                     }
                 )
                 
@@ -703,8 +713,16 @@ class FlightScanner:
             raise Exception(f"SERPAPI timeout after {duration:.1f}s")
         except requests.exceptions.RequestException as e:
             duration = time.time() - start_time
-            metrics_dashboard.record_call('serpapi', False, duration, error=str(e))
-            raise Exception(f"SERPAPI request failed: {e}")
+            error_msg = str(e)
+            # Log detailed error if JSON response available
+            try:
+                if hasattr(e.response, 'json'):
+                    error_data = e.response.json()
+                    error_msg = f"{e} - {json.dumps(error_data)}"
+            except:
+                pass
+            metrics_dashboard.record_call('serpapi', False, duration, error=error_msg)
+            raise Exception(f"SERPAPI request failed: {error_msg}")
         except Exception as e:
             duration = time.time() - start_time
             metrics_dashboard.record_call('serpapi', False, duration, error=str(e))
