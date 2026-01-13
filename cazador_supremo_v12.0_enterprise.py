@@ -6,7 +6,7 @@
 ║   🚀 Sistema Profesional de Monitorización de Vuelos 2026 🚀           ║
 ═════════════════════════════════════════════════════════════════════════════
 
-👨‍💻 Autor: @Juanka_Spain | 🏷️ v12.0.2 Enterprise | 📅 2026-01-13 | 📋 MIT License
+👨‍💻 Autor: @Juanka_Spain | 🏷️ v12.0.3 Enterprise | 📅 2026-01-13 | 📋 MIT License
 
 🌟 ENTERPRISE FEATURES V12.0:
 ✅ SerpAPI Enhanced Google Flights   ✅ Webhooks para Producción     ✅ ML Confidence Scores
@@ -28,12 +28,12 @@
 ⭐ PROACTIVE ALERTS - Sistema de alertas de degradación
 ⭐ COLORIZED OUTPUT - Console logging profesional
 
-🐛 v12.0.2 FIXES:
-- ✅ Corregido AttributeError 'NoneType' en update.message para callbacks
-- ✅ Usa update.effective_message en todos los handlers
-- ✅ Mejora gestión async tasks en shutdown (elimina GeneratorExit)
-- ✅ Fix handle_callback para inline keyboards
-- ✅ Limpieza apropiada de tareas pendientes
+🐛 FIXES:
+- v12.0.3: Agrega método UI.section() faltante
+- v12.0.2: Corregido AttributeError 'NoneType' en update.message para callbacks
+- v12.0.2: Usa update.effective_message en todos los handlers
+- v12.0.2: Mejora gestión async tasks en shutdown (elimina GeneratorExit)
+- v12.0.2: Fix handle_callback para inline keyboards
 
 📦 Dependencies: python-telegram-bot pandas requests feedparser colorama
 📦 Optional: python-telegram-bot[job-queue] (para heartbeat)
@@ -77,7 +77,7 @@ if sys.platform == 'win32':
     except: pass
 
 # 🌐 GLOBAL CONFIG
-VERSION = "12.0.2 Enterprise"
+VERSION = "12.0.3 Enterprise"
 APP_NAME = "Cazador Supremo"
 CONFIG_FILE, LOG_FILE, CSV_FILE = "config.json", "cazador_supremo.log", "deals_history.csv"
 MAX_WORKERS, API_TIMEOUT = 25, 15
@@ -409,6 +409,13 @@ class UI:
         UI.print(f"\n{'='*80}", Fore.CYAN + Style.BRIGHT)
         UI.print(f"{title.center(80)}", Fore.CYAN + Style.BRIGHT)
         UI.print(f"{'='*80}\n", Fore.CYAN + Style.BRIGHT)
+    
+    @staticmethod
+    def section(title: str):
+        """⚠️ MÉTODO AGREGADO: Imprime una sección con separadores"""
+        UI.print(f"\n{'─'*80}", Fore.CYAN)
+        UI.print(f"📍 {title}", Fore.CYAN + Style.BRIGHT)
+        UI.print(f"{'─'*80}\n", Fore.CYAN)
     
     @staticmethod
     def status(emoji: str, msg: str, typ: str = "INFO"):
@@ -747,7 +754,6 @@ class TelegramBotManager:
         UI.header("✅ BOT STOPPED")
         UI.status("✅", "System stopped by user", "SUCCESS")
     
-    # ⚠️ FIX: Usa update.effective_message en lugar de update.message
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = update.effective_message
         if not msg:
@@ -870,7 +876,6 @@ class TelegramBotManager:
         
         await msg.reply_text(help_text, parse_mode='Markdown')
     
-    # ⚠️ FIX CRÍTICO: Manejo correcto de CallbackQuery
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         if not query:
@@ -882,8 +887,6 @@ class TelegramBotManager:
         callback_data = query.data
         logger.info(f"📞 Callback received: {callback_data}")
         
-        # ⚠️ IMPORTANTE: Para callbacks, el mensaje está en query.message
-        # NO en update.message (que es None)
         if callback_data == "scan":
             await self.cmd_scan(update, context)
         elif callback_data == "status":
