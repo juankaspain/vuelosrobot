@@ -1,0 +1,42 @@
+{
+  "telegram": {
+    "token": "8543611357:AAH_X0A79CDV7vzN4_T8u0v6WLljs6lBLQo",
+    "chat_id": "915723710"
+  },
+  "flights": [
+    {
+      "origin": "MAD",
+      "dest": "MGA",
+      "name": "Madrid-Managua"
+    },
+    {
+      "origin": "MGA",
+      "dest": "MAD",
+      "name": "Managua-Madrid"
+    },
+    {
+      "origin": "MAD",
+      "dest": "BOG",
+      "name": "Madrid-Bogotá (stopover)"
+    },
+    {
+      "origin": "MAD",
+      "dest": "MIA",
+      "name": "Madrid-Miami (conexión)"
+    },
+    {
+      "origin": "BCN",
+      "dest": "MGA",
+      "name": "Barcelona-Managua"
+    }
+  ],
+  "apis": {
+    "aviationstack": "TU_CLAVE_AVIATIONSTACK_AQUI",
+    "serpapi": "TU_CLAVE_SERPAPI_AQUI"
+  },
+  "alert_min": 500,
+  "rss_feeds": [
+    "https://www.secretflying.com/feed/",
+    "https://www.fly4free.com/feed/"
+  ]
+}
