@@ -12,16 +12,28 @@
       "outbound_date": "2026-06-15",
       "return_date": "2026-06-30",
       "alert_min": 900,
-      "description": "Viaje completo ida y vuelta"
+      "stops": "any",
+      "description": "Viaje completo ida y vuelta, acepta cualquier número de escalas"
     },
     {
       "type": "oneway",
       "origin": "MAD",
       "dest": "MGA",
-      "name": "Madrid-Managua (Solo Ida)",
+      "name": "Madrid-Managua (Solo Ida - Directo)",
       "outbound_date": "2026-06-15",
-      "alert_min": 500,
-      "description": "Solo vuelo de ida"
+      "alert_min": 600,
+      "stops": "0",
+      "description": "Solo vuelo de ida, SOLO DIRECTOS sin escalas"
+    },
+    {
+      "type": "oneway",
+      "origin": "MAD",
+      "dest": "MGA",
+      "name": "Madrid-Managua (Solo Ida - Con Escalas)",
+      "outbound_date": "2026-06-15",
+      "alert_min": 450,
+      "stops": "1+",
+      "description": "Solo vuelo de ida, acepta 1 o más escalas (más barato)"
     },
     {
       "type": "oneway",
@@ -30,7 +42,8 @@
       "name": "Managua-Madrid (Solo Vuelta)",
       "outbound_date": "2026-06-30",
       "alert_min": 500,
-      "description": "Solo vuelo de vuelta"
+      "stops": "any",
+      "description": "Solo vuelo de vuelta, cualquier número de escalas"
     }
   ],
   "apis": {
@@ -41,5 +54,12 @@
   "rss_feeds": [
     "https://www.secretflying.com/feed/",
     "https://www.fly4free.com/feed/"
-  ]
+  ],
+  "_stops_options": {
+    "0": "Solo vuelos directos (sin escalas)",
+    "1": "Máximo 1 escala",
+    "1+": "1 o más escalas (cualquier cantidad con escalas)",
+    "2": "Máximo 2 escalas",
+    "any": "Cualquier opción (directos o con escalas)"
+  }
 }
