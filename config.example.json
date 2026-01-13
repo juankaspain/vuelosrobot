@@ -1,0 +1,97 @@
+{
+  "_comment_telegram": "Configuración de Telegram Bot",
+  "telegram": {
+    "_help_token": "Obtén tu token hablando con @BotFather en Telegram",
+    "token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz-1234567890",
+    
+    "_help_chat_id": "Obtén tu Chat ID usando @userinfobot en Telegram",
+    "chat_id": "123456789"
+  },
+
+  "_comment_flights": "Lista de rutas de vuelo a monitorizar",
+  "flights": [
+    {
+      "_help": "Usa códigos IATA de 3 letras (MAD=Madrid, MGA=Managua, etc.)",
+      "origin": "MAD",
+      "dest": "MGA",
+      "name": "Madrid-Managua"
+    },
+    {
+      "origin": "MAD",
+      "dest": "BOG",
+      "name": "Madrid-Bogotá"
+    },
+    {
+      "origin": "MAD",
+      "dest": "MIA",
+      "name": "Madrid-Miami"
+    },
+    {
+      "origin": "BCN",
+      "dest": "MGA",
+      "name": "Barcelona-Managua"
+    },
+    {
+      "origin": "MAD",
+      "dest": "LIM",
+      "name": "Madrid-Lima"
+    },
+    {
+      "origin": "MAD",
+      "dest": "MEX",
+      "name": "Madrid-Ciudad de México"
+    },
+    {
+      "origin": "MAD",
+      "dest": "GUA",
+      "name": "Madrid-Guatemala"
+    },
+    {
+      "origin": "MAD",
+      "dest": "PTY",
+      "name": "Madrid-Panamá"
+    },
+    {
+      "origin": "MAD",
+      "dest": "SJO",
+      "name": "Madrid-San José (Costa Rica)"
+    },
+    {
+      "origin": "MAD",
+      "dest": "EZE",
+      "name": "Madrid-Buenos Aires"
+    }
+  ],
+
+  "_comment_alert": "Precio mínimo para enviar alertas automáticas (en euros)",
+  "alert_min": 500,
+
+  "_comment_apis": "Claves de API para proveedores de datos de vuelos",
+  "apis": {
+    "_help_aviationstack": "Regístrate en https://aviationstack.com para obtener API key",
+    "aviationstack": "TU_CLAVE_AVIATIONSTACK_AQUI",
+    
+    "_help_serpapi": "Regístrate en https://serpapi.com para obtener API key (Google Flights)",
+    "serpapi": "TU_CLAVE_SERPAPI_AQUI"
+  },
+
+  "_comment_rss": "Feeds RSS para monitorizar ofertas flash",
+  "rss_feeds": [
+    "https://www.secretflying.com/feed/",
+    "https://www.fly4free.com/feed/",
+    "https://www.travelcodex.com/feed/",
+    "https://thepointsguy.com/feed/"
+  ],
+
+  "_comment_advanced": "Configuraciones avanzadas (opcional)",
+  "advanced": {
+    "_help_max_workers": "Número máximo de workers en paralelo (default: 20)",
+    "max_workers": 20,
+    
+    "_help_request_timeout": "Timeout para peticiones HTTP en segundos (default: 10)",
+    "request_timeout": 10,
+    
+    "_help_log_level": "Nivel de logging: DEBUG, INFO, WARNING, ERROR, CRITICAL (default: INFO)",
+    "log_level": "INFO"
+  }
+}
