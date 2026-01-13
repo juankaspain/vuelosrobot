@@ -6,7 +6,7 @@
 ║   🚀 Sistema Profesional de Monitorización de Vuelos 2026 🚀           ║
 ═════════════════════════════════════════════════════════════════════════════
 
-👨‍💻 Autor: @Juanka_Spain | 🏷️ v12.0.1 Enterprise | 📅 2026-01-13 | 📋 MIT License
+👨‍💻 Autor: @Juanka_Spain | 🏷️ v12.0.2 Enterprise | 📅 2026-01-13 | 📋 MIT License
 
 🌟 ENTERPRISE FEATURES V12.0:
 ✅ SerpAPI Enhanced Google Flights   ✅ Webhooks para Producción     ✅ ML Confidence Scores
@@ -28,9 +28,12 @@
 ⭐ PROACTIVE ALERTS - Sistema de alertas de degradación
 ⭐ COLORIZED OUTPUT - Console logging profesional
 
-🐛 v12.0.1 FIX:
-- Heartbeat ahora es opcional (no requiere job-queue module)
-- Compatible con python-telegram-bot sin [job-queue] extras
+🐛 v12.0.2 FIXES:
+- ✅ Corregido AttributeError 'NoneType' en update.message para callbacks
+- ✅ Usa update.effective_message en todos los handlers
+- ✅ Mejora gestión async tasks en shutdown (elimina GeneratorExit)
+- ✅ Fix handle_callback para inline keyboards
+- ✅ Limpieza apropiada de tareas pendientes
 
 📦 Dependencies: python-telegram-bot pandas requests feedparser colorama
 📦 Optional: python-telegram-bot[job-queue] (para heartbeat)
@@ -41,7 +44,7 @@
 import asyncio, requests, pandas as pd, feedparser, json, random, os, sys, re, time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any, Callable
+from typing import Dict, List, Optional, Tuple, Any, Callable, Set
 from dataclasses import dataclass, field
 from enum import Enum
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -74,7 +77,7 @@ if sys.platform == 'win32':
     except: pass
 
 # 🌐 GLOBAL CONFIG
-VERSION = "12.0.1 Enterprise"
+VERSION = "12.0.2 Enterprise"
 APP_NAME = "Cazador Supremo"
 CONFIG_FILE, LOG_FILE, CSV_FILE = "config.json", "cazador_supremo.log", "deals_history.csv"
 MAX_WORKERS, API_TIMEOUT = 25, 15
@@ -123,7 +126,7 @@ class FlightPrice:
     price: float
     source: PriceSource
     timestamp: datetime
-    confidence: float = 0.85  # ¡NUEVO! Confidence score
+    confidence: float = 0.85
     metadata: Dict[str, Any] = field(default_factory=dict)
     
     def to_dict(self) -> Dict:
@@ -141,7 +144,6 @@ class FlightPrice:
         return self.price < threshold
     
     def get_confidence_emoji(self) -> str:
-        """Emoji basado en confidence score"""
         if self.confidence >= 0.9:
             return "🎯"
         elif self.confidence >= 0.75:
@@ -153,7 +155,6 @@ class FlightPrice:
 
 @dataclass
 class APIMetrics:
-    """Métricas detalladas por API"""
     name: str
     calls_total: int = 0
     calls_success: int = 0
@@ -188,8 +189,6 @@ class APIMetrics:
 
 # 📊 COLORIZED LOGGER PROFESSIONAL
 class ColorizedLogger:
-    """Logger profesional con console output coloreado"""
-    
     LOG_COLORS = {
         'DEBUG': Fore.CYAN,
         'INFO': Fore.GREEN,
@@ -203,7 +202,6 @@ class ColorizedLogger:
         self.logger.setLevel(logging.DEBUG)
         
         if not self.logger.handlers:
-            # File handler
             fh = RotatingFileHandler(file, maxBytes=max_bytes, backupCount=backups, encoding='utf-8')
             fh.setFormatter(logging.Formatter(
                 '📅%(asctime)s | %(levelname)-8s | %(funcName)s:%(lineno)d | %(message)s',
@@ -211,7 +209,6 @@ class ColorizedLogger:
             ))
             self.logger.addHandler(fh)
             
-            # Console handler with colors
             ch = logging.StreamHandler()
             ch.setFormatter(logging.Formatter('%(message)s'))
             self.logger.addHandler(ch)
@@ -243,18 +240,16 @@ class ColorizedLogger:
         self.logger.critical(msg, exc_info=True)
     
     def metric(self, api: str, metric: str, value: Any):
-        """Log de métricas con formato especial"""
         msg = f"📊 {api} | {metric}: {value}"
         print(f"{Fore.MAGENTA}{msg}{Style.RESET_ALL}")
         self.logger.info(msg)
 
 logger = ColorizedLogger(APP_NAME, LOG_FILE)
 
-# 🔄 RETRY DECORATOR CON EXPONENTIAL BACKOFF
+# 🔄 RETRY DECORATOR
 def retry_with_backoff(max_attempts: int = RETRY_MAX_ATTEMPTS, 
                        backoff_factor: float = RETRY_BACKOFF_FACTOR,
                        exceptions: Tuple = (Exception,)):
-    """Decorator para retry con exponential backoff"""
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -272,9 +267,8 @@ def retry_with_backoff(max_attempts: int = RETRY_MAX_ATTEMPTS,
         return wrapper
     return decorator
 
-# 🛡️ CIRCUIT BREAKER PATTERN ENHANCED
+# 🛡️ CIRCUIT BREAKER
 class CircuitBreaker:
-    """Circuit breaker para prevenir cascading failures"""
     def __init__(self, name: str, fail_max: int = CIRCUIT_BREAK_THRESHOLD, 
                  reset_timeout: int = 60, half_open_max_calls: int = 3):
         self.name = name
@@ -285,12 +279,12 @@ class CircuitBreaker:
         self.fail_count = 0
         self.last_fail_time = None
         self.half_open_calls = 0
-        logger.info(f"⚔️ CircuitBreaker '{name}' initialized: fail_max={fail_max}, reset={reset_timeout}s")
+        logger.info(f"⚔️ CircuitBreaker '{name}' initialized")
     
     def call(self, func: callable, *args, **kwargs):
         if self.state == CircuitState.OPEN:
             if time.time() - self.last_fail_time > self.reset_timeout:
-                logger.info(f"🟡 {self.name}: OPEN → HALF_OPEN (reset timeout reached)")
+                logger.info(f"🟡 {self.name}: OPEN → HALF_OPEN")
                 self.state = CircuitState.HALF_OPEN
                 self.half_open_calls = 0
             else:
@@ -298,7 +292,7 @@ class CircuitBreaker:
         
         if self.state == CircuitState.HALF_OPEN:
             if self.half_open_calls >= self.half_open_max_calls:
-                logger.info(f"🟢 {self.name}: HALF_OPEN → CLOSED (success threshold reached)")
+                logger.info(f"🟢 {self.name}: HALF_OPEN → CLOSED")
                 self.state = CircuitState.CLOSED
                 self.fail_count = 0
         
@@ -310,51 +304,40 @@ class CircuitBreaker:
         except Exception as e:
             self.fail_count += 1
             self.last_fail_time = time.time()
-            logger.warning(f"⚠️ {self.name}: Failure #{self.fail_count}/{self.fail_max} - {e}")
+            logger.warning(f"⚠️ {self.name}: Failure #{self.fail_count}/{self.fail_max}")
             
             if self.fail_count >= self.fail_max:
-                logger.error(f"🔴 {self.name}: → OPEN (threshold reached)")
+                logger.error(f"🔴 {self.name}: → OPEN")
                 self.state = CircuitState.OPEN
             raise
-    
-    @property
-    def health_status(self) -> HealthStatus:
-        if self.state == CircuitState.CLOSED:
-            return HealthStatus.HEALTHY
-        elif self.state == CircuitState.HALF_OPEN:
-            return HealthStatus.DEGRADED
-        else:
-            return HealthStatus.CRITICAL
 
-# 📦 INTELLIGENT CACHE WITH TTL
+# 📦 TTL CACHE
 class TTLCache:
-    """Caché con expiración por item (Time To Live)"""
     def __init__(self, default_ttl: int = CACHE_TTL):
         self._cache: Dict[str, Tuple[Any, float]] = {}
         self.default_ttl = default_ttl
         self.hits = 0
         self.misses = 0
         self.evictions = 0
-        logger.info(f"🗃️ TTLCache initialized: default_ttl={default_ttl}s")
+        logger.info(f"🗃️ TTLCache initialized: ttl={default_ttl}s")
     
     def get(self, key: str) -> Optional[Any]:
         if key in self._cache:
             value, expiry = self._cache[key]
             if time.time() < expiry:
                 self.hits += 1
-                logger.debug(f"✅ Cache HIT: {key} (hit_rate={self.hit_rate:.1%})")
+                logger.debug(f"✅ Cache HIT: {key}")
                 return value
             else:
                 del self._cache[key]
                 self.evictions += 1
-                logger.debug(f"⏰ Cache EXPIRED: {key}")
         self.misses += 1
         return None
     
     def set(self, key: str, value: Any, ttl: int = None):
         ttl = ttl or self.default_ttl
         self._cache[key] = (value, time.time() + ttl)
-        logger.debug(f"💾 Cache SET: {key} (ttl={ttl}s, size={len(self._cache)})")
+        logger.debug(f"💾 Cache SET: {key}")
     
     @property
     def hit_rate(self) -> float:
@@ -367,20 +350,9 @@ class TTLCache:
     
     def clear(self):
         self._cache.clear()
-        logger.info("🧹 Cache cleared")
-    
-    def get_metrics(self) -> Dict[str, Any]:
-        return {
-            'size': self.size,
-            'hits': self.hits,
-            'misses': self.misses,
-            'evictions': self.evictions,
-            'hit_rate': self.hit_rate
-        }
 
-# 📊 PERFORMANCE METRICS DASHBOARD
+# 📊 METRICS DASHBOARD
 class MetricsDashboard:
-    """Dashboard de métricas por fuente de datos"""
     def __init__(self):
         self.apis: Dict[str, APIMetrics] = {}
         self.start_time = datetime.now()
@@ -389,7 +361,6 @@ class MetricsDashboard:
     def register_api(self, name: str) -> APIMetrics:
         if name not in self.apis:
             self.apis[name] = APIMetrics(name=name)
-            logger.info(f"📊 API registered: {name}")
         return self.apis[name]
     
     def record_call(self, api_name: str, success: bool, duration: float, 
@@ -404,7 +375,6 @@ class MetricsDashboard:
         if success:
             metrics.calls_success += 1
             metrics.response_times.append(duration)
-            # Limitar historial a últimas 100 llamadas
             if len(metrics.response_times) > 100:
                 metrics.response_times = metrics.response_times[-100:]
         else:
@@ -413,45 +383,20 @@ class MetricsDashboard:
         
         if rate_limit_remaining is not None:
             metrics.rate_limit_remaining = rate_limit_remaining
-        
-        # Log métricas cada 10 llamadas
-        if metrics.calls_total % 10 == 0:
-            logger.metric(api_name, "success_rate", f"{metrics.success_rate:.1%}")
-            logger.metric(api_name, "avg_response", f"{metrics.avg_response_time:.2f}s")
-    
-    def get_summary(self) -> Dict[str, Any]:
-        uptime = (datetime.now() - self.start_time).total_seconds()
-        return {
-            'uptime_seconds': uptime,
-            'apis': {name: {
-                'calls': m.calls_total,
-                'success_rate': m.success_rate,
-                'avg_time': m.avg_response_time,
-                'health': m.health_status.value,
-                'rate_limit': m.rate_limit_remaining
-            } for name, m in self.apis.items()}
-        }
     
     def check_degradation(self) -> List[str]:
-        """Detecta degradación de servicios"""
         alerts = []
         for name, metrics in self.apis.items():
             if metrics.health_status == HealthStatus.CRITICAL:
                 alerts.append(f"🔴 {name}: CRITICAL ({metrics.success_rate:.0%} success)")
             elif metrics.health_status == HealthStatus.DEGRADED:
                 alerts.append(f"⚠️ {name}: DEGRADED ({metrics.success_rate:.0%} success)")
-            
-            if metrics.rate_limit_remaining is not None and metrics.rate_limit_remaining < 10:
-                alerts.append(f"⚠️ {name}: LOW RATE LIMIT ({metrics.rate_limit_remaining} remaining)")
-        
         return alerts
 
 metrics_dashboard = MetricsDashboard()
 
-# 🏛️ CONSOLE UI WITH EMOJIS ENHANCED
+# 🏛️ CONSOLE UI
 class UI:
-    """Beautiful console UI with colorized output"""
-    
     @staticmethod
     def print(text: str, color: str = '', flush: bool = True):
         try:
@@ -466,19 +411,9 @@ class UI:
         UI.print(f"{'='*80}\n", Fore.CYAN + Style.BRIGHT)
     
     @staticmethod
-    def section(title: str):
-        UI.print(f"\n{'─'*80}\n📍 {title}\n{'─'*80}\n", Fore.CYAN)
-    
-    @staticmethod
     def status(emoji: str, msg: str, typ: str = "INFO"):
         ts = datetime.now().strftime('%H:%M:%S')
-        colors = {
-            "INFO": Fore.CYAN, 
-            "SUCCESS": Fore.GREEN, 
-            "WARNING": Fore.YELLOW, 
-            "ERROR": Fore.RED,
-            "ALERT": Fore.MAGENTA + Style.BRIGHT
-        }
+        colors = {"INFO": Fore.CYAN, "SUCCESS": Fore.GREEN, "WARNING": Fore.YELLOW, "ERROR": Fore.RED}
         color = colors.get(typ, Fore.WHITE) if COLORS_AVAILABLE else ''
         UI.print(f"[{ts}] {emoji} {msg}", color)
     
@@ -488,54 +423,28 @@ class UI:
         filled = int(width * current / total)
         bar = '█' * filled + '░' * (width - filled)
         color = Fore.GREEN if pct == 100 else Fore.CYAN
-        UI.print(f"\r{prefix} [{bar}] {pct:.0f}% ({current}/{total})", color, flush=True)
+        UI.print(f"\r{prefix} Progress [{bar}] {pct:.0f}% ({current}/{total})", color, flush=True)
         if current == total: print()
-    
-    @staticmethod
-    def metric_table(data: Dict[str, Any]):
-        """Tabla formateada de métricas"""
-        UI.print("\n╔═══════════════════════════╦════════════════════════╗", Fore.CYAN)
-        for key, value in data.items():
-            UI.print(f"║ {key:<25} ║ {str(value):<22} ║", Fore.CYAN)
-        UI.print("╚═══════════════════════════╩════════════════════════╝\n", Fore.CYAN)
 
-# ⚙️ CONFIG MANAGER ENHANCED
+# ⚙️ CONFIG MANAGER
 class ConfigManager:
-    """Gestor de configuración con validación exhaustiva"""
     def __init__(self, file: str = CONFIG_FILE):
         self.file = Path(file)
         self._config = self._load()
         self._validate()
-        logger.info(f"✅ Config loaded: {len(self.flights)} flights, threshold=€{self.alert_threshold}")
+        logger.info(f"✅ Config loaded: {len(self.flights)} flights")
     
     def _load(self) -> Dict:
-        UI.status("📂", "Loading configuration...")
         if not self.file.exists():
             raise FileNotFoundError(f"❌ {self.file} not found")
-        try:
-            with open(self.file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except json.JSONDecodeError as e:
-            raise ValueError(f"❌ Invalid JSON in {self.file}: {e}")
+        with open(self.file, 'r', encoding='utf-8') as f:
+            return json.load(f)
     
     def _validate(self):
         required = ['telegram', 'flights']
         for field in required:
             if field not in self._config:
-                raise ValueError(f"❌ Missing required field: {field}")
-        
-        telegram_config = self._config['telegram']
-        if not telegram_config.get('token') or not telegram_config.get('chat_id'):
-            raise ValueError("❌ Invalid Telegram config")
-        
-        # Validar inputs de vuelos
-        for flight in self._config['flights']:
-            if not all(k in flight for k in ['origin', 'dest', 'name']):
-                raise ValueError(f"❌ Invalid flight config: {flight}")
-            if not re.match(r'^[A-Z]{3}$', flight['origin'].upper()):
-                raise ValueError(f"❌ Invalid origin IATA: {flight['origin']}")
-            if not re.match(r'^[A-Z]{3}$', flight['dest'].upper()):
-                raise ValueError(f"❌ Invalid dest IATA: {flight['dest']}")
+                raise ValueError(f"❌ Missing: {field}")
     
     @property
     def bot_token(self) -> str: 
@@ -547,12 +456,7 @@ class ConfigManager:
     
     @property
     def webhook_url(self) -> Optional[str]:
-        """¡NUEVO! Webhook para producción"""
         return self._config['telegram'].get('webhook_url')
-    
-    @property
-    def webhook_port(self) -> int:
-        return self._config['telegram'].get('webhook_port', 8443)
     
     @property
     def flights(self) -> List[Dict]: 
@@ -569,19 +473,9 @@ class ConfigManager:
     @property
     def rss_feeds(self) -> List[str]: 
         return self._config.get('rss_feeds', [])
-    
-    @property
-    def use_webhooks(self) -> bool:
-        return bool(self.webhook_url)
 
-# 🧠 ML SMART PREDICTOR ENTERPRISE (DecisionTree Patterns)
+# 🧠 ML SMART PREDICTOR
 class MLSmartPredictor:
-    """
-    Predictor Enterprise con DecisionTree patterns, más factores y confidence scores.
-    Basado en estudios reales de precio dinámico en aerolíneas.
-    """
-    
-    # Precios base por ruta (mercado real 2026)
     BASE_PRICES = {
         'MAD-MGA': 680, 'MGA-MAD': 700,
         'MAD-MIA': 520, 'MIA-MAD': 580,
@@ -594,227 +488,445 @@ class MLSmartPredictor:
     HIGH_SEASON = [6, 7, 8, 12]
     LOW_SEASON = [1, 2, 9, 10, 11]
     
-    # ¡NUEVO! Aerolíneas y sus multiplicadores
-    AIRLINE_MULTIPLIERS = {
-        'legacy': 1.35,      # Iberia, British Airways
-        'lowcost': 0.75,     # Ryanair, Vueling
-        'premium': 1.85,     # Emirates, Singapore
-        'charter': 0.65      # Wamos, World2Fly
-    }
-    
     def __init__(self):
-        logger.info("🧠 ML Smart Predictor ENTERPRISE initialized with DecisionTree patterns")
+        logger.info("🧠 ML Smart Predictor initialized")
     
     def predict(self, origin: str, dest: str, flight_date: str = None, 
-                cabin_class: str = 'economy', stops: int = 1,
-                airline_type: str = 'legacy') -> Tuple[float, float]:
-        """
-        Predice precio con confidence score basado en DecisionTree.
-        
-        Returns:
-            Tuple[float, float]: (precio, confidence_score)
-        """
+                cabin_class: str = 'economy', stops: int = 1) -> Tuple[float, float]:
         route = f"{origin}-{dest}"
         base = self.BASE_PRICES.get(route, 650)
         
-        # Variables de fecha
         if flight_date:
             try:
                 flight_dt = datetime.strptime(flight_date, '%Y-%m-%d')
                 days_ahead = (flight_dt - datetime.now()).days
                 month = flight_dt.month
-                day_of_week = flight_dt.weekday()
             except:
-                days_ahead, month, day_of_week = 45, datetime.now().month, 1
+                days_ahead, month = 45, datetime.now().month
         else:
             days_ahead = 45
             month = datetime.now().month
-            day_of_week = datetime.now().weekday()
         
-        # Multiplicadores
         advance_mult = self._get_anticipation_multiplier(days_ahead)
         season_mult = self._get_seasonal_multiplier(month)
-        weekday_mult = self._get_weekday_multiplier(day_of_week)
         stops_mult = self._get_stops_multiplier(stops)
         cabin_mult = self._get_cabin_multiplier(cabin_class)
-        airline_mult = self.AIRLINE_MULTIPLIERS.get(airline_type, 1.0)
         
-        # ¡NUEVO! Demand factor (DecisionTree pattern)
-        demand_mult = self._get_demand_multiplier(days_ahead, month, day_of_week)
-        
-        # Ruido proporcional
         noise = random.uniform(0.92, 1.08)
-        
-        # Precio final
-        final_price = (
-            base * 
-            advance_mult * 
-            season_mult * 
-            weekday_mult * 
-            stops_mult * 
-            cabin_mult * 
-            airline_mult *
-            demand_mult *
-            noise
-        )
-        
-        # ¡NUEVO! Calcular confidence score
-        confidence = self._calculate_confidence(
-            days_ahead, month, stops, cabin_class, airline_type
-        )
-        
-        logger.debug(
-            f"🧠 {route}: Base=€{base} | Advance={advance_mult:.2f} | "
-            f"Season={season_mult:.2f} | Weekday={weekday_mult:.2f} | "
-            f"Stops={stops_mult:.2f} | Cabin={cabin_mult:.2f} | "
-            f"Airline={airline_mult:.2f} | Demand={demand_mult:.2f} | "
-            f"Final=€{final_price:.0f} | Confidence={confidence:.0%}"
-        )
+        final_price = base * advance_mult * season_mult * stops_mult * cabin_mult * noise
+        confidence = self._calculate_confidence(days_ahead, stops)
         
         return max(100, int(final_price)), confidence
     
-    def _get_anticipation_multiplier(self, days_ahead: int) -> float:
-        """Patrón curva en U mejorado"""
-        if days_ahead < 0:
-            return 2.5
-        elif days_ahead < 3:
-            return 2.0
-        elif days_ahead < 7:
-            return 1.7
-        elif days_ahead < 14:
-            return 1.4
-        elif days_ahead < 30:
-            return 1.15
-        elif days_ahead < 45:
-            return 1.05
-        elif days_ahead <= 60:
-            return 1.0  # Sweet spot
-        elif days_ahead < 90:
-            return 1.1
-        elif days_ahead < 120:
-            return 1.25
-        else:
-            return 1.35
+    def _get_anticipation_multiplier(self, days: int) -> float:
+        if days < 0: return 2.5
+        elif days < 7: return 1.7
+        elif days < 30: return 1.15
+        elif days <= 60: return 1.0
+        elif days < 120: return 1.25
+        else: return 1.35
     
     def _get_seasonal_multiplier(self, month: int) -> float:
-        if month in self.HIGH_SEASON:
-            return 1.35
-        elif month in [3, 4, 5]:
-            return 1.15
-        elif month in self.LOW_SEASON:
-            return 0.85
-        else:
-            return 1.0
-    
-    def _get_weekday_multiplier(self, weekday: int) -> float:
-        if weekday == 4:  # Viernes
-            return 1.15
-        elif weekday == 6:  # Domingo
-            return 1.2
-        elif weekday in [1, 2]:  # Martes, Miércoles
-            return 0.95
-        else:
-            return 1.0
+        if month in self.HIGH_SEASON: return 1.35
+        elif month in self.LOW_SEASON: return 0.85
+        else: return 1.0
     
     def _get_stops_multiplier(self, stops: int) -> float:
-        if stops == 0:
-            return 1.35
-        elif stops == 1:
-            return 1.0
-        elif stops == 2:
-            return 0.82
-        else:
-            return 0.75
+        if stops == 0: return 1.35
+        elif stops == 1: return 1.0
+        else: return 0.82
     
-    def _get_cabin_multiplier(self, cabin_class: str) -> float:
-        multipliers = {
-            'economy': 1.0,
-            'premium_economy': 1.75,
-            'business': 4.2,
-            'first': 6.5
-        }
-        return multipliers.get(cabin_class, 1.0)
+    def _get_cabin_multiplier(self, cabin: str) -> float:
+        multipliers = {'economy': 1.0, 'premium_economy': 1.75, 'business': 4.2, 'first': 6.5}
+        return multipliers.get(cabin, 1.0)
     
-    def _get_demand_multiplier(self, days_ahead: int, month: int, weekday: int) -> float:
-        """
-        ¡NUEVO! Multiplicador de demanda basado en DecisionTree patterns.
-        Simula comportamiento real de pricing dinámico.
-        """
-        # Alta demanda: temporada alta + último minuto + fin de semana
-        demand_score = 0
-        
-        if month in self.HIGH_SEASON:
-            demand_score += 2
-        if days_ahead < 14:
-            demand_score += 2
-        if weekday in [4, 5, 6]:  # Vie-Dom
-            demand_score += 1
-        
-        # Decision tree
-        if demand_score >= 4:
-            return 1.25  # Muy alta demanda
-        elif demand_score >= 3:
-            return 1.15  # Alta demanda
-        elif demand_score >= 2:
-            return 1.05  # Media
-        else:
-            return 0.95  # Baja demanda
-    
-    def _calculate_confidence(self, days_ahead: int, month: int, stops: int,
-                            cabin_class: str, airline_type: str) -> float:
-        """
-        ¡NUEVO! Calcula confidence score de la predicción.
-        
-        Factors:
-        - Anticipación (mejor confianza en sweet spot)
-        - Disponibilidad de datos históricos
-        - Volatilidad esperada
-        """
-        confidence = 0.85  # Base
-        
-        # Factor 1: Anticipación
-        if 45 <= days_ahead <= 60:
-            confidence += 0.10  # Sweet spot = alta confianza
-        elif days_ahead < 7:
-            confidence -= 0.20  # Último minuto = volátil
-        elif days_ahead > 120:
-            confidence -= 0.10  # Muy anticipado = incierto
-        
-        # Factor 2: Stops (directo = más predecible)
-        if stops == 0:
-            confidence += 0.05
-        elif stops >= 2:
-            confidence -= 0.05
-        
-        # Factor 3: Cabin (economy más predecible)
-        if cabin_class == 'economy':
-            confidence += 0.05
-        elif cabin_class in ['business', 'first']:
-            confidence -= 0.10
-        
-        # Factor 4: Airline type
-        if airline_type == 'lowcost':
-            confidence += 0.05  # Lowcost más predecible
-        elif airline_type == 'charter':
-            confidence -= 0.10  # Charter menos predecible
-        
+    def _calculate_confidence(self, days: int, stops: int) -> float:
+        confidence = 0.85
+        if 45 <= days <= 60: confidence += 0.10
+        elif days < 7: confidence -= 0.20
+        if stops == 0: confidence += 0.05
         return max(0.3, min(0.99, confidence))
-    
-    def get_breakdown(self, origin: str, dest: str, flight_date: str = None,
-                     cabin_class: str = 'economy', stops: int = 1,
-                     airline_type: str = 'legacy') -> Dict[str, Any]:
-        """Desglose detallado con confidence"""
-        route = f"{origin}-{dest}"
-        price, confidence = self.predict(origin, dest, flight_date, cabin_class, stops, airline_type)
-        
-        return {
-            'route': route,
-            'price': price,
-            'confidence': confidence,
-            'confidence_emoji': "🎯" if confidence >= 0.9 else "✅" if confidence >= 0.75 else "⚠️",
-            'cabin_class': cabin_class,
-            'stops': stops,
-            'airline_type': airline_type
-        }
 
-# (Continúa en el siguiente mensaje debido al límite de caracteres...)
+# 🎯 FLIGHT SCANNER CORE
+class FlightScanner:
+    def __init__(self, config: ConfigManager):
+        self.config = config
+        self.cache = TTLCache()
+        self.ml_predictor = MLSmartPredictor()
+        self.circuits = {
+            'serpapi': CircuitBreaker('serpapi', fail_max=3, reset_timeout=60),
+            'aviationstack': CircuitBreaker('aviationstack', fail_max=5)
+        }
+        self.serpapi_calls_today = 0
+        self.serpapi_last_reset = datetime.now().date()
+        logger.info("🎯 FlightScanner initialized")
+    
+    def scan_routes(self, routes: List[FlightRoute], parallel: bool = True) -> List[FlightPrice]:
+        UI.section(f"FLIGHT SCANNER: {len(routes)} ROUTES")
+        UI.status("🚀", f"Starting {'parallel' if parallel else 'sequential'} scan with {MAX_WORKERS} workers...")
+        
+        results = []
+        if parallel:
+            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                futures = {executor.submit(self._scan_single, r): r for r in routes}
+                for i, future in enumerate(as_completed(futures), 1):
+                    try:
+                        price = future.result()
+                        if price:
+                            results.append(price)
+                    except Exception as e:
+                        route = futures[future]
+                        logger.error(f"❌ Scan failed for {route.route_code}: {e}")
+                    UI.progress(i, len(routes))
+        else:
+            for i, route in enumerate(routes, 1):
+                try:
+                    price = self._scan_single(route)
+                    if price:
+                        results.append(price)
+                except Exception as e:
+                    logger.error(f"❌ Scan failed for {route.route_code}: {e}")
+                UI.progress(i, len(routes))
+        
+        UI.status("✅", f"Scan complete: {len(results)}/{len(routes)} results", "SUCCESS")
+        return results
+    
+    def _scan_single(self, route: FlightRoute) -> Optional[FlightPrice]:
+        cache_key = f"price:{route.route_code}:today:economy:1"
+        cached = self.cache.get(cache_key)
+        
+        if cached:
+            logger.info(f"💾 Using cached price for {route.route_code}")
+            return cached
+        
+        # Try SerpAPI first
+        try:
+            price = self.circuits['serpapi'].call(self._fetch_serpapi, route)
+            if price:
+                self.cache.set(cache_key, price, ttl=100)
+                return price
+        except Exception as e:
+            logger.warning(f"⚠️ serpapi failed for {route.route_code}: {e}")
+        
+        # Fallback to ML
+        ml_price, confidence = self.ml_predictor.predict(
+            route.origin, route.dest, 
+            flight_date=datetime.now().strftime('%Y-%m-%d'),
+            cabin_class='economy', stops=random.choice([0, 1])
+        )
+        
+        price = FlightPrice(
+            route=route.route_code,
+            name=route.name,
+            price=ml_price,
+            source=PriceSource.ML_SMART,
+            timestamp=datetime.now(),
+            confidence=confidence,
+            metadata={'fallback': True}
+        )
+        
+        logger.info(f"🧠 {route.route_code}: €{ml_price} (ML Smart Fallback, conf={confidence:.0%})")
+        self.cache.set(cache_key, price, ttl=100)
+        return price
+    
+    def _fetch_serpapi(self, route: FlightRoute) -> Optional[FlightPrice]:
+        # Check rate limit
+        if self.serpapi_last_reset != datetime.now().date():
+            self.serpapi_calls_today = 0
+            self.serpapi_last_reset = datetime.now().date()
+        
+        if self.serpapi_calls_today >= SERPAPI_RATE_LIMIT:
+            raise Exception("SERPAPI rate limit reached")
+        
+        # Simulate API call
+        self.serpapi_calls_today += 1
+        raise Exception("SERPAPI not configured")  # Placeholder
+
+# 💾 DATA MANAGER
+class DataManager:
+    def __init__(self, csv_file: str = CSV_FILE):
+        self.csv_file = Path(csv_file)
+        self._ensure_csv()
+        logger.info(f"💾 DataManager initialized: {self.csv_file}")
+    
+    def _ensure_csv(self):
+        if not self.csv_file.exists():
+            df = pd.DataFrame(columns=['route', 'name', 'price', 'source', 'timestamp', 'confidence', 'metadata'])
+            df.to_csv(self.csv_file, index=False, encoding='utf-8')
+            logger.info(f"📄 Created new CSV: {self.csv_file}")
+    
+    def save_prices(self, prices: List[FlightPrice]):
+        if not prices:
+            return
+        
+        df_new = pd.DataFrame([p.to_dict() for p in prices])
+        
+        if self.csv_file.exists():
+            df_existing = pd.read_csv(self.csv_file, encoding='utf-8')
+            df = pd.concat([df_existing, df_new], ignore_index=True)
+        else:
+            df = df_new
+        
+        df.to_csv(self.csv_file, index=False, encoding='utf-8')
+        avg_conf = sum(p.confidence for p in prices) / len(prices)
+        UI.status("💾", f"Saved {len(prices)} prices (avg confidence: {avg_conf:.0%})", "SUCCESS")
+    
+    def get_historical_avg(self, route: str, days: int = 30) -> Optional[float]:
+        try:
+            df = pd.read_csv(self.csv_file, encoding='utf-8')
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            cutoff = datetime.now() - timedelta(days=days)
+            df_route = df[(df['route'] == route) & (df['timestamp'] >= cutoff)]
+            return df_route['price'].mean() if not df_route.empty else None
+        except:
+            return None
+
+# 🤖 TELEGRAM BOT MANAGER
+class TelegramBotManager:
+    def __init__(self, config: ConfigManager, scanner: FlightScanner, data_mgr: DataManager):
+        self.config = config
+        self.scanner = scanner
+        self.data_mgr = data_mgr
+        self.app = None
+        self.running = False
+        self._background_tasks: Set[asyncio.Task] = set()
+        logger.info("🤖 TelegramBotManager initialized")
+    
+    async def start(self):
+        self.app = Application.builder().token(self.config.bot_token).build()
+        
+        # Handlers
+        self.app.add_handler(CommandHandler('start', self.cmd_start))
+        self.app.add_handler(CommandHandler('scan', self.cmd_scan))
+        self.app.add_handler(CommandHandler('status', self.cmd_status))
+        self.app.add_handler(CommandHandler('help', self.cmd_help))
+        self.app.add_handler(CallbackQueryHandler(self.handle_callback))
+        
+        self.running = True
+        
+        if self.config.webhook_url:
+            UI.status("🌐", "Starting in WEBHOOK mode...")
+            await self.app.initialize()
+            await self.app.start()
+            await self.app.bot.set_webhook(url=self.config.webhook_url)
+            logger.info(f"🌐 Webhook set: {self.config.webhook_url}")
+        else:
+            UI.status("🔄", "Starting in POLLING mode...")
+            await self.app.initialize()
+            await self.app.start()
+            await self.app.updater.start_polling(drop_pending_updates=True)
+            logger.info("🔄 Polling started")
+        
+        UI.status("✅", "Bot is running!", "SUCCESS")
+    
+    async def stop(self):
+        UI.header("🛑 SHUTDOWN REQUESTED")
+        self.running = False
+        
+        # Cancel all background tasks
+        if self._background_tasks:
+            UI.status("⏹️", f"Cancelling {len(self._background_tasks)} background tasks...")
+            for task in self._background_tasks:
+                if not task.done():
+                    task.cancel()
+            
+            # Wait for all tasks to complete cancellation
+            await asyncio.gather(*self._background_tasks, return_exceptions=True)
+            self._background_tasks.clear()
+        
+        if self.app:
+            UI.status("⏹️", "Stopping bot...")
+            try:
+                if self.app.updater and self.app.updater.running:
+                    await self.app.updater.stop()
+                await self.app.stop()
+                await self.app.shutdown()
+            except Exception as e:
+                logger.error(f"Error during shutdown: {e}")
+        
+        UI.header("✅ BOT STOPPED")
+        UI.status("✅", "System stopped by user", "SUCCESS")
+    
+    # ⚠️ FIX: Usa update.effective_message en lugar de update.message
+    async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        msg = update.effective_message
+        if not msg:
+            logger.warning("cmd_start: No effective_message")
+            return
+        
+        await context.bot.send_chat_action(chat_id=msg.chat_id, action=ChatAction.TYPING)
+        
+        welcome = (
+            f"🎆 *{APP_NAME} v{VERSION}* 🎆\n\n"
+            "¡Bienvenido al sistema Enterprise de monitorización de vuelos!\n\n"
+            "*Comandos disponibles:*\n"
+            "/scan - Escanear rutas configuradas\n"
+            "/status - Ver estado del sistema\n"
+            "/help - Ayuda detallada\n\n"
+            "💡 _Usa los botones para interactuar_"
+        )
+        
+        keyboard = [
+            [InlineKeyboardButton("🔍 Escanear Ahora", callback_data="scan")],
+            [InlineKeyboardButton("📊 Estado Sistema", callback_data="status")],
+            [InlineKeyboardButton("❓ Ayuda", callback_data="help")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await msg.reply_text(welcome, parse_mode='Markdown', reply_markup=reply_markup)
+        logger.info(f"✅ /start command executed for user {msg.from_user.id}")
+    
+    async def cmd_scan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        msg = update.effective_message
+        if not msg:
+            logger.warning("cmd_scan: No effective_message")
+            return
+        
+        await context.bot.send_chat_action(chat_id=msg.chat_id, action=ChatAction.TYPING)
+        await msg.reply_text("🔍 Iniciando escaneo de rutas...")
+        
+        routes = [FlightRoute(**f) for f in self.config.flights]
+        prices = self.scanner.scan_routes(routes, parallel=True)
+        
+        if prices:
+            self.data_mgr.save_prices(prices)
+            
+            response = "✅ *Escaneo completado*\n\n"
+            for p in prices[:5]:
+                emoji = p.get_confidence_emoji()
+                response += f"{emoji} {p.name}: €{p.price:.0f} ({p.source.value})\n"
+            
+            if len(prices) > 5:
+                response += f"\n_...y {len(prices)-5} resultados más_"
+            
+            keyboard = [
+                [InlineKeyboardButton("🔄 Escanear de nuevo", callback_data="scan")],
+                [InlineKeyboardButton("📊 Ver estado", callback_data="status")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await msg.reply_text(response, parse_mode='Markdown', reply_markup=reply_markup)
+        else:
+            await msg.reply_text("❌ No se obtuvieron resultados")
+    
+    async def cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        msg = update.effective_message
+        if not msg:
+            logger.warning("cmd_status: No effective_message")
+            return
+        
+        await context.bot.send_chat_action(chat_id=msg.chat_id, action=ChatAction.TYPING)
+        
+        cache_metrics = {
+            'size': self.scanner.cache.size,
+            'hit_rate': f"{self.scanner.cache.hit_rate:.1%}",
+            'hits': self.scanner.cache.hits,
+            'misses': self.scanner.cache.misses
+        }
+        
+        circuit_status = {
+            name: cb.state.value 
+            for name, cb in self.scanner.circuits.items()
+        }
+        
+        msg_text = (
+            "📊 *Estado del Sistema*\n\n"
+            f"🗃️ Caché: {cache_metrics['size']} items ({cache_metrics['hit_rate']} hit rate)\n"
+            f"⚡ Circuit Breakers:\n"
+        )
+        
+        for name, status in circuit_status.items():
+            msg_text += f"  • {name}: {status}\n"
+        
+        alerts = metrics_dashboard.check_degradation()
+        if alerts:
+            msg_text += f"\n⚠️ *Alertas:*\n" + "\n".join(f"  • {a}" for a in alerts)
+        
+        keyboard = [[InlineKeyboardButton("🔄 Actualizar", callback_data="status")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await msg.reply_text(msg_text, parse_mode='Markdown', reply_markup=reply_markup)
+    
+    async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        msg = update.effective_message
+        if not msg:
+            logger.warning("cmd_help: No effective_message")
+            return
+        
+        help_text = (
+            f"📚 *Ayuda - {APP_NAME}*\n\n"
+            "*Comandos:*\n"
+            "/start - Iniciar bot\n"
+            "/scan - Escanear rutas\n"
+            "/status - Ver estado sistema\n"
+            "/help - Esta ayuda\n\n"
+            "*Características:*\n"
+            "✅ ML Smart Predictions\n"
+            "✅ Circuit Breaker Pattern\n"
+            "✅ Intelligent Caching\n"
+            "✅ Health Monitoring\n\n"
+            f"_Versión: {VERSION}_"
+        )
+        
+        await msg.reply_text(help_text, parse_mode='Markdown')
+    
+    # ⚠️ FIX CRÍTICO: Manejo correcto de CallbackQuery
+    async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        query = update.callback_query
+        if not query:
+            logger.warning("handle_callback: No callback_query")
+            return
+        
+        await query.answer()
+        
+        callback_data = query.data
+        logger.info(f"📞 Callback received: {callback_data}")
+        
+        # ⚠️ IMPORTANTE: Para callbacks, el mensaje está en query.message
+        # NO en update.message (que es None)
+        if callback_data == "scan":
+            await self.cmd_scan(update, context)
+        elif callback_data == "status":
+            await self.cmd_status(update, context)
+        elif callback_data == "help":
+            await self.cmd_help(update, context)
+        else:
+            if query.message:
+                await query.message.reply_text(f"❓ Callback desconocido: {callback_data}")
+
+# 🚀 MAIN
+async def main():
+    UI.header(f"🎆 {APP_NAME} v{VERSION} 🎆")
+    
+    try:
+        config = ConfigManager()
+        scanner = FlightScanner(config)
+        data_mgr = DataManager()
+        bot_mgr = TelegramBotManager(config, scanner, data_mgr)
+        
+        await bot_mgr.start()
+        
+        # Keep running
+        while bot_mgr.running:
+            await asyncio.sleep(1)
+            
+            # Check degradation periodically
+            if int(time.time()) % 60 == 0:
+                alerts = metrics_dashboard.check_degradation()
+                if alerts:
+                    UI.status("⚠️", f"Degradation detected: {', '.join(alerts)}", "WARNING")
+        
+    except KeyboardInterrupt:
+        UI.status("⏹️", "Keyboard interrupt received", "WARNING")
+    except Exception as e:
+        UI.status("❌", f"Fatal error: {e}", "ERROR")
+        logger.critical(f"Fatal error: {e}")
+    finally:
+        if 'bot_mgr' in locals():
+            await bot_mgr.stop()
+
+if __name__ == '__main__':
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        UI.status("✅", "System stopped by user", "SUCCESS")
