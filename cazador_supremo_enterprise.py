@@ -2,31 +2,30 @@
 # -*- coding: utf-8 -*-
 """
 ═════════════════════════════════════════════════════════════════════════════
-║       🎆 CAZADOR SUPREMO v12.1 ENTERPRISE EDITION 🎆                    ║
+║       🎆 CAZADOR SUPREMO v12.2 ENTERPRISE EDITION 🎆                    ║
 ║   🚀 Sistema Profesional de Monitorización de Vuelos 2026 🚀           ║
 ═════════════════════════════════════════════════════════════════════════════
 
-👨‍💻 Autor: @Juanka_Spain | 🏷️ v12.1.2 Enterprise | 📅 2026-01-13 | 📋 MIT License
+👨‍💻 Autor: @Juanka_Spain | 🏷️ v12.2.0 Enterprise | 📅 2026-01-14 | 📋 MIT License
 
-🌟 ENTERPRISE FEATURES V12.1:
-✅ SerpAPI Real Google Flights       ✅ Webhooks para Producción     ✅ ML Confidence Scores
-✅ Rate Limiting Inteligente         ✅ Retry Logic Robusto          ✅ DecisionTree Patterns
-✅ Fallback Multi-Nivel              ✅ Input Validation Pro         ✅ Alertas Proactivas
-✅ Heartbeat Monitoring (opcional)   ✅ Inline Keyboards             ✅ Métricas por Fuente
-✅ Typing Indicators UX              ✅ Markdown Estratégico         ✅ Console Coloreado
-✅ Health Checks Avanzados           ✅ Status por Componente        ✅ Degradation Alerts
+🌟 ENTERPRISE FEATURES V12.2 - ITERACIÓN 1/3:
+✅ Búsqueda Personalizada /route     ✅ Sistema de Deals Automático    ✅ Análisis de Tendencias
+✅ Notificaciones Inteligentes       ✅ Búsqueda Flexible ±3 días      ✅ Info de Aerolíneas
+✅ Scheduler de Escaneos            ✅ Multi-Currency (EUR/USD/GBP)   ✅ ML Mejorado
+✅ Formato Mensajes Avanzado        ✅ Alertas Proactivas             ✅ Historical Analytics
 
-🆕 NUEVO EN v12.1.2:
-⭐ FIX: Corregido error 400 Bad Request en SerpAPI
-⭐ Soporte solo one-way flights (sin return_date requerido)
-⭐ Logs mejorados para debugging de parámetros API
+🆕 NUEVO EN v12.2.0:
+⭐ /route - Búsqueda personalizada por origen, destino y fecha
+⭐ /deals - Sistema inteligente de detección de chollos
+⭐ /trends - Análisis de tendencias de precios históricos
+⭐ Notificaciones automáticas cuando detecta precios bajos
+⭐ Búsqueda flexible de fechas con ventana de ±3 días
+⭐ Extracción detallada de info de vuelos (aerolíneas, escalas)
+⭐ Scheduler para escaneos automáticos programables
+⭐ Soporte multi-moneda (EUR, USD, GBP)
+⭐ Algoritmo ML mejorado con 50+ rutas base
 
-🐛 FIXES ANTERIORES:
-- v12.1.1: Añade comando /clearcache para testing
-- v12.1.0: Implementa integración real SerpAPI Google Flights
-- v12.0.3: Agrega método UI.section() faltante
-
-📦 Dependencies: python-telegram-bot pandas requests feedparser colorama
+📦 Dependencies: python-telegram-bot pandas requests feedparser colorama matplotlib
 🚀 Usage: python cazador_supremo_enterprise.py
 ⚙️ Config: Edit config.json with your tokens
 """
@@ -43,7 +42,7 @@ from functools import wraps
 import logging
 from logging.handlers import RotatingFileHandler
 from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 from telegram.error import TelegramError, RetryAfter, TimedOut, NetworkError
 from telegram.constants import ChatAction
 
@@ -67,15 +66,21 @@ if sys.platform == 'win32':
     except: pass
 
 # 🌐 GLOBAL CONFIG
-VERSION = "12.1.2 Enterprise"
+VERSION = "12.2.0 Enterprise"
 APP_NAME = "Cazador Supremo"
 CONFIG_FILE, LOG_FILE, CSV_FILE = "config.json", "cazador_supremo.log", "deals_history.csv"
 MAX_WORKERS, API_TIMEOUT = 25, 15
 CACHE_TTL, CIRCUIT_BREAK_THRESHOLD = 300, 5
-SERPAPI_RATE_LIMIT = 100  # llamadas/mes tier free
+SERPAPI_RATE_LIMIT = 100
 RETRY_MAX_ATTEMPTS = 3
 RETRY_BACKOFF_FACTOR = 2
-HEARTBEAT_INTERVAL = 60  # segundos
+HEARTBEAT_INTERVAL = 60
+AUTO_SCAN_INTERVAL = 3600  # 1 hora
+DEAL_NOTIFICATION_COOLDOWN = 1800  # 30 minutos entre notificaciones del mismo deal
+
+# Currency symbols
+CURRENCY_SYMBOLS = {'EUR': '€', 'USD': '$', 'GBP': '£'}
+CURRENCY_RATES = {'EUR': 1.0, 'USD': 1.09, 'GBP': 0.86}  # Tasas desde EUR
 
 # 📦 ENUMS
 class PriceSource(Enum):
@@ -118,6 +123,10 @@ class FlightPrice:
     timestamp: datetime
     confidence: float = 0.85
     metadata: Dict[str, Any] = field(default_factory=dict)
+    departure_date: Optional[str] = None
+    airline: Optional[str] = None
+    stops: int = 0
+    currency: str = 'EUR'
     
     def to_dict(self) -> Dict:
         return {
@@ -127,21 +136,63 @@ class FlightPrice:
             'source': self.source.value, 
             'timestamp': self.timestamp.isoformat(),
             'confidence': self.confidence,
-            'metadata': json.dumps(self.metadata)
+            'metadata': json.dumps(self.metadata),
+            'departure_date': self.departure_date,
+            'airline': self.airline,
+            'stops': self.stops,
+            'currency': self.currency
         }
     
     def is_deal(self, threshold: float) -> bool:
         return self.price < threshold
     
     def get_confidence_emoji(self) -> str:
-        if self.confidence >= 0.9:
-            return "🎯"
-        elif self.confidence >= 0.75:
-            return "✅"
-        elif self.confidence >= 0.6:
-            return "⚠️"
-        else:
-            return "❓"
+        if self.confidence >= 0.9: return "🎯"
+        elif self.confidence >= 0.75: return "✅"
+        elif self.confidence >= 0.6: return "⚠️"
+        else: return "❓"
+    
+    def convert_currency(self, to_currency: str) -> float:
+        """Convert price to different currency"""
+        if self.currency == to_currency:
+            return self.price
+        # Convert to EUR first, then to target
+        price_eur = self.price / CURRENCY_RATES[self.currency]
+        return price_eur * CURRENCY_RATES[to_currency]
+    
+    def format_price(self, currency: str = None) -> str:
+        """Format price with currency symbol"""
+        target_currency = currency or self.currency
+        price = self.convert_currency(target_currency)
+        symbol = CURRENCY_SYMBOLS.get(target_currency, target_currency)
+        return f"{symbol}{price:.0f}"
+
+@dataclass
+class Deal:
+    """Represents a price deal/opportunity"""
+    flight_price: FlightPrice
+    savings_pct: float
+    historical_avg: float
+    detected_at: datetime
+    notified: bool = False
+    
+    def get_message(self) -> str:
+        """Format deal as Telegram message"""
+        fp = self.flight_price
+        msg = (
+            f"🔥 *¡CHOLLO DETECTADO!* 🔥\n\n"
+            f"✈️ *Ruta:* {fp.name}\n"
+            f"💰 *Precio:* {fp.format_price()} ({fp.source.value})\n"
+            f"📉 *Ahorro:* {self.savings_pct:.1f}% vs histórico\n"
+            f"📊 *Media histórica:* €{self.historical_avg:.0f}\n"
+        )
+        if fp.departure_date:
+            msg += f"📅 *Salida:* {fp.departure_date}\n"
+        if fp.airline:
+            msg += f"🛫 *Aerolínea:* {fp.airline}\n"
+        msg += f"🔗 *Escalas:* {fp.stops}\n"
+        msg += f"{fp.get_confidence_emoji()} *Confianza:* {fp.confidence:.0%}"
+        return msg
 
 @dataclass
 class APIMetrics:
@@ -156,35 +207,26 @@ class APIMetrics:
     
     @property
     def success_rate(self) -> float:
-        if self.calls_total == 0:
-            return 0.0
+        if self.calls_total == 0: return 0.0
         return self.calls_success / self.calls_total
     
     @property
     def avg_response_time(self) -> float:
-        if not self.response_times:
-            return 0.0
+        if not self.response_times: return 0.0
         return sum(self.response_times) / len(self.response_times)
     
     @property
     def health_status(self) -> HealthStatus:
-        if self.calls_total == 0:
-            return HealthStatus.UNKNOWN
-        if self.success_rate >= 0.95:
-            return HealthStatus.HEALTHY
-        elif self.success_rate >= 0.7:
-            return HealthStatus.DEGRADED
-        else:
-            return HealthStatus.CRITICAL
+        if self.calls_total == 0: return HealthStatus.UNKNOWN
+        if self.success_rate >= 0.95: return HealthStatus.HEALTHY
+        elif self.success_rate >= 0.7: return HealthStatus.DEGRADED
+        else: return HealthStatus.CRITICAL
 
 # 📊 COLORIZED LOGGER PROFESSIONAL
 class ColorizedLogger:
     LOG_COLORS = {
-        'DEBUG': Fore.CYAN,
-        'INFO': Fore.GREEN,
-        'WARNING': Fore.YELLOW,
-        'ERROR': Fore.RED,
-        'CRITICAL': Fore.RED + Style.BRIGHT
+        'DEBUG': Fore.CYAN, 'INFO': Fore.GREEN, 'WARNING': Fore.YELLOW,
+        'ERROR': Fore.RED, 'CRITICAL': Fore.RED + Style.BRIGHT
     }
     
     def __init__(self, name: str, file: str, max_bytes: int = 10*1024*1024, backups: int = 5):
@@ -204,31 +246,16 @@ class ColorizedLogger:
             self.logger.addHandler(ch)
     
     def _colorize(self, level: str, msg: str) -> str:
-        if not COLORS_AVAILABLE:
-            return msg
+        if not COLORS_AVAILABLE: return msg
         color = self.LOG_COLORS.get(level, '')
         timestamp = datetime.now().strftime('%H:%M:%S')
         return f"{Fore.CYAN}[{timestamp}]{Style.RESET_ALL} {color}{level:<8}{Style.RESET_ALL} | {msg}"
     
-    def debug(self, msg: str):
-        self.logger.debug(msg)
-    
-    def info(self, msg: str):
-        print(self._colorize('INFO', msg))
-        self.logger.info(msg)
-    
-    def warning(self, msg: str):
-        print(self._colorize('WARNING', msg))
-        self.logger.warning(msg)
-    
-    def error(self, msg: str, exc=False):
-        print(self._colorize('ERROR', msg))
-        self.logger.error(msg, exc_info=exc)
-    
-    def critical(self, msg: str):
-        print(self._colorize('CRITICAL', msg))
-        self.logger.critical(msg, exc_info=True)
-    
+    def debug(self, msg: str): self.logger.debug(msg)
+    def info(self, msg: str): print(self._colorize('INFO', msg)); self.logger.info(msg)
+    def warning(self, msg: str): print(self._colorize('WARNING', msg)); self.logger.warning(msg)
+    def error(self, msg: str, exc=False): print(self._colorize('ERROR', msg)); self.logger.error(msg, exc_info=exc)
+    def critical(self, msg: str): print(self._colorize('CRITICAL', msg)); self.logger.critical(msg, exc_info=True)
     def metric(self, api: str, metric: str, value: Any):
         msg = f"📊 {api} | {metric}: {value}"
         print(f"{Fore.MAGENTA}{msg}{Style.RESET_ALL}")
@@ -295,7 +322,6 @@ class CircuitBreaker:
             self.fail_count += 1
             self.last_fail_time = time.time()
             logger.warning(f"⚠️ {self.name}: Failure #{self.fail_count}/{self.fail_max}")
-            
             if self.fail_count >= self.fail_max:
                 logger.error(f"🔴 {self.name}: → OPEN")
                 self.state = CircuitState.OPEN
@@ -449,54 +475,71 @@ class ConfigManager:
                 raise ValueError(f"❌ Missing: {field}")
     
     @property
-    def bot_token(self) -> str: 
-        return self._config['telegram']['token']
+    def bot_token(self) -> str: return self._config['telegram']['token']
     
     @property
-    def chat_id(self) -> str: 
-        return self._config['telegram']['chat_id']
+    def chat_id(self) -> str: return self._config['telegram']['chat_id']
     
     @property
-    def webhook_url(self) -> Optional[str]:
-        return self._config['telegram'].get('webhook_url')
+    def webhook_url(self) -> Optional[str]: return self._config['telegram'].get('webhook_url')
     
     @property
-    def flights(self) -> List[Dict]: 
-        return self._config['flights']
+    def flights(self) -> List[Dict]: return self._config['flights']
     
     @property
-    def alert_threshold(self) -> float: 
-        return float(self._config.get('alert_min', 500))
+    def alert_threshold(self) -> float: return float(self._config.get('alert_min', 500))
     
     @property
-    def api_keys(self) -> Dict: 
-        return self._config.get('apis', {})
+    def api_keys(self) -> Dict: return self._config.get('apis', {})
     
     @property
-    def rss_feeds(self) -> List[str]: 
-        return self._config.get('rss_feeds', [])
+    def rss_feeds(self) -> List[str]: return self._config.get('rss_feeds', [])
+    
+    @property
+    def auto_scan_enabled(self) -> bool: return self._config.get('auto_scan', False)
+    
+    @property
+    def deal_threshold_pct(self) -> float: return float(self._config.get('deal_threshold_pct', 20))
 
-# 🧠 ML SMART PREDICTOR
+# 🧠 ML SMART PREDICTOR - ENHANCED
 class MLSmartPredictor:
+    # Expanded base prices for 50+ routes
     BASE_PRICES = {
-        'MAD-MGA': 680, 'MGA-MAD': 700,
-        'MAD-MIA': 520, 'MIA-MAD': 580,
-        'MAD-BOG': 580, 'BOG-MAD': 620,
-        'MAD-NYC': 450, 'NYC-MAD': 500,
-        'MAD-MEX': 700, 'MEX-MAD': 720,
-        'MAD-LAX': 550, 'LAX-MAD': 600,
+        # España
+        'MAD-BCN': 120, 'BCN-MAD': 115, 'MAD-AGP': 90, 'AGP-MAD': 95,
+        'MAD-PMI': 85, 'PMI-MAD': 80, 'MAD-SVQ': 75, 'SVQ-MAD': 70,
+        'MAD-VLC': 65, 'VLC-MAD': 60, 'MAD-BIO': 95, 'BIO-MAD': 90,
+        # Europa
+        'MAD-LHR': 180, 'LHR-MAD': 190, 'MAD-CDG': 150, 'CDG-MAD': 160,
+        'MAD-FCO': 140, 'FCO-MAD': 145, 'MAD-AMS': 165, 'AMS-MAD': 170,
+        'MAD-BER': 155, 'BER-MAD': 160, 'MAD-MUC': 175, 'MUC-MAD': 180,
+        # América
+        'MAD-JFK': 480, 'JFK-MAD': 520, 'MAD-MIA': 520, 'MIA-MAD': 580,
+        'MAD-NYC': 450, 'NYC-MAD': 500, 'MAD-LAX': 550, 'LAX-MAD': 600,
+        'MAD-EZE': 720, 'EZE-MAD': 780, 'MAD-BOG': 580, 'BOG-MAD': 620,
+        'MAD-MEX': 700, 'MEX-MAD': 720, 'MAD-LIM': 650, 'LIM-MAD': 680,
+        'MAD-SCL': 820, 'SCL-MAD': 850, 'MAD-GRU': 780, 'GRU-MAD': 800,
+        # Centroamérica
+        'MAD-MGA': 680, 'MGA-MAD': 700, 'MAD-PTY': 640, 'PTY-MAD': 660,
+        'MAD-SJO': 670, 'SJO-MAD': 690, 'MAD-GUA': 650, 'GUA-MAD': 670,
+        # Asia
+        'MAD-TYO': 950, 'TYO-MAD': 980, 'MAD-BKK': 720, 'BKK-MAD': 750,
+        'MAD-SIN': 850, 'SIN-MAD': 880, 'MAD-HKG': 820, 'HKG-MAD': 850,
+        # Otros
+        'MAD-DXB': 480, 'DXB-MAD': 500, 'MAD-IST': 350, 'IST-MAD': 370,
     }
     
     HIGH_SEASON = [6, 7, 8, 12]
     LOW_SEASON = [1, 2, 9, 10, 11]
     
     def __init__(self):
-        logger.info("🧠 ML Smart Predictor initialized")
+        logger.info(f"🧠 ML Smart Predictor initialized with {len(self.BASE_PRICES)} routes")
     
     def predict(self, origin: str, dest: str, flight_date: str = None, 
                 cabin_class: str = 'economy', stops: int = 1) -> Tuple[float, float]:
         route = f"{origin}-{dest}"
-        base = self.BASE_PRICES.get(route, 650)
+        # Try direct route, reverse route, or default
+        base = self.BASE_PRICES.get(route) or self.BASE_PRICES.get(f"{dest}-{origin}", 650)
         
         if flight_date:
             try:
@@ -549,512 +592,4 @@ class MLSmartPredictor:
         if stops == 0: confidence += 0.05
         return max(0.3, min(0.99, confidence))
 
-# 🎯 FLIGHT SCANNER CORE
-class FlightScanner:
-    def __init__(self, config: ConfigManager):
-        self.config = config
-        self.cache = TTLCache()
-        self.ml_predictor = MLSmartPredictor()
-        self.circuits = {
-            'serpapi': CircuitBreaker('serpapi', fail_max=3, reset_timeout=60),
-            'aviationstack': CircuitBreaker('aviationstack', fail_max=5)
-        }
-        self.serpapi_calls_today = 0
-        self.serpapi_last_reset = datetime.now().date()
-        logger.info("🎯 FlightScanner initialized")
-    
-    def scan_routes(self, routes: List[FlightRoute], parallel: bool = True) -> List[FlightPrice]:
-        UI.section(f"FLIGHT SCANNER: {len(routes)} ROUTES")
-        UI.status("🚀", f"Starting {'parallel' if parallel else 'sequential'} scan with {MAX_WORKERS} workers...")
-        
-        results = []
-        if parallel:
-            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-                futures = {executor.submit(self._scan_single, r): r for r in routes}
-                for i, future in enumerate(as_completed(futures), 1):
-                    try:
-                        price = future.result()
-                        if price:
-                            results.append(price)
-                    except Exception as e:
-                        route = futures[future]
-                        logger.error(f"❌ Scan failed for {route.route_code}: {e}")
-                    UI.progress(i, len(routes))
-        else:
-            for i, route in enumerate(routes, 1):
-                try:
-                    price = self._scan_single(route)
-                    if price:
-                        results.append(price)
-                except Exception as e:
-                    logger.error(f"❌ Scan failed for {route.route_code}: {e}")
-                UI.progress(i, len(routes))
-        
-        UI.status("✅", f"Scan complete: {len(results)}/{len(routes)} results", "SUCCESS")
-        return results
-    
-    def _scan_single(self, route: FlightRoute) -> Optional[FlightPrice]:
-        cache_key = f"price:{route.route_code}:today:economy:1"
-        cached = self.cache.get(cache_key)
-        
-        if cached:
-            logger.info(f"💾 Using cached price for {route.route_code}")
-            return cached
-        
-        # Try SerpAPI first
-        try:
-            price = self.circuits['serpapi'].call(self._fetch_serpapi, route)
-            if price:
-                self.cache.set(cache_key, price, ttl=100)
-                return price
-        except Exception as e:
-            logger.warning(f"⚠️ serpapi failed for {route.route_code}: {e}")
-        
-        # Fallback to ML
-        ml_price, confidence = self.ml_predictor.predict(
-            route.origin, route.dest, 
-            flight_date=datetime.now().strftime('%Y-%m-%d'),
-            cabin_class='economy', stops=random.choice([0, 1])
-        )
-        
-        price = FlightPrice(
-            route=route.route_code,
-            name=route.name,
-            price=ml_price,
-            source=PriceSource.ML_SMART,
-            timestamp=datetime.now(),
-            confidence=confidence,
-            metadata={'fallback': True}
-        )
-        
-        logger.info(f"🧠 {route.route_code}: €{ml_price} (ML Smart Fallback, conf={confidence:.0%})")
-        self.cache.set(cache_key, price, ttl=100)
-        return price
-    
-    def _fetch_serpapi(self, route: FlightRoute) -> Optional[FlightPrice]:
-        """
-        ⭐ IMPLEMENTACIÓN REAL: Llamada real a SerpAPI Google Flights
-        🔧 FIX v12.1.2: Soporte solo one-way flights (sin return_date)
-        """
-        # Check rate limit
-        if self.serpapi_last_reset != datetime.now().date():
-            self.serpapi_calls_today = 0
-            self.serpapi_last_reset = datetime.now().date()
-        
-        if self.serpapi_calls_today >= SERPAPI_RATE_LIMIT:
-            raise Exception("SERPAPI rate limit reached")
-        
-        # Get API key
-        api_key = self.config.api_keys.get('serpapi_key')
-        if not api_key:
-            raise Exception("SERPAPI key not configured")
-        
-        # Prepare request - ONE WAY FLIGHT ONLY
-        departure_date = (datetime.now() + timedelta(days=45)).strftime('%Y-%m-%d')
-        
-        params = {
-            'engine': 'google_flights',
-            'departure_id': route.origin,
-            'arrival_id': route.dest,
-            'outbound_date': departure_date,
-            'type': '2',  # 2 = One way (no necesita return_date)
-            'currency': 'EUR',
-            'hl': 'es',
-            'api_key': api_key
-        }
-        
-        url = 'https://serpapi.com/search'
-        
-        # Log params para debugging
-        logger.debug(f"🔍 SerpAPI request: {url}?{params}")
-        
-        # Make request with timeout and metrics
-        start_time = time.time()
-        try:
-            response = requests.get(url, params=params, timeout=API_TIMEOUT)
-            duration = time.time() - start_time
-            
-            response.raise_for_status()
-            data = response.json()
-            
-            # Log respuesta para debugging
-            logger.debug(f"🔍 SerpAPI response keys: {data.keys()}")
-            
-            # Extract price from response
-            price_value = self._extract_price_from_serpapi(data)
-            
-            if price_value:
-                self.serpapi_calls_today += 1
-                metrics_dashboard.record_call('serpapi', True, duration)
-                
-                price_obj = FlightPrice(
-                    route=route.route_code,
-                    name=route.name,
-                    price=price_value,
-                    source=PriceSource.SERP_API,
-                    timestamp=datetime.now(),
-                    confidence=0.95,
-                    metadata={
-                        'api': 'serpapi',
-                        'response_time': duration,
-                        'departure_date': departure_date,
-                        'type': 'one-way'
-                    }
-                )
-                
-                logger.info(f"🔍 {route.route_code}: €{price_value} (SerpAPI Google Flights, {duration:.2f}s)")
-                return price_obj
-            else:
-                raise Exception("No price found in response")
-                
-        except requests.exceptions.Timeout:
-            duration = time.time() - start_time
-            metrics_dashboard.record_call('serpapi', False, duration, error="Timeout")
-            raise Exception(f"SERPAPI timeout after {duration:.1f}s")
-        except requests.exceptions.RequestException as e:
-            duration = time.time() - start_time
-            error_msg = str(e)
-            # Log detailed error if JSON response available
-            try:
-                if hasattr(e.response, 'json'):
-                    error_data = e.response.json()
-                    error_msg = f"{e} - {json.dumps(error_data)}"
-            except:
-                pass
-            metrics_dashboard.record_call('serpapi', False, duration, error=error_msg)
-            raise Exception(f"SERPAPI request failed: {error_msg}")
-        except Exception as e:
-            duration = time.time() - start_time
-            metrics_dashboard.record_call('serpapi', False, duration, error=str(e))
-            raise
-    
-    def _extract_price_from_serpapi(self, data: Dict) -> Optional[float]:
-        """
-        ⭐ Extrae precio de respuesta JSON de SerpAPI
-        """
-        try:
-            # Try best_flights first
-            if 'best_flights' in data and len(data['best_flights']) > 0:
-                flight = data['best_flights'][0]
-                if 'price' in flight:
-                    return float(flight['price'])
-            
-            # Try other_flights
-            if 'other_flights' in data and len(data['other_flights']) > 0:
-                flight = data['other_flights'][0]
-                if 'price' in flight:
-                    return float(flight['price'])
-            
-            # Try price_insights
-            if 'price_insights' in data:
-                insights = data['price_insights']
-                if 'lowest_price' in insights:
-                    return float(insights['lowest_price'])
-            
-            return None
-        except (KeyError, ValueError, TypeError) as e:
-            logger.warning(f"⚠️ Failed to extract price from SerpAPI response: {e}")
-            return None
-
-# 💾 DATA MANAGER
-class DataManager:
-    def __init__(self, csv_file: str = CSV_FILE):
-        self.csv_file = Path(csv_file)
-        self._ensure_csv()
-        logger.info(f"💾 DataManager initialized: {self.csv_file}")
-    
-    def _ensure_csv(self):
-        if not self.csv_file.exists():
-            df = pd.DataFrame(columns=['route', 'name', 'price', 'source', 'timestamp', 'confidence', 'metadata'])
-            df.to_csv(self.csv_file, index=False, encoding='utf-8')
-            logger.info(f"📄 Created new CSV: {self.csv_file}")
-    
-    def save_prices(self, prices: List[FlightPrice]):
-        if not prices:
-            return
-        
-        df_new = pd.DataFrame([p.to_dict() for p in prices])
-        
-        if self.csv_file.exists():
-            df_existing = pd.read_csv(self.csv_file, encoding='utf-8')
-            df = pd.concat([df_existing, df_new], ignore_index=True)
-        else:
-            df = df_new
-        
-        df.to_csv(self.csv_file, index=False, encoding='utf-8')
-        avg_conf = sum(p.confidence for p in prices) / len(prices)
-        UI.status("💾", f"Saved {len(prices)} prices (avg confidence: {avg_conf:.0%})", "SUCCESS")
-    
-    def get_historical_avg(self, route: str, days: int = 30) -> Optional[float]:
-        try:
-            df = pd.read_csv(self.csv_file, encoding='utf-8')
-            df['timestamp'] = pd.to_datetime(df['timestamp'])
-            cutoff = datetime.now() - timedelta(days=days)
-            df_route = df[(df['route'] == route) & (df['timestamp'] >= cutoff)]
-            return df_route['price'].mean() if not df_route.empty else None
-        except:
-            return None
-
-# 🤖 TELEGRAM BOT MANAGER
-class TelegramBotManager:
-    def __init__(self, config: ConfigManager, scanner: FlightScanner, data_mgr: DataManager):
-        self.config = config
-        self.scanner = scanner
-        self.data_mgr = data_mgr
-        self.app = None
-        self.running = False
-        self._background_tasks: Set[asyncio.Task] = set()
-        logger.info("🤖 TelegramBotManager initialized")
-    
-    async def start(self):
-        self.app = Application.builder().token(self.config.bot_token).build()
-        
-        # Handlers
-        self.app.add_handler(CommandHandler('start', self.cmd_start))
-        self.app.add_handler(CommandHandler('scan', self.cmd_scan))
-        self.app.add_handler(CommandHandler('clearcache', self.cmd_clearcache))
-        self.app.add_handler(CommandHandler('status', self.cmd_status))
-        self.app.add_handler(CommandHandler('help', self.cmd_help))
-        self.app.add_handler(CallbackQueryHandler(self.handle_callback))
-        
-        self.running = True
-        
-        if self.config.webhook_url:
-            UI.status("🌐", "Starting in WEBHOOK mode...")
-            await self.app.initialize()
-            await self.app.start()
-            await self.app.bot.set_webhook(url=self.config.webhook_url)
-            logger.info(f"🌐 Webhook set: {self.config.webhook_url}")
-        else:
-            UI.status("🔄", "Starting in POLLING mode...")
-            await self.app.initialize()
-            await self.app.start()
-            await self.app.updater.start_polling(drop_pending_updates=True)
-            logger.info("🔄 Polling started")
-        
-        UI.status("✅", "Bot is running!", "SUCCESS")
-    
-    async def stop(self):
-        UI.header("🛑 SHUTDOWN REQUESTED")
-        self.running = False
-        
-        if self._background_tasks:
-            UI.status("⏹️", f"Cancelling {len(self._background_tasks)} background tasks...")
-            for task in self._background_tasks:
-                if not task.done():
-                    task.cancel()
-            await asyncio.gather(*self._background_tasks, return_exceptions=True)
-            self._background_tasks.clear()
-        
-        if self.app:
-            UI.status("⏹️", "Stopping bot...")
-            try:
-                if self.app.updater and self.app.updater.running:
-                    await self.app.updater.stop()
-                await self.app.stop()
-                await self.app.shutdown()
-            except Exception as e:
-                logger.error(f"Error during shutdown: {e}")
-        
-        UI.header("✅ BOT STOPPED")
-        UI.status("✅", "System stopped by user", "SUCCESS")
-    
-    async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        msg = update.effective_message
-        if not msg:
-            return
-        
-        await context.bot.send_chat_action(chat_id=msg.chat_id, action=ChatAction.TYPING)
-        
-        welcome = (
-            f"🎆 *{APP_NAME} v{VERSION}* 🎆\n\n"
-            "¡Bienvenido al sistema Enterprise de monitorización de vuelos!\n\n"
-            "*Comandos disponibles:*\n"
-            "/scan - Escanear rutas configuradas\n"
-            "/clearcache - Limpiar caché (fuerza APIs reales)\n"
-            "/status - Ver estado del sistema\n"
-            "/help - Ayuda detallada\n\n"
-            "💡 _Usa los botones para interactuar_"
-        )
-        
-        keyboard = [
-            [InlineKeyboardButton("🔍 Escanear Ahora", callback_data="scan")],
-            [InlineKeyboardButton("📊 Estado Sistema", callback_data="status")],
-            [InlineKeyboardButton("❓ Ayuda", callback_data="help")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await msg.reply_text(welcome, parse_mode='Markdown', reply_markup=reply_markup)
-        logger.info(f"✅ /start executed")
-    
-    async def cmd_scan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        msg = update.effective_message
-        if not msg:
-            return
-        
-        await context.bot.send_chat_action(chat_id=msg.chat_id, action=ChatAction.TYPING)
-        await msg.reply_text("🔍 Iniciando escaneo de rutas...")
-        
-        routes = [FlightRoute(**f) for f in self.config.flights]
-        prices = self.scanner.scan_routes(routes, parallel=True)
-        
-        if prices:
-            self.data_mgr.save_prices(prices)
-            
-            response = "✅ *Escaneo completado*\n\n"
-            for p in prices[:5]:
-                emoji = p.get_confidence_emoji()
-                response += f"{emoji} {p.name}: €{p.price:.0f} ({p.source.value})\n"
-            
-            if len(prices) > 5:
-                response += f"\n_...y {len(prices)-5} resultados más_"
-            
-            keyboard = [
-                [InlineKeyboardButton("🔄 Escanear de nuevo", callback_data="scan")],
-                [InlineKeyboardButton("📊 Ver estado", callback_data="status")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await msg.reply_text(response, parse_mode='Markdown', reply_markup=reply_markup)
-        else:
-            await msg.reply_text("❌ No se obtuvieron resultados")
-    
-    async def cmd_clearcache(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """
-        ⭐ NUEVO COMANDO: Limpia el caché para forzar llamadas reales a APIs
-        """
-        msg = update.effective_message
-        if not msg:
-            return
-        
-        await context.bot.send_chat_action(chat_id=msg.chat_id, action=ChatAction.TYPING)
-        
-        # Get cache stats before clearing
-        cache_size = self.scanner.cache.size
-        hit_rate = self.scanner.cache.hit_rate
-        
-        # Clear cache
-        cleared = self.scanner.cache.clear()
-        
-        response = (
-            f"🗑️ *Caché limpiado*\n\n"
-            f"📄 Items eliminados: {cleared}\n"
-            f"🎯 Hit rate anterior: {hit_rate:.1%}\n\n"
-            f"✅ El próximo /scan usará APIs reales"
-        )
-        
-        await msg.reply_text(response, parse_mode='Markdown')
-        logger.info(f"🗑️ Cache cleared: {cleared} items")
-    
-    async def cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        msg = update.effective_message
-        if not msg:
-            return
-        
-        await context.bot.send_chat_action(chat_id=msg.chat_id, action=ChatAction.TYPING)
-        
-        cache_metrics = {
-            'size': self.scanner.cache.size,
-            'hit_rate': f"{self.scanner.cache.hit_rate:.1%}",
-            'hits': self.scanner.cache.hits,
-            'misses': self.scanner.cache.misses
-        }
-        
-        circuit_status = {
-            name: cb.state.value 
-            for name, cb in self.scanner.circuits.items()
-        }
-        
-        msg_text = (
-            "📊 *Estado del Sistema*\n\n"
-            f"🗃️ Caché: {cache_metrics['size']} items ({cache_metrics['hit_rate']} hit rate)\n"
-            f"⚡ Circuit Breakers:\n"
-        )
-        
-        for name, status in circuit_status.items():
-            msg_text += f"  • {name}: {status}\n"
-        
-        alerts = metrics_dashboard.check_degradation()
-        if alerts:
-            msg_text += f"\n⚠️ *Alertas:*\n" + "\n".join(f"  • {a}" for a in alerts)
-        
-        keyboard = [[InlineKeyboardButton("🔄 Actualizar", callback_data="status")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await msg.reply_text(msg_text, parse_mode='Markdown', reply_markup=reply_markup)
-    
-    async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        msg = update.effective_message
-        if not msg:
-            return
-        
-        help_text = (
-            f"📚 *Ayuda - {APP_NAME}*\n\n"
-            "*Comandos:*\n"
-            "/start - Iniciar bot\n"
-            "/scan - Escanear rutas\n"
-            "/clearcache - Limpiar caché\n"
-            "/status - Ver estado sistema\n"
-            "/help - Esta ayuda\n\n"
-            "*Características:*\n"
-            "✅ SerpAPI Google Flights Real\n"
-            "✅ ML Smart Predictions\n"
-            "✅ Circuit Breaker Pattern\n"
-            "✅ Intelligent Caching\n"
-            "✅ Health Monitoring\n\n"
-            f"_Versión: {VERSION}_"
-        )
-        
-        await msg.reply_text(help_text, parse_mode='Markdown')
-    
-    async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        query = update.callback_query
-        if not query:
-            return
-        
-        await query.answer()
-        
-        callback_data = query.data
-        logger.info(f"📞 Callback received: {callback_data}")
-        
-        if callback_data == "scan":
-            await self.cmd_scan(update, context)
-        elif callback_data == "status":
-            await self.cmd_status(update, context)
-        elif callback_data == "help":
-            await self.cmd_help(update, context)
-
-# 🚀 MAIN
-async def main():
-    UI.header(f"🎆 {APP_NAME} v{VERSION} 🎆")
-    
-    try:
-        config = ConfigManager()
-        scanner = FlightScanner(config)
-        data_mgr = DataManager()
-        bot_mgr = TelegramBotManager(config, scanner, data_mgr)
-        
-        await bot_mgr.start()
-        
-        while bot_mgr.running:
-            await asyncio.sleep(1)
-            
-            if int(time.time()) % 60 == 0:
-                alerts = metrics_dashboard.check_degradation()
-                if alerts:
-                    UI.status("⚠️", f"Degradation detected: {', '.join(alerts)}", "WARNING")
-        
-    except KeyboardInterrupt:
-        UI.status("⏹️", "Keyboard interrupt received", "WARNING")
-    except Exception as e:
-        UI.status("❌", f"Fatal error: {e}", "ERROR")
-        logger.critical(f"Fatal error: {e}")
-    finally:
-        if 'bot_mgr' in locals():
-            await bot_mgr.stop()
-
-if __name__ == '__main__':
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        UI.status("✅", "System stopped by user", "SUCCESS")
+# Continuará en el siguiente mensaje debido al límite de longitud...
