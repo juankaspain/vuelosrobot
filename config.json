@@ -57,8 +57,8 @@
   ],
   "alert_min": 500,
   "apis": {
-    "aviationstack": "cf33c5341fad0bd359d8c41d6902ce1c",
-    "serpapi": "KGGvesNWaiWBew83i2MD2C7w"
+    "aviationstack_key": "cf33c5341fad0bd359d8c41d6902ce1c",
+    "serpapi_key": "KGGvesNWaiWBew83i2MD2C7w"
   },
   "rss_feeds": [
     "https://www.secretflying.com/feed/",
