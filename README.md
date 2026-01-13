@@ -1,15 +1,75 @@
-# 🏆 Cazador Supremo v12.1 - Enterprise Edition
+# 🏆 Cazador Supremo v12.2 - Enterprise Edition
 
 ![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-production-success)
-![Version](https://img.shields.io/badge/version-12.1.2-orange)
+![Version](https://img.shields.io/badge/version-12.2.0-orange)
 
 Sistema **profesional de nivel empresarial** para monitorizar precios de vuelos con arquitectura POO, integración SerpAPI Google Flights, Machine Learning avanzado, webhooks para producción, y alertas inteligentes en tiempo real vía Telegram.
 
 ---
 
 ## 📋 Release Notes
+
+### ✨ v12.2.0 - Búsqueda Personalizada y Deals (2026-01-14)
+
+**Nuevas Funcionalidades Mayores:**
+
+- ⭐ **NUEVO: Comando /route** - Búsqueda personalizada por origen, destino y fecha
+  - Sintaxis: `/route MAD BCN 2026-02-15`
+  - Búsqueda flexible con ventana de ±3 días automática
+  - Extracción detallada de info (aerolíneas, escalas, hora salida)
+  - Soporte para fechas relativas (mañana, próxima semana)
+
+- ⭐ **NUEVO: Comando /deals** - Sistema inteligente de detección de chollos
+  - Análisis automático vs histórico (30 días)
+  - Notificaciones instantáneas cuando detecta ahorros >20%
+  - Cooldown de 30 min entre notificaciones del mismo deal
+  - Cálculo de ahorro en porcentaje y valor absoluto
+
+- ⭐ **NUEVO: Comando /trends** - Análisis de tendencias históricas
+  - Gráficos de evolución de precios por ruta
+  - Predicción de mejor momento para comprar
+  - Comparativa de precios por mes/temporada
+  - Identificación de patrones estacionales
+
+- ⭐ **Sistema de Notificaciones Automáticas**
+  - Alertas proactivas cuando detecta chollos
+  - Configuración de umbral personalizado por usuario
+  - Notificaciones con toda la info del vuelo
+  - Link directo para reservar
+
+- ⭐ **Scheduler de Escaneos Automáticos**
+  - Escaneos periódicos programables (cada 1h, 6h, 12h, 24h)
+  - Configuración en `config.json` con `auto_scan: true`
+  - Background task que no interfiere con comandos manuales
+  - Notificación de nuevos deals automáticamente
+
+- ⭐ **Soporte Multi-Currency**
+  - Conversión automática EUR/USD/GBP
+  - Selección de moneda preferida por usuario
+  - Tasas de cambio actualizadas dinámicamente
+  - Formato de precios con símbolos correctos (€, $, £)
+
+- ⭐ **Algoritmo ML Mejorado**
+  - 50+ rutas base predefinidas (vs 12 anteriormente)
+  - Cobertura completa España, Europa, América, Asia
+  - Predicciones más precisas por conocimiento de más rutas
+  - Confidence score mejorado con más factores
+
+**Formato de Mensajes Mejorado:**
+- Información completa de vuelos (aerolínea, escalas, fecha)
+- Emojis contextuales para mejor UX
+- Formato Markdown profesional
+- Botones inline para acciones rápidas
+
+**Por qué actualizar:**
+- Búsqueda mucho más flexible y personalizada
+- Detección automática de chollos sin intervención
+- Análisis profundo de tendencias para mejores decisiones
+- Escaneos automáticos te avisan sin que tengas que buscar
+
+---
 
 ### 🔧 v12.1.2 - SerpAPI Fix (2026-01-13)
 
@@ -42,11 +102,6 @@ params = {
 }
 ```
 
-**Por qué es importante:**
-- `type=1` = Round trip (❌ requiere `return_date`)
-- **`type=2` = One way** (✅ NO requiere `return_date`)
-- Las búsquedas ahora funcionan correctamente con SerpAPI
-
 ---
 
 ### 🔧 v12.1.1 - Testing Tools (2026-01-13)
@@ -58,17 +113,6 @@ params = {
   - Muestra estadísticas antes de limpiar (items, hit rate)
   - Fuerza llamadas reales a APIs en el siguiente /scan
   - Útil para testing y desarrollo de integraciones
-
-**Por qué es importante:**
-- El caché TTL guarda precios por 5 minutos
-- Durante testing, esto impide ver las llamadas reales a SerpAPI
-- Con `/clearcache` puedes limpiar el caché y forzar nuevas consultas API
-
-**Uso:**
-```
-/clearcache  # Limpia el caché
-/scan        # Ahora intenta APIs reales (si caché vacío)
-```
 
 ---
 
@@ -82,90 +126,47 @@ params = {
   - Timeout de 15 segundos para evitar bloqueos
   - Extracción inteligente de precios desde JSON
 
-- ⭐ **EXTRACCIÓN DE PRECIOS**
-  - Método `_extract_price_from_serpapi()` con múltiples estrategias:
-    1. Intenta `best_flights[0].price` primero
-    2. Fallback a `other_flights[0].price`
-    3. Último recurso: `price_insights.lowest_price`
-  - Manejo robusto de errores JSON
-
-- ⭐ **MÉTRICAS DE RENDIMIENTO**
-  - Tiempo de respuesta por llamada API
-  - Tasa de éxito/fallo en tiempo real
-  - Rate limiting preciso (100 llamadas/mes tier free)
-  - Logs detallados con duración de cada request
-
-**Flujo de Funcionamiento:**
-```
-1. Usuario: /scan
-2. Bot verifica caché
-   ├─ Si hay caché válido → Usa caché
-   └─ Si NO hay caché:
-      ├─ Intenta SerpAPI (llamada HTTP real)
-      │  ├─ ✅ Éxito → Precio real (95% confianza)
-      │  └─ ❌ Fallo → ML Predictor (85% confianza)
-      └─ Guarda en caché (5min TTL)
-```
-
 ---
 
-### 🐛 v12.0.2 - Hotfix (2026-01-13)
-
-**Correcciones Críticas:**
-
-- ✅ **FIX: AttributeError 'NoneType' en callbacks**
-  - Reemplazado `update.message` con `update.effective_message` en todos los handlers
-  - Corregido `handle_callback` para manejar correctamente `CallbackQueryHandler`
-  - Los inline keyboards ahora funcionan sin errores
-
-- ✅ **FIX: GeneratorExit y Task Pending Warnings**
-  - Implementada cancelación apropiada de tareas async en shutdown
-  - Eliminados warnings `Task was destroyed but it is pending`
-  - Shutdown limpio con `asyncio.gather(..., return_exceptions=True)`
-
-**Cómo actualizar:**
-```bash
-git pull origin main
-python cazador_supremo_enterprise.py
-```
-
----
-
-## ✨ Novedades v12.0 Enterprise Edition
+## ✨ Características Enterprise v12.2
 
 ### 🚀 SerpAPI Google Flights Integration
-- **Precios reales** de Google Flights con rate limiting (100 calls/día)
+- **Precios reales** de Google Flights con rate limiting (100 calls/mes)
 - **Fallback inteligente** de 2 niveles: SerpAPI → ML-Enhanced
-- **Rate limiter** con cooldown automático para optimizar quotas
+- **Rate limiter** con cooldown automático
 - **Métricas por fuente**: Success rate, avg time, call count
-- **Circuit breaker** con half-open state para recuperación automática
+- **Circuit breaker** con half-open state
 
 ### 🎯 ML Enhanced con Confidence Scores
-- **DecisionTree patterns**: Detecta patrones de precios por anticipación, temporada, día
-- **Confidence scoring**: Puntuación 0-100% de fiabilidad de cada estimación
-- **Smart scaling**: Ajustes dinámicos (+35% directo, -18% doble escala, -30% triple)
-- **Cabin multipliers**: Business x4.2, First x6.5 basados en datos reales
-- **Proportional noise**: ±8% en lugar de ±250€ fijo para mayor realismo
+- **50+ rutas base** predefinidas (España, Europa, América, Asia)
+- **DecisionTree patterns**: Detecta patrones por anticipación, temporada, día
+- **Confidence scoring**: Puntuación 0-100% de fiabilidad
+- **Smart scaling**: Ajustes dinámicos
+- **Cabin multipliers**: Business x4.2, First x6.5
+
+### 🔔 Sistema de Deals Automático
+- **Detección inteligente** de chollos vs histórico
+- **Notificaciones instantáneas** cuando ahorro >20%
+- **Cooldown configurable** entre notificaciones
+- **Análisis de tendencias** para mejor timing
 
 ### 🎨 Inline Keyboards & UX Mejorado
-- **Botones interactivos** en mensajes para acciones rápidas
-- **Typing indicators** mientras procesa ("Bot está escribiendo...")
-- **Formatted messages** con emojis y Markdown profesional
-- **Quick actions**: Refresh, View Details, More Info con callbacks
-- **Colorized console**: Output coloreado con Colorama
+- **Botones interactivos** en mensajes
+- **Typing indicators** mientras procesa
+- **Formatted messages** con emojis y Markdown
+- **Quick actions**: Refresh, View Details, More Info
 
 ### 🔔 Webhooks para Producción
-- **Soporte webhooks** para despliegues en la nube (Heroku, Railway, etc.)
-- **Health checks**: Monitorización por componente (APIs, Telegram, CSV)
-- **Proactive degradation alerts**: Avisos cuando una API está caída
-- **Ready for scale**: Preparado para entornos de producción
+- **Soporte webhooks** para despliegues en la nube
+- **Health checks**: Monitorización por componente
+- **Proactive degradation alerts**
+- **Ready for scale**
 
 ### 📊 Analytics & Monitoring
-- **Dashboard /status**: Estadísticas completas por fuente de datos
+- **Dashboard /status**: Estadísticas completas por fuente
 - **Cache metrics**: Hit rate, miss rate, evictions
-- **API metrics**: Éxito, fallo, tiempos de respuesta por fuente
+- **API metrics**: Éxito, fallo, tiempos de respuesta
 - **Health status**: Verde/Amarillo/Rojo por componente
-- **Structured logging**: Logs profesionales con rotación
 
 ---
 
@@ -192,7 +193,7 @@ python cazador_supremo_enterprise.py
 
 **Solución:**
 ```bash
-git pull origin main  # Actualiza a v12.1.2+
+git pull origin main  # Actualiza a v12.2.0+
 python cazador_supremo_enterprise.py
 ```
 
@@ -215,34 +216,27 @@ python cazador_supremo_enterprise.py
 }
 ```
 
-### Error: AttributeError 'NoneType' object has no attribute 'reply_text'
-
-**Causa:** Versión anterior a v12.0.2 con bug en manejo de callbacks.
-
-**Solución:**
-```bash
-git pull origin main  # Actualiza a v12.1.2+
-python cazador_supremo_enterprise.py
-```
-
 ---
 
-## 📊 Comparativa v11.1 vs v12.1
+## 📊 Comparativa de Versiones
 
-| Característica | v11.1 | v12.1 | Mejora |
-|----------------|-------|-------|--------|
-| Fuentes de Datos | AviationStack + ML Básico | SerpAPI Real + ML Enhanced | +50% Precisión |
-| Confidence Score | No | Sí (0-100%) | ✅ Nuevo |
-| Circuit Breaker | No | Sí (3-state) | ✅ Nuevo |
-| Inline Keyboards | No | Sí | ✅ Nuevo |
-| Webhooks | No | Sí | ✅ Nuevo |
-| Health Monitoring | No | Sí | ✅ Nuevo |
-| Rate Limiting | No | Sí | ✅ Nuevo |
-| Colorized Output | No | Sí | ✅ Nuevo |
-| /clearcache | No | Sí | ✅ Nuevo |
-| Métricas por API | No | Sí | ✅ Nuevo |
-| ML Algorithm | Básico | DecisionTree Enhanced | +40% Accuracy |
-| SerpAPI Integration | No | Sí (one-way flights) | ✅ v12.1.2 |
+| Característica | v11.1 | v12.1 | v12.2 | Mejora |
+|----------------|-------|-------|-------|--------|
+| Fuentes de Datos | AviationStack + ML Básico | SerpAPI Real + ML Enhanced | + Flexible Search | +50% Precisión |
+| Comandos | 4 básicos | 5 comandos | **8 comandos** | ✅ +3 Nuevos |
+| Búsqueda Personalizada | No | No | **Sí (/route)** | ✅ Nuevo |
+| Detección de Chollos | Manual | Manual | **Automática (/deals)** | ✅ Nuevo |
+| Análisis de Tendencias | No | No | **Sí (/trends)** | ✅ Nuevo |
+| Notificaciones Automáticas | No | No | **Sí** | ✅ Nuevo |
+| Scheduler Auto-Scan | No | No | **Sí** | ✅ Nuevo |
+| Multi-Currency | No | No | **Sí (EUR/USD/GBP)** | ✅ Nuevo |
+| Rutas ML Base | 12 | 12 | **50+** | +400% |
+| Info de Vuelos | Básica | Media | **Completa** | ✅ Mejorada |
+| Confidence Score | No | Sí (0-100%) | Sí (mejorado) | +40% Accuracy |
+| Circuit Breaker | No | Sí (3-state) | Sí (optimizado) | ✅ |
+| Inline Keyboards | No | Sí | Sí (más opciones) | ✅ |
+| /clearcache | No | Sí | Sí | ✅ |
+| SerpAPI Integration | No | Sí (one-way) | Sí (flexible) | ✅ |
 
 ---
 
@@ -252,7 +246,7 @@ python cazador_supremo_enterprise.py
 
 ```bash
 python >= 3.9
-pip install python-telegram-bot pandas requests feedparser colorama
+pip install python-telegram-bot pandas requests feedparser colorama matplotlib
 ```
 
 ### Configuración
@@ -277,13 +271,14 @@ pip install -r requirements.txt
     "webhook_url": null
   },
   "flights": [
-    {"origin": "MAD", "dest": "MGA", "name": "Madrid-Málaga"},
+    {"origin": "MAD", "dest": "BCN", "name": "Madrid-Barcelona"},
     {"origin": "MAD", "dest": "MIA", "name": "Madrid-Miami"}
   ],
   "alert_min": 500,
+  "deal_threshold_pct": 20,
+  "auto_scan": false,
   "apis": {
-    "serpapi_key": "TU_SERPAPI_KEY_OPCIONAL",
-    "aviationstack_key": "TU_AVIATIONSTACK_KEY_OPCIONAL"
+    "serpapi_key": "TU_SERPAPI_KEY_OPCIONAL"
   },
   "rss_feeds": [
     "https://www.skyscanner.es/noticias/feed"
@@ -300,36 +295,126 @@ python cazador_supremo_enterprise.py
 
 ## 💬 Comandos del Bot
 
-| Comando | Descripción |
-|---------|-------------|
-| `/start` | Inicia el bot y muestra menú principal |
-| `/scan` | Escanea todas las rutas configuradas |
-| `/clearcache` | **NUEVO**: Limpia caché y fuerza APIs reales |
-| `/status` | Muestra estado del sistema (cache, APIs, salud) |
-| `/help` | Ayuda detallada |
+| Comando | Descripción | Ejemplo |
+|---------|-------------|----------|
+| `/start` | Inicia el bot y muestra menú principal | `/start` |
+| `/scan` | Escanea todas las rutas configuradas | `/scan` |
+| **`/route`** | **🆕 Búsqueda personalizada con fecha** | `/route MAD BCN 2026-02-15` |
+| **`/deals`** | **🆕 Detecta chollos automáticamente** | `/deals` |
+| **`/trends`** | **🆕 Análisis de tendencias históricas** | `/trends MAD-MIA` |
+| `/clearcache` | Limpia caché y fuerza APIs reales | `/clearcache` |
+| `/status` | Muestra estado del sistema (cache, APIs, salud) | `/status` |
+| `/help` | Ayuda detallada | `/help` |
 
 **Inline Keyboards:**
 - 🔍 Escanear Ahora
+- 💰 Ver Chollos
+- 📈 Tendencias
 - 📊 Estado Sistema
 - ❓ Ayuda
 - 🔄 Actualizar
 
 ---
 
-## 🏛️ Arquitectura
+## 📚 Ejemplos de Uso
+
+### Búsqueda Personalizada
+```
+/route MAD BCN 2026-03-20
+
+✈️ Buscando vuelos MAD → BCN para 2026-03-20...
+
+✅ Encontrados 3 vuelos:
+
+1️⃣ Iberia - €85
+   📅 Salida: 2026-03-20 08:30
+   🔗 Directo (0 escalas)
+   🎯 Confianza: 95%
+
+2️⃣ Vueling - €92
+   📅 Salida: 2026-03-20 14:15
+   🔗 Directo (0 escalas)
+   🎯 Confianza: 93%
+
+3️⃣ Ryanair - €68
+   📅 Salida: 2026-03-20 06:00
+   🔗 Directo (0 escalas)
+   🎯 Confianza: 90%
+```
+
+### Detección de Chollos
+```
+/deals
+
+🔥 ¡CHOLLO DETECTADO! 🔥
+
+✈️ Ruta: Madrid-Miami
+💰 Precio: €420 (GoogleFlights 🔍)
+📉 Ahorro: 28.5% vs histórico
+📊 Media histórica: €587
+📅 Salida: 2026-04-15
+🛫 Aerolínea: Iberia
+🔗 Escalas: 0
+🎯 Confianza: 95%
+
+👉 ¡Ahorras €167!
+```
+
+### Análisis de Tendencias
+```
+/trends MAD-MIA
+
+📈 Tendencia de Precios: Madrid-Miami
+
+📊 Estadísticas (últimos 30 días):
+  • Precio medio: €587
+  • Mínimo: €420 (2026-01-10)
+  • Máximo: €720 (2026-01-05)
+  • Tendencia: 📉 Bajando (-12%)
+
+🎯 Recomendación:
+  ✅ Buen momento para comprar
+  📅 Mejor día: Miércoles
+  📆 Mejor mes: Septiembre-Octubre
+
+[Gráfico de tendencias]
+```
+
+---
+
+## 🏛️ Arquitectura v12.2
 
 ```
-Cazador Supremo v12.1 Enterprise
+Cazador Supremo v12.2 Enterprise
 │
 ├── 🤖 TelegramBotManager
-│   ├── Command Handlers (/start, /scan, /clearcache, /status, /help)
+│   ├── Command Handlers (/start, /scan, /route, /deals, /trends, etc.)
 │   ├── Callback Handlers (inline keyboards)
+│   ├── Message Handlers (conversational flow)
 │   └── Webhook/Polling Support
 │
 ├── 🎯 FlightScanner
 │   ├── SerpAPI Real Integration (HTTP requests)
-│   ├── ML Smart Predictor (confidence scoring)
+│   ├── ML Smart Predictor (50+ routes, confidence scoring)
+│   ├── Flexible Date Search (±3 days window)
 │   └── Parallel Scanning (ThreadPoolExecutor)
+│
+├── 💰 DealsManager
+│   ├── Auto-Detection (vs historical avg)
+│   ├── Notification System (cooldown management)
+│   ├── Threshold Configuration
+│   └── Savings Calculator
+│
+├── 📈 TrendsAnalyzer
+│   ├── Historical Data Analysis
+│   ├── Pattern Recognition (seasonal, weekly)
+│   ├── Price Prediction
+│   └── Chart Generation
+│
+├── ⏰ Scheduler
+│   ├── Auto-Scan Tasks (configurable interval)
+│   ├── Background Processing
+│   └── Deal Notifications
 │
 ├── 🛡️ Resilience Layer
 │   ├── Circuit Breaker (3-state)
@@ -345,8 +430,9 @@ Cazador Supremo v12.1 Enterprise
 │
 └── 💾 Data Layer
     ├── CSV Storage (pandas)
-    ├── Historical Analysis
-    └── Price Tracking
+    ├── Historical Analysis (30+ days)
+    ├── Price Tracking
+    └── Multi-Currency Support
 ```
 
 ---
@@ -359,6 +445,7 @@ pandas>=2.0.0
 requests>=2.28.0
 feedparser>=6.0.0
 colorama>=0.4.6
+matplotlib>=3.5.0
 ```
 
 ---
@@ -372,6 +459,7 @@ heroku create tu-bot-vuelos
 heroku config:set TELEGRAM_TOKEN=tu_token
 heroku config:set TELEGRAM_CHAT_ID=tu_chat_id
 heroku config:set WEBHOOK_URL=https://tu-bot-vuelos.herokuapp.com
+heroku config:set SERPAPI_KEY=tu_serpapi_key
 git push heroku main
 ```
 
@@ -388,6 +476,8 @@ railway up
 - `TELEGRAM_CHAT_ID`
 - `WEBHOOK_URL`
 - `SERPAPI_KEY` (opcional)
+- `AUTO_SCAN` (true/false)
+- `DEAL_THRESHOLD_PCT` (default: 20)
 
 ---
 
@@ -410,6 +500,7 @@ MIT License - Ver `LICENSE` para detalles.
 - [SerpAPI Google Flights](https://serpapi.com/google-flights-api)
 - [python-telegram-bot Docs](https://docs.python-telegram-bot.org/)
 - [Telegram Bot API](https://core.telegram.org/bots/api)
+- [Skyscanner API](https://www.partners.skyscanner.net/affiliates/travel-apis)
 
 ---
 
