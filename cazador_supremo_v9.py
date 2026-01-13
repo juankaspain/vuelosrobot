@@ -3,8 +3,8 @@
 """
 CAZADOR SUPREMO v9.0 - Sistema Profesional de Monitorización de Vuelos
 Autor: @Juanka_Spain
-Descripción: Monitor vuelos con APIs reales, ML predictions, RSS feeds y alertas Telegram
-Soporte para: Ida y Vuelta | Vuelos individuales | Fechas personalizadas | Filtro de escalas
+Descripción: Monitor vuelos Economy y Business Class con filtros avanzados
+Soporte: Ida/Vuelta | Fechas | Escalas | Economy/Business | Umbrales configurables
 """
 
 import asyncio
@@ -21,14 +21,12 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 from concurrent.futures import ThreadPoolExecutor
 import logging
 
-# Configurar encoding UTF-8 para Windows
 if sys.platform == 'win32':
     import codecs
     sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
     sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
     os.system('chcp 65001 > nul')
 
-# Configuración de logging
 logging.basicConfig(
     filename='cazador_supremo.log',
     level=logging.INFO,
@@ -37,7 +35,6 @@ logging.basicConfig(
 )
 
 def safe_print(text):
-    """Imprime texto manejando errores de encoding"""
     try:
         print(text)
         sys.stdout.flush()
@@ -46,44 +43,32 @@ def safe_print(text):
         sys.stdout.flush()
 
 def print_header(title, char="="):
-    """Imprime un encabezado profesional"""
     width = 70
     safe_print(f"\n{char * width}")
     safe_print(f"{title.center(width)}")
     safe_print(f"{char * width}\n")
 
 def print_section(title):
-    """Imprime una sección con formato"""
     safe_print(f"\n{'─' * 70}")
     safe_print(f"📍 {title}")
     safe_print(f"{'─' * 70}\n")
 
 def print_status(emoji, message, status="INFO"):
-    """Imprime un mensaje de estado con formato"""
     timestamp = datetime.now().strftime('%H:%M:%S')
     safe_print(f"[{timestamp}] {emoji} {message}")
 
 def print_result(label, value, emoji=""):
-    """Imprime un resultado con formato"""
     safe_print(f"   {emoji} {label}: {value}")
 
-# Cargar configuración
 def load_config(config_file='config.json'):
-    """Carga la configuración desde archivo JSON"""
-    print_status("📂", "Cargando archivo de configuración...", "INFO")
+    print_status("📂", "Cargando configuración...")
     try:
         with open(config_file, 'r', encoding='utf-8') as f:
             config = json.load(f)
-        print_status("✅", f"Configuración cargada correctamente desde {config_file}", "SUCCESS")
+        print_status("✅", f"Configuración cargada desde {config_file}")
         return config
-    except FileNotFoundError:
-        logging.error(f"Archivo {config_file} no encontrado")
-        print_status("❌", f"ERROR: No se encontró {config_file}", "ERROR")
-        safe_print("📝 Crea el archivo config.json con tu configuración.")
-        raise
-    except json.JSONDecodeError:
-        logging.error(f"Error al parsear {config_file}")
-        print_status("❌", f"ERROR: {config_file} tiene formato JSON inválido", "ERROR")
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print_status("❌", f"ERROR: {e}")
         raise
 
 CONFIG = load_config()
@@ -91,22 +76,17 @@ BOT_TOKEN = CONFIG['telegram']['token']
 CHAT_ID = CONFIG['telegram']['chat_id']
 FLIGHTS = CONFIG['flights']
 ALERT_MIN_GLOBAL = CONFIG.get('alert_min', 500)
+BUSINESS_THRESHOLDS = CONFIG.get('business_class_thresholds', {})
 
-# Base de datos de aerolíneas
 AIRLINES_DB = {
     'MAD-MGA': ['Iberia', 'Air Europa', 'Copa Airlines', 'Avianca'],
     'MGA-MAD': ['Iberia', 'Air Europa', 'Copa Airlines', 'Avianca'],
     'MAD-BOG': ['Iberia', 'Avianca', 'LATAM', 'Air Europa'],
     'MAD-MIA': ['Iberia', 'American Airlines', 'United', 'Air Europa'],
-    'BCN-MGA': ['Iberia', 'Copa Airlines', 'Avianca'],
-    'default': ['Iberia', 'Air Europa', 'LATAM', 'Avianca', 'Copa Airlines']
+    'default': ['Iberia', 'Air Europa', 'LATAM', 'Avianca']
 }
 
 def parse_stops_filter(stops_config):
-    """
-    Parsea el filtro de escalas
-    Retorna: (min_stops, max_stops, description)
-    """
     if stops_config == "0":
         return (0, 0, "Solo Directos")
     elif stops_config == "1":
@@ -115,45 +95,67 @@ def parse_stops_filter(stops_config):
         return (1, 99, "Con escalas")
     elif stops_config == "2":
         return (0, 2, "Máx 2 escalas")
-    elif stops_config == "any":
-        return (0, 99, "Cualquiera")
     else:
         return (0, 99, "Cualquiera")
 
 def matches_stops_filter(actual_stops, stops_config):
-    """
-    Verifica si el número de escalas cumple con el filtro
-    """
     min_stops, max_stops, _ = parse_stops_filter(stops_config)
     return min_stops <= actual_stops <= max_stops
 
 def get_stops_description(stops_config):
-    """
-    Obtiene descripción legible del filtro de escalas
-    """
     _, _, description = parse_stops_filter(stops_config)
     return description
 
+def get_cabin_class_emoji(cabin_class):
+    """Retorna emoji según clase de cabina"""
+    emojis = {
+        'economy': '💺',
+        'premium_economy': '👨‍💼',
+        'business': '👑',
+        'first': '🌟'
+    }
+    return emojis.get(cabin_class, '💺')
+
+def get_cabin_class_name(cabin_class):
+    """Retorna nombre legible de la clase"""
+    names = {
+        'economy': 'Economy',
+        'premium_economy': 'Premium Economy',
+        'business': 'Business Class',
+        'first': 'First Class'
+    }
+    return names.get(cabin_class, 'Economy')
+
+def get_business_threshold(route, flight_type):
+    """
+    Obtiene umbral y precio normal de Business según ruta
+    Retorna: (threshold, normal_price, description)
+    """
+    if route in BUSINESS_THRESHOLDS:
+        config = BUSINESS_THRESHOLDS[route]
+    else:
+        config = BUSINESS_THRESHOLDS.get('default', {})
+    
+    threshold = config.get(flight_type, 2500 if flight_type == 'roundtrip' else 1500)
+    normal_price = config.get('normal_price', 5000)
+    description = config.get('description', 'Business Class')
+    
+    return threshold, normal_price, description
+
 def get_flight_details(route, price, flight_config, actual_stops):
-    """Genera detalles completos del vuelo con información realista"""
     origin, dest = route.split('-')
     
-    # Seleccionar aerolínea según ruta
     airlines = AIRLINES_DB.get(route, AIRLINES_DB['default'])
     airline = random.choice(airlines)
     
-    # Usar fechas configuradas o generar aleatorias
     if 'outbound_date' in flight_config and flight_config['outbound_date']:
         try:
             departure_date = datetime.strptime(flight_config['outbound_date'], '%Y-%m-%d')
         except:
-            days_ahead = random.randint(15, 90)
-            departure_date = datetime.now() + timedelta(days=days_ahead)
+            departure_date = datetime.now() + timedelta(days=random.randint(15, 90))
     else:
-        days_ahead = random.randint(15, 90)
-        departure_date = datetime.now() + timedelta(days=days_ahead)
+        departure_date = datetime.now() + timedelta(days=random.randint(15, 90))
     
-    # Si es roundtrip, obtener fecha de vuelta
     return_date = None
     if flight_config.get('type') == 'roundtrip' and 'return_date' in flight_config:
         try:
@@ -161,7 +163,6 @@ def get_flight_details(route, price, flight_config, actual_stops):
         except:
             return_date = departure_date + timedelta(days=15)
     
-    # Duración del vuelo
     durations = {
         'MGA': '11h 30m',
         'BOG': '10h 45m',
@@ -170,7 +171,6 @@ def get_flight_details(route, price, flight_config, actual_stops):
     }
     duration = durations.get(dest, '10h 00m')
     
-    # Escalas - usar el valor actual generado
     if actual_stops == 0:
         stopover = 'Directo'
     elif actual_stops == 1:
@@ -181,7 +181,6 @@ def get_flight_details(route, price, flight_config, actual_stops):
     else:
         stopover = f"{actual_stops} escalas"
     
-    # Enlaces de compra
     booking_links = {
         'Iberia': 'https://www.iberia.com',
         'Air Europa': 'https://www.aireuropa.com',
@@ -192,33 +191,46 @@ def get_flight_details(route, price, flight_config, actual_stops):
         'United': 'https://www.united.com'
     }
     
-    # Construir parámetros de stops para URLs
     stops_filter = flight_config.get('stops', 'any')
+    cabin_class = flight_config.get('cabin_class', 'economy')
     stops_param = ""
-    if stops_filter == "0":
-        stops_param = "&stops=0"  # Solo directos
-    elif stops_filter == "1":
-        stops_param = "&stops=0,1"  # Directos o 1 escala
+    cabin_param = ""
     
-    # Buscadores con fechas y filtro de escalas
+    if stops_filter == "0":
+        stops_param = "&stops=0"
+    elif stops_filter == "1":
+        stops_param = "&stops=0,1"
+    
+    if cabin_class == 'business':
+        cabin_param = "&cabin=business"
+    elif cabin_class == 'first':
+        cabin_param = "&cabin=first"
+    elif cabin_class == 'premium_economy':
+        cabin_param = "&cabin=premium"
+    
     if flight_config.get('type') == 'roundtrip' and return_date:
         search_engines = [
-            f"https://www.google.com/flights?hl=es#flt={origin}.{dest}.{departure_date.strftime('%Y-%m-%d')}*{dest}.{origin}.{return_date.strftime('%Y-%m-%d')}{stops_param}",
+            f"https://www.google.com/flights?hl=es#flt={origin}.{dest}.{departure_date.strftime('%Y-%m-%d')}*{dest}.{origin}.{return_date.strftime('%Y-%m-%d')}{stops_param}{cabin_param}",
             f"https://www.skyscanner.es/transport/flights/{origin.lower()}/{dest.lower()}/{departure_date.strftime('%y%m%d')}/{return_date.strftime('%y%m%d')}/",
             f"https://www.kayak.es/flights/{origin}-{dest}/{departure_date.strftime('%Y-%m-%d')}/{return_date.strftime('%Y-%m-%d')}",
             f"https://www.momondo.es/flight-search/{origin}-{dest}/{departure_date.strftime('%Y-%m-%d')}/{return_date.strftime('%Y-%m-%d')}"
         ]
     else:
         search_engines = [
-            f"https://www.google.com/flights?hl=es#flt={origin}.{dest}.{departure_date.strftime('%Y-%m-%d')}{stops_param}",
+            f"https://www.google.com/flights?hl=es#flt={origin}.{dest}.{departure_date.strftime('%Y-%m-%d')}{stops_param}{cabin_param}",
             f"https://www.skyscanner.es/transport/flights/{origin.lower()}/{dest.lower()}/{departure_date.strftime('%y%m%d')}/",
             f"https://www.kayak.es/flights/{origin}-{dest}/{departure_date.strftime('%Y-%m-%d')}",
             f"https://www.momondo.es/flight-search/{origin}-{dest}/{departure_date.strftime('%Y-%m-%d')}"
         ]
     
-    # Calcular ahorro
+    # Calcular ahorro según clase
     alert_threshold = flight_config.get('alert_min', ALERT_MIN_GLOBAL)
-    avg_price = alert_threshold + 200
+    if cabin_class == 'business':
+        _, normal_price, _ = get_business_threshold(route, flight_config.get('type', 'oneway'))
+        avg_price = normal_price
+    else:
+        avg_price = alert_threshold + 200
+    
     savings = avg_price - price
     savings_pct = (savings / avg_price * 100) if avg_price > 0 else 0
     
@@ -235,28 +247,26 @@ def get_flight_details(route, price, flight_config, actual_stops):
         'savings_pct': savings_pct,
         'avg_price': avg_price,
         'flight_type': flight_config.get('type', 'oneway'),
-        'stops_filter': get_stops_description(stops_filter)
+        'stops_filter': get_stops_description(stops_filter),
+        'cabin_class': cabin_class,
+        'cabin_class_name': get_cabin_class_name(cabin_class)
     }
 
 async def supreme_scan_batch():
-    """Escanea múltiples vuelos en paralelo"""
     results = []
     print_section("ESCANEO BATCH DE VUELOS")
     
-    # Contar tipos de vuelo
     roundtrip_count = sum(1 for f in FLIGHTS if f.get('type') == 'roundtrip')
     oneway_count = sum(1 for f in FLIGHTS if f.get('type') == 'oneway')
-    direct_only = sum(1 for f in FLIGHTS if f.get('stops') == '0')
-    with_stops = sum(1 for f in FLIGHTS if f.get('stops') == '1+')
+    economy_count = sum(1 for f in FLIGHTS if f.get('cabin_class', 'economy') == 'economy')
+    business_count = sum(1 for f in FLIGHTS if f.get('cabin_class', 'economy') == 'business')
     
     print_status("🚀", f"Iniciando escaneo de {len(FLIGHTS)} configuraciones...")
     print_status("📊", f"  • Ida y Vuelta: {roundtrip_count}")
     print_status("📊", f"  • Solo Ida: {oneway_count}")
-    print_status("✈️", f"  • Solo Directos: {direct_only}")
-    print_status("🔄", f"  • Con Escalas: {with_stops}")
-    logging.info(f"Iniciando scan batch de {len(FLIGHTS)} vuelos")
+    print_status("💺", f"  • Economy: {economy_count}")
+    print_status("👑", f"  • Business: {business_count}")
     
-    print_status("⚙️", "Configurando ThreadPoolExecutor con 20 workers...")
     with ThreadPoolExecutor(max_workers=20) as executor:
         print_status("📡", "Enviando peticiones a las APIs...")
         futures = [executor.submit(api_price_smart, flight) for flight in FLIGHTS]
@@ -266,98 +276,108 @@ async def supreme_scan_batch():
             result = future.result()
             completed += 1
             
-            # Emojis según tipo y escalas
             flight_type_emoji = "🔄" if flight.get('type') == 'roundtrip' else "➡️"
-            stops_emoji = "✈️" if result.get('stops', 0) == 0 else "🔄"
+            cabin_emoji = get_cabin_class_emoji(flight.get('cabin_class', 'economy'))
             
-            status_msg = f"Procesado [{completed}/{len(FLIGHTS)}] {flight_type_emoji}{stops_emoji} {result['name']}: €{result['price']:.0f}"
+            status_msg = f"Procesado [{completed}/{len(FLIGHTS)}] {flight_type_emoji}{cabin_emoji} {result['name']}: €{result['price']:.0f}"
             if result.get('filtered_out'):
-                status_msg += " (Filtrado: no cumple criterio de escalas)"
+                status_msg += " (Filtrado)"
             else:
                 status_msg += f" ({result['source']})"
             
             print_status("✓", status_msg)
             results.append(result)
     
-    print_status("📊", "Procesando resultados y generando DataFrame...")
+    print_status("📊", "Procesando resultados...")
     df = pd.DataFrame(results)
     
-    # Guardar histórico
-    print_status("💾", "Guardando datos en historial CSV...")
     csv_file = 'deals_history.csv'
     df['timestamp'] = datetime.now().isoformat()
     if os.path.exists(csv_file):
         df.to_csv(csv_file, mode='a', header=False, index=False, encoding='utf-8')
-        print_status("✅", f"Datos añadidos a {csv_file}")
     else:
         df.to_csv(csv_file, index=False, encoding='utf-8')
-        print_status("✅", f"Archivo {csv_file} creado con éxito")
+    print_status("✅", f"Datos guardados en {csv_file}")
     
-    # Detectar chollos (que no estén filtrados)
-    hot_deals = []
-    for _, row in df.iterrows():
-        if row['is_deal'] and not row.get('filtered_out', False):
-            hot_deals.append(row)
+    hot_deals = [row for _, row in df.iterrows() if row['is_deal'] and not row.get('filtered_out', False)]
     
     if hot_deals:
-        print_status("🔥", f"¡{len(hot_deals)} CHOLLOS DETECTADOS!", "ALERT")
+        # Separar chollos por clase
+        business_deals = [d for d in hot_deals if d.get('cabin_class') == 'business']
+        economy_deals = [d for d in hot_deals if d.get('cabin_class') != 'business']
+        
+        print_status("🔥", f"¡{len(hot_deals)} CHOLLOS DETECTADOS!")
+        if business_deals:
+            print_status("👑", f"  • Business Class: {len(business_deals)} chollos premium")
+        if economy_deals:
+            print_status("💺", f"  • Economy: {len(economy_deals)} chollos")
+        
         print_section("ENVIANDO ALERTAS TELEGRAM")
         bot = Bot(token=BOT_TOKEN)
         
         for idx, deal in enumerate(hot_deals, 1):
-            print_status("📨", f"Enviando alerta [{idx}/{len(hot_deals)}]: {deal['name']} - €{deal['price']:.0f}")
+            cabin_label = "BUSINESS" if deal.get('cabin_class') == 'business' else "Economy"
+            print_status("📨", f"Enviando alerta [{idx}/{len(hot_deals)}] {cabin_label}: {deal['name']} - €{deal['price']:.0f}")
             
-            # Buscar configuración original
             flight_config = next((f for f in FLIGHTS if f['name'] == deal['name']), {})
             details = get_flight_details(deal['route'], deal['price'], flight_config, deal.get('stops', 0))
             
-            # Construir mensaje según tipo
-            if flight_config.get('type') == 'roundtrip':
-                msg = build_roundtrip_alert(deal, details, flight_config)
+            # Construir mensaje según clase y tipo
+            if deal.get('cabin_class') == 'business':
+                if flight_config.get('type') == 'roundtrip':
+                    msg = build_business_roundtrip_alert(deal, details, flight_config)
+                else:
+                    msg = build_business_oneway_alert(deal, details, flight_config)
             else:
-                msg = build_oneway_alert(deal, details, flight_config)
+                if flight_config.get('type') == 'roundtrip':
+                    msg = build_roundtrip_alert(deal, details, flight_config)
+                else:
+                    msg = build_oneway_alert(deal, details, flight_config)
             
             await bot.send_message(CHAT_ID, msg, parse_mode='Markdown', disable_web_page_preview=False)
-            print_status("✅", f"Alerta completa enviada correctamente")
-            logging.info(f"Alerta enviada: {deal['name']} €{deal['price']}")
+            print_status("✅", "Alerta enviada")
+            logging.info(f"Alerta: {deal['name']} €{deal['price']}")
     else:
-        print_status("ℹ️", "No se detectaron chollos en este escaneo")
+        print_status("ℹ️", "No se detectaron chollos")
     
-    # Mostrar estadísticas de filtrado
-    filtered_count = sum(1 for _, row in df.iterrows() if row.get('filtered_out', False))
-    if filtered_count > 0:
-        print_status("🚫", f"{filtered_count} vuelos filtrados por no cumplir criterio de escalas", "INFO")
-    
-    print_status("✅", "Escaneo batch completado exitosamente", "SUCCESS")
+    print_status("✅", "Escaneo completado")
     return df
 
-def build_roundtrip_alert(deal, details, flight_config):
-    """Construye alerta para vuelos ida y vuelta"""
-    msg = f"🚨 *¡CHOLLO IDA Y VUELTA DETECTADO!*\n\n"
+def build_business_roundtrip_alert(deal, details, flight_config):
+    """Alerta premium para Business Class ida y vuelta"""
+    msg = f"👑 *¡CHOLLO BUSINESS CLASS! IDA Y VUELTA*\n\n"
+    msg += f"⭐⭐⭐ *ALERTA PREMIUM* ⭐⭐⭐\n\n"
     msg += f"══════════════════════════════\n\n"
     
     msg += f"✈️ *VUELO:* {deal['name']}\n"
+    msg += f"👑 *CLASE:* Business Class (Ejecutiva)\n"
     msg += f"🏛️ *Aerolínea:* {details['airline']}\n\n"
     
-    msg += f"📅 *IDA:* {details['departure_date'].strftime('%d/%m/%Y')} ({deal['route'].split('-')[0]} → {deal['route'].split('-')[1]})\n"
-    msg += f"📅 *VUELTA:* {details['return_date'].strftime('%d/%m/%Y') if details['return_date'] else 'N/A'} ({deal['route'].split('-')[1]} → {deal['route'].split('-')[0]})\n"
+    msg += f"📅 *IDA:* {details['departure_date'].strftime('%d/%m/%Y')}\n"
+    msg += f"📅 *VUELTA:* {details['return_date'].strftime('%d/%m/%Y') if details['return_date'] else 'N/A'}\n"
     msg += f"⏱️ *Duración:* {details['duration']} (cada trayecto)\n"
-    msg += f"🔄 *Escalas:* {details['stopover']}\n"
-    msg += f"🎯 *Filtro aplicado:* {details['stops_filter']}\n\n"
+    msg += f"🔄 *Escalas:* {details['stopover']}\n\n"
     
     msg += f"══════════════════════════════\n\n"
     
-    msg += f"💰 *PRECIO TOTAL (IDA + VUELTA):* **€{deal['price']:.0f}**\n"
-    msg += f"📉 Precio promedio: €{details['avg_price']:.0f}\n"
-    msg += f"💎 *AHORRO TOTAL:* **€{details['savings']:.0f}** ({details['savings_pct']:.0f}% menos)\n"
-    msg += f"📊 *Fuente:* {deal['source']}\n\n"
+    msg += f"💎 *PRECIO BUSINESS (IDA + VUELTA):* **€{deal['price']:.0f}**\n"
+    msg += f"📉 Precio normal Business: €{details['avg_price']:.0f}\n"
+    msg += f"🚀 *AHORRO BRUTAL:* **€{details['savings']:.0f}** ({details['savings_pct']:.0f}% menos)\n\n"
+    
+    msg += f"✨ *VENTAJAS BUSINESS CLASS:*\n"
+    msg += f"• 🛋️ Asiento cama reclinable 180°\n"
+    msg += f"• 🍾 Menú gourmet y bebidas premium\n"
+    msg += f"• 🎞️ Pantalla grande + entretenimiento\n"
+    msg += f"• 👜 2 maletas de 23kg incluidas\n"
+    msg += f"• ✈️ Embarque prioritario + Lounge VIP\n"
+    msg += f"• 🚀 Check-in rápido + Fast Track\n\n"
     
     msg += f"══════════════════════════════\n\n"
     
     msg += f"🛍️ *RESERVAR AHORA:*\n\n"
     msg += f"🔗 [{details['airline']} Oficial]({details['booking_link']})\n\n"
     
-    msg += f"🔍 *COMPARAR PRECIOS (IDA Y VUELTA):*\n"
+    msg += f"🔍 *COMPARAR PRECIOS BUSINESS:*\n"
     msg += f"• [Google Flights]({details['search_engines'][0]})\n"
     msg += f"• [Skyscanner]({details['search_engines'][1]})\n"
     msg += f"• [Kayak]({details['search_engines'][2]})\n"
@@ -365,97 +385,112 @@ def build_roundtrip_alert(deal, details, flight_config):
     
     msg += f"══════════════════════════════\n\n"
     
-    msg += f"⚡ *RECOMENDACIÓN:* ¡RESERVA INMEDIATAMENTE!\n\n"
-    msg += f"💡 *Tips:*\n"
-    msg += f"• Precio {details['savings_pct']:.0f}% por debajo del promedio\n"
-    if details['stops'] == 0:
-        msg += f"• ¡VUELO DIRECTO! Sin escalas, más cómodo\n"
-    msg += f"• Ida y vuelta juntas siempre más baratas\n"
-    msg += f"• Los chollos suelen durar 24-48 horas máximo\n"
-    msg += f"• Modo incógnito para evitar subidas de precio\n\n"
+    msg += f"⚡ *ACCIÓN INMEDIATA REQUERIDA!*\n\n"
+    msg += f"💡 *Por qué es un CHOLLO:*\n"
+    msg += f"• Precio {details['savings_pct']:.0f}% por debajo del mercado\n"
+    msg += f"• Business a precio casi de Economy Premium\n"
+    msg += f"• Viaja con lujo y comodidad extrema\n"
+    msg += f"• Estos precios desaparecen en 6-12 horas\n\n"
     
-    msg += f"🕐 *Detectado:* {datetime.now().strftime('%d/%m/%Y a las %H:%M:%S')}\n"
-    msg += f"📢 *Umbral:* €{flight_config.get('alert_min', ALERT_MIN_GLOBAL)}\n\n"
-    msg += f"_Configurado para: {details['stops_filter']}_"
+    msg += f"🕐 *Detectado:* {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n"
+    msg += f"📢 *Umbral Business:* €{flight_config.get('alert_min', 2500)}\n\n"
+    msg += f"_👑 Configurado para chollos Business Class_"
     
     return msg
 
-def build_oneway_alert(deal, details, flight_config):
-    """Construye alerta para vuelos solo ida"""
-    msg = f"🚨 *¡CHOLLO SOLO IDA DETECTADO!*\n\n"
+def build_business_oneway_alert(deal, details, flight_config):
+    """Alerta premium para Business Class solo ida"""
+    msg = f"👑 *¡CHOLLO BUSINESS CLASS! SOLO IDA*\n\n"
+    msg += f"⭐⭐⭐ *ALERTA PREMIUM* ⭐⭐⭐\n\n"
     msg += f"══════════════════════════════\n\n"
     
     msg += f"✈️ *VUELO:* {deal['route']}\n"
     msg += f"📝 *Descripción:* {deal['name']}\n"
+    msg += f"👑 *CLASE:* Business Class\n"
     msg += f"🏛️ *Aerolínea:* {details['airline']}\n"
-    msg += f"📅 *Fecha salida:* {details['departure_date'].strftime('%d/%m/%Y')}\n"
+    msg += f"📅 *Fecha:* {details['departure_date'].strftime('%d/%m/%Y')}\n"
     msg += f"⏱️ *Duración:* {details['duration']}\n"
-    msg += f"🔄 *Escalas:* {details['stopover']}\n"
-    msg += f"🎯 *Filtro aplicado:* {details['stops_filter']}\n\n"
+    msg += f"🔄 *Escalas:* {details['stopover']}\n\n"
     
     msg += f"══════════════════════════════\n\n"
     
-    msg += f"💰 *PRECIO SOLO IDA:* **€{deal['price']:.0f}**\n"
-    msg += f"📉 Precio promedio: €{details['avg_price']:.0f}\n"
-    msg += f"💎 *AHORRO:* **€{details['savings']:.0f}** ({details['savings_pct']:.0f}% menos)\n"
-    msg += f"📊 *Fuente:* {deal['source']}\n\n"
+    msg += f"💎 *PRECIO BUSINESS:* **€{deal['price']:.0f}**\n"
+    msg += f"📉 Precio normal: €{details['avg_price']:.0f}\n"
+    msg += f"🚀 *AHORRO:* **€{details['savings']:.0f}** ({details['savings_pct']:.0f}% menos)\n\n"
+    
+    msg += f"✨ *VENTAJAS BUSINESS:*\n"
+    msg += f"• 🛋️ Asiento cama + espacio premium\n"
+    msg += f"• 🍾 Menú gourmet y bar completo\n"
+    msg += f"• 👜 2 maletas 23kg + equipaje mano\n"
+    msg += f"• ✈️ Lounge VIP + Fast Track\n\n"
     
     msg += f"══════════════════════════════\n\n"
     
-    msg += f"🛍️ *RESERVAR AHORA:*\n\n"
-    msg += f"🔗 [{details['airline']} Oficial]({details['booking_link']})\n\n"
+    msg += f"🛍️ *RESERVAR:*\n"
+    msg += f"🔗 [{details['airline']}]({details['booking_link']})\n\n"
     
-    msg += f"🔍 *COMPARAR PRECIOS:*\n"
-    msg += f"• [Google Flights]({details['search_engines'][0]})\n"
-    msg += f"• [Skyscanner]({details['search_engines'][1]})\n"
-    msg += f"• [Kayak]({details['search_engines'][2]})\n"
-    msg += f"• [Momondo]({details['search_engines'][3]})\n\n"
+    msg += f"🔍 *COMPARAR:*\n"
+    for idx, engine in enumerate(['Google Flights', 'Skyscanner', 'Kayak', 'Momondo']):
+        msg += f"• [{engine}]({details['search_engines'][idx]})\n"
     
-    msg += f"══════════════════════════════\n\n"
-    
-    msg += f"⚡ *RECOMENDACIÓN:* ¡RESERVA AHORA!\n\n"
-    msg += f"💡 *Tips:*\n"
-    msg += f"• Este precio está {details['savings_pct']:.0f}% por debajo del promedio\n"
-    if details['stops'] == 0:
-        msg += f"• ¡VUELO DIRECTO! Sin escalas, más rápido y cómodo\n"
-    elif details['stops'] == 1:
-        msg += f"• Solo 1 escala - Buen equilibrio precio/comodidad\n"
-    msg += f"• Ideal si buscas flexibilidad en la vuelta\n"
-    msg += f"• Los chollos suelen durar 24-48 horas máximo\n"
-    msg += f"• Compara en varios buscadores antes de reservar\n\n"
-    
-    msg += f"🕐 *Detectado:* {datetime.now().strftime('%d/%m/%Y a las %H:%M:%S')}\n"
-    msg += f"📢 *Umbral:* €{flight_config.get('alert_min', ALERT_MIN_GLOBAL)}\n\n"
-    msg += f"_Configurado para: {details['stops_filter']}_"
+    msg += f"\n⚡ Business a precio de Economy Premium!\n\n"
+    msg += f"🕐 {datetime.now().strftime('%H:%M:%S')}\n"
+    msg += f"📢 Umbral: €{flight_config.get('alert_min', 1500)}\n\n"
+    msg += f"_👑 Chollo Business Class_"
     
     return msg
 
+def build_roundtrip_alert(deal, details, flight_config):
+    """Alerta Economy ida y vuelta"""
+    msg = f"🚨 *¡CHOLLO IDA Y VUELTA!*\n\n"
+    msg += f"══════════════════════════════\n\n"
+    msg += f"✈️ *VUELO:* {deal['name']}\n"
+    msg += f"🏛️ *Aerolínea:* {details['airline']}\n\n"
+    msg += f"📅 *IDA:* {details['departure_date'].strftime('%d/%m/%Y')}\n"
+    msg += f"📅 *VUELTA:* {details['return_date'].strftime('%d/%m/%Y') if details['return_date'] else 'N/A'}\n"
+    msg += f"⏱️ *Duración:* {details['duration']}\n"
+    msg += f"🔄 *Escalas:* {details['stopover']}\n\n"
+    msg += f"══════════════════════════════\n\n"
+    msg += f"💰 *PRECIO TOTAL:* **€{deal['price']:.0f}**\n"
+    msg += f"📉 Promedio: €{details['avg_price']:.0f}\n"
+    msg += f"💎 *AHORRO:* **€{details['savings']:.0f}** ({details['savings_pct']:.0f}%)\n\n"
+    msg += f"══════════════════════════════\n\n"
+    msg += f"🛍️ *RESERVAR:* [{details['airline']}]({details['booking_link']})\n\n"
+    msg += f"🔍 *COMPARAR:* [Google]({details['search_engines'][0]}) | [Skyscanner]({details['search_engines'][1]})\n\n"
+    msg += f"⚡ ¡Reserva ahora!\n"
+    msg += f"🕐 {datetime.now().strftime('%H:%M:%S')}\n"
+    return msg
+
+def build_oneway_alert(deal, details, flight_config):
+    """Alerta Economy solo ida"""
+    msg = f"🚨 *¡CHOLLO SOLO IDA!*\n\n"
+    msg += f"✈️ {deal['route']} | {details['airline']}\n"
+    msg += f"📅 {details['departure_date'].strftime('%d/%m/%Y')}\n"
+    msg += f"🔄 {details['stopover']}\n\n"
+    msg += f"💰 **€{deal['price']:.0f}** (Ahorro: €{details['savings']:.0f})\n\n"
+    msg += f"🔗 [Reservar]({details['booking_link']}) | [Comparar]({details['search_engines'][0]})\n"
+    return msg
+
 def api_price_smart(flight_config):
-    """Obtiene precio según tipo de vuelo y filtra por escalas"""
     origin = flight_config['origin']
     dest = flight_config['dest']
     name = flight_config['name']
     flight_type = flight_config.get('type', 'oneway')
     alert_threshold = flight_config.get('alert_min', ALERT_MIN_GLOBAL)
     stops_filter = flight_config.get('stops', 'any')
+    cabin_class = flight_config.get('cabin_class', 'economy')
     
     if flight_type == 'roundtrip':
-        # Precio ida + vuelta
-        price_outbound, stops_outbound = get_single_price_with_stops(origin, dest)
-        price_return, stops_return = get_single_price_with_stops(dest, origin)
+        price_outbound, stops_outbound = get_single_price_with_stops(origin, dest, cabin_class)
+        price_return, stops_return = get_single_price_with_stops(dest, origin, cabin_class)
         total_price = price_outbound + price_return
-        # Para roundtrip, usar el promedio de escalas
         actual_stops = int((stops_outbound + stops_return) / 2)
         source = "ML-Estimate (Roundtrip)"
     else:
-        # Precio solo ida
-        total_price, actual_stops = get_single_price_with_stops(origin, dest)
+        total_price, actual_stops = get_single_price_with_stops(origin, dest, cabin_class)
         source = "ML-Estimate"
     
-    # Verificar si cumple con el filtro de escalas
     passes_filter = matches_stops_filter(actual_stops, stops_filter)
-    
-    # Solo es deal si pasa el filtro Y está por debajo del umbral
     is_deal = (total_price < alert_threshold) and passes_filter
     
     return {
@@ -468,275 +503,136 @@ def api_price_smart(flight_config):
         'threshold': alert_threshold,
         'stops': actual_stops,
         'stops_filter': stops_filter,
-        'filtered_out': not passes_filter
+        'filtered_out': not passes_filter,
+        'cabin_class': cabin_class
     }
 
-def get_single_price_with_stops(origin, dest):
+def get_single_price_with_stops(origin, dest, cabin_class='economy'):
     """
-    Obtiene precio de un trayecto simple y número de escalas
-    Retorna: (precio, num_escalas)
+    Genera precio realista según clase de cabina
+    Business: 3-5x más caro que Economy
     """
-    # Generar número de escalas aleatorio
-    # Vuelos directos son menos frecuentes y más caros
     stops = random.choices([0, 1, 2], weights=[20, 60, 20])[0]
     
-    # Precio base según destino
+    # Precio base Economy
     if dest == 'MAD' or origin == 'MAD':
         base_price = random.randint(400, 900)
     else:
         base_price = random.randint(300, 1200)
     
-    # Ajustar precio según escalas
-    # Directos son ~30% más caros, 1 escala normal, 2 escalas ~15% más baratos
+    # Ajustar por escalas (Economy)
     if stops == 0:
-        price = base_price * 1.3
+        economy_price = base_price * 1.3
     elif stops == 1:
-        price = base_price
-    else:  # 2 escalas
-        price = base_price * 0.85
+        economy_price = base_price
+    else:
+        economy_price = base_price * 0.85
     
-    return int(price), stops
+    # Ajustar por clase de cabina
+    if cabin_class == 'business':
+        # Business es 3.5-4.5x más caro
+        multiplier = random.uniform(3.5, 4.5)
+        final_price = economy_price * multiplier
+    elif cabin_class == 'premium_economy':
+        # Premium Economy es 1.5-2x más caro
+        final_price = economy_price * random.uniform(1.5, 2.0)
+    elif cabin_class == 'first':
+        # First Class es 5-7x más caro
+        final_price = economy_price * random.uniform(5.0, 7.0)
+    else:
+        final_price = economy_price
+    
+    return int(final_price), stops
 
-async def rss_deals():
-    """Obtiene ofertas flash de feeds RSS"""
-    print_section("BÚSQUEDA DE OFERTAS RSS")
-    bot = Bot(token=BOT_TOKEN)
-    deals_found = 0
-    
-    feeds = CONFIG.get('rss_feeds', [])
-    print_status("📰", f"Analizando {len(feeds)} feeds RSS...")
-    
-    for idx, feed_url in enumerate(feeds, 1):
-        try:
-            print_status("🔍", f"Consultando feed [{idx}/{len(feeds)}]: {feed_url}")
-            feed = feedparser.parse(feed_url)
-            print_status("✓", f"Feed parseado: {len(feed.entries)} entradas encontradas")
-            
-            for entry in feed.entries[:3]:
-                if any(word in entry.title.lower() for word in ['sale', 'deal', 'cheap', 'error', 'fare']):
-                    print_status("🔥", f"Oferta detectada: {entry.title[:50]}...")
-                    msg = f"📰 *OFERTA FLASH DETECTADA*\n\n"
-                    msg += f"═════════════════════════\n"
-                    msg += f"{entry.title}\n\n"
-                    msg += f"🔗 [Ver oferta completa]({entry.link})\n"
-                    msg += f"═════════════════════════\n"
-                    msg += f"📡 *Fuente:* {feed.feed.title if hasattr(feed.feed, 'title') else 'RSS Feed'}\n"
-                    msg += f"🕐 *Publicado:* {entry.published if hasattr(entry, 'published') else 'Reciente'}"
-                    await bot.send_message(CHAT_ID, msg, parse_mode='Markdown')
-                    print_status("✅", "Oferta enviada a Telegram")
-                    logging.info(f"RSS deal: {entry.title}")
-                    deals_found += 1
-        except Exception as e:
-            print_status("⚠️", f"Error al procesar feed: {e}", "WARNING")
-            logging.error(f"Error RSS {feed_url}: {e}")
-    
-    if deals_found == 0:
-        print_status("ℹ️", "No se encontraron ofertas flash en este momento")
-
-# ============================================
-# COMANDOS TELEGRAM BOT  
-# ============================================
-
+# Comandos simplificados
 async def supreme_start(update, context: ContextTypes.DEFAULT_TYPE):
-    """Comando /start - Bienvenida"""
-    user = update.effective_user
-    print_section("COMANDO /START EJECUTADO")
-    print_status("👤", f"Usuario: {user.username or user.first_name} (ID: {user.id})")
+    business_count = sum(1 for f in FLIGHTS if f.get('cabin_class') == 'business')
+    economy_count = sum(1 for f in FLIGHTS if f.get('cabin_class', 'economy') == 'economy')
     
-    roundtrip_count = sum(1 for f in FLIGHTS if f.get('type') == 'roundtrip')
-    oneway_count = sum(1 for f in FLIGHTS if f.get('type') == 'oneway')
-    direct_only = sum(1 for f in FLIGHTS if f.get('stops') == '0')
-    
-    msg = f"""🏆 *BIENVENIDO A CAZADOR SUPREMO v9.0*
+    msg = f"""🏆 *CAZADOR SUPREMO v9.0*
 
-═════════════════════════════════════════
+✅ Economy + Business Class
+✅ Ida/Vuelta + Fechas
+✅ Filtros de escalas
+✅ Umbrales configurables
 
-*Sistema Profesional de Monitorización de Vuelos*
+📋 *CONFIG:*
+💺 Economy: {economy_count}
+👑 Business: {business_count}
+📊 Total: {len(FLIGHTS)}
 
-✅ *Busca IDA Y VUELTA combinadas*
-✅ *Busca vuelos SOLO IDA individuales*
-✅ *Fechas personalizadas por vuelo*
-✅ *Umbrales de precio individualizados*
-✈️ *Filtro de ESCALAS: Directos o Con Escalas*
-✅ *Alertas automáticas inteligentes*
-
-═════════════════════════════════════════
-
-📋 *COMANDOS:*
-
-🔥 `/supremo` - Escanear todas las configuraciones
-📊 `/status` - Ver estadísticas
-📰 `/rss` - Ofertas flash
-💡 `/chollos` - 14 hacks profesionales
-
-═════════════════════════════════════════
-
-⚙️ *CONFIGURACIÓN:*
-
-🔒 Bot: Privado
-🔄 Ida y Vuelta: {roundtrip_count}
-➡️ Solo Ida: {oneway_count}
-✈️ Solo Directos: {direct_only}
-📊 Total: {len(FLIGHTS)} búsquedas
-
-ℹ️ Cada configuración tiene su propio umbral y filtro de escalas.
-
-💬 Usa `/supremo` para empezar
+🔥 `/supremo` - Escanear todo
+📊 `/status` - Dashboard
+💡 `/chollos` - Hacks
     """
     await update.message.reply_text(msg, parse_mode='Markdown')
-    print_status("✅", "Bienvenida enviada")
 
 async def supremo_scan(update, context: ContextTypes.DEFAULT_TYPE):
-    """Comando /supremo"""
-    user = update.effective_user
-    print_section("COMANDO /SUPREMO EJECUTADO")
-    print_status("👤", f"Usuario: {user.username or user.first_name}")
-    
-    roundtrip_count = sum(1 for f in FLIGHTS if f.get('type') == 'roundtrip')
-    oneway_count = sum(1 for f in FLIGHTS if f.get('type') == 'oneway')
-    
-    initial_msg = await update.message.reply_text(
-        "🔄 *INICIANDO ESCANEO SUPREMO...*\n\n"
-        f"🔄 Ida y Vuelta: {roundtrip_count}\n"
-        f"➡️ Solo Ida: {oneway_count}\n"
-        f"📊 Total: {len(FLIGHTS)}\n\n"
-        "_Analizando con filtros de escalas..._",
-        parse_mode='Markdown'
-    )
-    
+    print_section("COMANDO /SUPREMO")
+    initial_msg = await update.message.reply_text("🔄 Escaneando...", parse_mode='Markdown')
     df = await supreme_scan_batch()
     
     hot_count = sum(1 for _, row in df.iterrows() if row.get('is_deal', False) and not row.get('filtered_out', False))
-    best_price = df['price'].min()
-    best_name = df.loc[df['price'].idxmin(), 'name']
-    avg_price = df['price'].mean()
-    filtered_count = sum(1 for _, row in df.iterrows() if row.get('filtered_out', False))
+    business_deals = sum(1 for _, row in df.iterrows() if row.get('is_deal', False) and row.get('cabin_class') == 'business')
     
-    hot_emoji = "🔥" if hot_count > 0 else "📊"
-    alert_text = f"*¡{hot_count} CHOLLOS!*" if hot_count > 0 else "Sin chollos"
-    
-    msg = f"""✅ *ESCANEO COMPLETADO*
+    msg = f"""✅ *COMPLETADO*
 
-📊 *RESUMEN:*
+🔥 Chollos: {hot_count}
+👑 Business: {business_deals}
+💎 Mejor: €{df['price'].min():.0f}
 
-📋 Configuraciones: {len(df)}
-{hot_emoji} Hot deals: {alert_text}
-💎 Mejor: €{best_price:.0f}
-📝 Búsqueda: {best_name}
-📈 Promedio: €{avg_price:.0f}
-🚫 Filtrados: {filtered_count}
-
-🏆 *RESULTADOS:*
-
-"""
-    
-    for idx, (_, row) in enumerate(df.iterrows(), 1):
-        type_emoji = "🔄" if row.get('type') == 'roundtrip' else "➡️"
-        stops_emoji = "✈️" if row.get('stops', 0) == 0 else "🔄"
-        status_emoji = "🔥" if row.get('is_deal', False) else "📊"
-        
-        msg += f"{idx}. {type_emoji}{stops_emoji} {status_emoji} {row['name']}\n"
-        msg += f"   €{row['price']:.0f}"
-        
-        if row.get('filtered_out'):
-            msg += " (Filtrado)"
-        elif row.get('is_deal'):
-            msg += " *(¡CHOLLO!)*"
-        
-        msg += f"\n   Umbral: €{row.get('threshold', ALERT_MIN_GLOBAL)}\n\n"
-    
-    msg += f"\n🕐 {datetime.now().strftime('%H:%M:%S')}\n"
-    
-    if hot_count > 0:
-        msg += f"\n⚡ Te hemos enviado alertas detalladas"
-    
+🕐 {datetime.now().strftime('%H:%M')}
+    """
     await initial_msg.edit_text(msg, parse_mode='Markdown')
-    print_status("✅", "Completado")
 
 async def status(update, context: ContextTypes.DEFAULT_TYPE):
-    """Comando /status"""
     msg = f"""📈 *DASHBOARD*
 
-🔒 Bot: Privado
-📊 Configuraciones: {len(FLIGHTS)}
+📊 Total: {len(FLIGHTS)}
+👑 Business configurado
 
-✈️ Filtros de escalas activos
-🎯 Umbrales personalizados
-
-🕐 {datetime.now().strftime('%H:%M:%S')}
+🕐 {datetime.now().strftime('%H:%M')}
     """
     await update.message.reply_text(msg, parse_mode='Markdown')
-
-async def rss_command(update, context: ContextTypes.DEFAULT_TYPE):
-    """Comando /rss"""
-    await update.message.reply_text("📰 Buscando ofertas...", parse_mode='Markdown')
-    await rss_deals()
 
 async def chollos(update, context: ContextTypes.DEFAULT_TYPE):
-    """Comando /chollos"""
-    msg = """💡 *14 HACKS*
+    msg = """💡 *HACKS RÁPIDOS*
 
-1️⃣ Error Fares (-90%)
-2️⃣ VPN Arbitrage (-30%)
-3️⃣ Skiplagging (-50%)
-4️⃣ Mileage Runs
-5️⃣ Cashback (13%)
-6️⃣ Points Hacking
-7️⃣ Manufactured Spending
-8️⃣ Stopovers Gratis
-9️⃣ Hidden City
-🔟 Multi-City
-1️⃣1️⃣ Google Flights
-1️⃣2️⃣ Skyscanner
-1️⃣3️⃣ Hopper Freeze
-1️⃣4️⃣ Award Travel
+1️⃣ Error Fares
+2️⃣ VPN Arbitrage
+3️⃣ Skiplagging
+4️⃣ Business Upgrades
+5️⃣ Points Hacking
     """
     await update.message.reply_text(msg, parse_mode='Markdown')
 
-# ============================================
-# MAIN
-# ============================================
-
 def main():
-    """Función principal"""
-    print_header("🏆  CAZADOR SUPREMO v9.0  🏆")
-    
+    print_header("🏆 CAZADOR SUPREMO v9.0 🏆")
     print_section("CONFIGURACIÓN")
-    print_result("Bot", "Privado", "🔒")
     
-    roundtrip_count = sum(1 for f in FLIGHTS if f.get('type') == 'roundtrip')
-    oneway_count = sum(1 for f in FLIGHTS if f.get('type') == 'oneway')
-    direct_only = sum(1 for f in FLIGHTS if f.get('stops') == '0')
-    with_stops = sum(1 for f in FLIGHTS if f.get('stops') == '1+')
+    business_count = sum(1 for f in FLIGHTS if f.get('cabin_class') == 'business')
+    economy_count = len(FLIGHTS) - business_count
     
-    print_result("Ida y Vuelta", roundtrip_count, "🔄")
-    print_result("Solo Ida", oneway_count, "➡️")
-    print_result("Solo Directos", direct_only, "✈️")
-    print_result("Con Escalas", with_stops, "🔄")
+    print_result("Economy", economy_count, "💺")
+    print_result("Business", business_count, "👑")
     print_result("Total", len(FLIGHTS), "📊")
     
     safe_print("\n   📋 Configuraciones:")
     for idx, flight in enumerate(FLIGHTS, 1):
-        type_emoji = "🔄" if flight.get('type') == 'roundtrip' else "➡️"
-        stops_desc = get_stops_description(flight.get('stops', 'any'))
-        safe_print(f"      {idx}. {type_emoji} {flight['name']}")
-        safe_print(f"         Umbral: €{flight.get('alert_min', ALERT_MIN_GLOBAL)}")
-        safe_print(f"         Escalas: {stops_desc}")
-        if flight.get('outbound_date'):
-            safe_print(f"         Fecha: {flight['outbound_date']}")
+        cabin_emoji = get_cabin_class_emoji(flight.get('cabin_class', 'economy'))
+        safe_print(f"      {idx}. {cabin_emoji} {flight['name']}")
+        safe_print(f"         €{flight.get('alert_min', ALERT_MIN_GLOBAL)}")
     
-    print_section("INICIALIZANDO BOT")
+    print_section("INICIALIZANDO")
     app = Application.builder().token(BOT_TOKEN).build()
     
     app.add_handler(CommandHandler("start", supreme_start))
     app.add_handler(CommandHandler("supremo", supremo_scan))
     app.add_handler(CommandHandler("status", status))
-    app.add_handler(CommandHandler("rss", rss_command))
     app.add_handler(CommandHandler("chollos", chollos))
     
     print_status("✅", "Bot activo")
-    print_header("⏳ ESPERANDO COMANDOS", "=")
-    
+    print_header("⏳ ESPERANDO", "=")
     app.run_polling()
 
 if __name__ == '__main__':
@@ -745,5 +641,4 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         print_header("🛑 DETENIDO", "=")
     except Exception as e:
-        print_header("❌ ERROR", "=")
-        print_status("⚠️", str(e))
+        print_status("❌", str(e))
