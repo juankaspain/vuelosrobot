@@ -6,7 +6,7 @@
 ║   🚀 Sistema Profesional de Monitorización de Vuelos 2026 🚀           ║
 ═════════════════════════════════════════════════════════════════════════════
 
-👨‍💻 Autor: @Juanka_Spain | 🏷️ v12.1.0 Enterprise | 📅 2026-01-13 | 📋 MIT License
+👨‍💻 Autor: @Juanka_Spain | 🏷️ v12.1.1 Enterprise | 📅 2026-01-13 | 📋 MIT License
 
 🌟 ENTERPRISE FEATURES V12.1:
 ✅ SerpAPI Real Google Flights       ✅ Webhooks para Producción     ✅ ML Confidence Scores
@@ -16,19 +16,16 @@
 ✅ Typing Indicators UX              ✅ Markdown Estratégico         ✅ Console Coloreado
 ✅ Health Checks Avanzados           ✅ Status por Componente        ✅ Degradation Alerts
 
-🆕 NUEVO EN v12.1:
-⭐ SERPAPI REAL INTEGRATION - Llamadas reales a Google Flights API
-⭐ PRICE EXTRACTION - Parsing inteligente de respuestas JSON
-⭐ ERROR HANDLING - Manejo robusto de errores de red y API
-⭐ RESPONSE TIME METRICS - Métricas detalladas de rendimiento
+🆕 NUEVO EN v12.1.1:
+⭐ /clearcache - Comando para limpiar caché manualmente
+⭐ Permite forzar llamadas reales a APIs sin reiniciar
 
 🐛 FIXES:
+- v12.1.1: Añade comando /clearcache para testing
 - v12.1.0: Implementa integración real SerpAPI Google Flights
 - v12.0.3: Agrega método UI.section() faltante
-- v12.0.2: Corregido AttributeError 'NoneType' en update.message para callbacks
 
 📦 Dependencies: python-telegram-bot pandas requests feedparser colorama
-📦 Optional: python-telegram-bot[job-queue] (para heartbeat)
 🚀 Usage: python cazador_supremo_v12.0_enterprise.py
 ⚙️ Config: Edit config.json with your tokens
 """
@@ -69,7 +66,7 @@ if sys.platform == 'win32':
     except: pass
 
 # 🌐 GLOBAL CONFIG
-VERSION = "12.1.0 Enterprise"
+VERSION = "12.1.1 Enterprise"
 APP_NAME = "Cazador Supremo"
 CONFIG_FILE, LOG_FILE, CSV_FILE = "config.json", "cazador_supremo.log", "deals_history.csv"
 MAX_WORKERS, API_TIMEOUT = 25, 15
@@ -341,7 +338,13 @@ class TTLCache:
         return len(self._cache)
     
     def clear(self):
+        old_size = len(self._cache)
         self._cache.clear()
+        self.hits = 0
+        self.misses = 0
+        self.evictions = 0
+        logger.info(f"🗑️ Cache cleared: {old_size} items removed")
+        return old_size
 
 # 📊 METRICS DASHBOARD
 class MetricsDashboard:
@@ -629,7 +632,7 @@ class FlightScanner:
     
     def _fetch_serpapi(self, route: FlightRoute) -> Optional[FlightPrice]:
         """
-        ⭐ NUEVA IMPLEMENTACIÓN REAL: Llamada real a SerpAPI Google Flights
+        ⭐ IMPLEMENTACIÓN REAL: Llamada real a SerpAPI Google Flights
         """
         # Check rate limit
         if self.serpapi_last_reset != datetime.now().date():
@@ -709,7 +712,7 @@ class FlightScanner:
     
     def _extract_price_from_serpapi(self, data: Dict) -> Optional[float]:
         """
-        ⭐ NUEVA FUNCIÓN: Extrae precio de respuesta JSON de SerpAPI
+        ⭐ Extrae precio de respuesta JSON de SerpAPI
         """
         try:
             # Try best_flights first
@@ -791,6 +794,7 @@ class TelegramBotManager:
         # Handlers
         self.app.add_handler(CommandHandler('start', self.cmd_start))
         self.app.add_handler(CommandHandler('scan', self.cmd_scan))
+        self.app.add_handler(CommandHandler('clearcache', self.cmd_clearcache))
         self.app.add_handler(CommandHandler('status', self.cmd_status))
         self.app.add_handler(CommandHandler('help', self.cmd_help))
         self.app.add_handler(CallbackQueryHandler(self.handle_callback))
@@ -816,14 +820,11 @@ class TelegramBotManager:
         UI.header("🛑 SHUTDOWN REQUESTED")
         self.running = False
         
-        # Cancel all background tasks
         if self._background_tasks:
             UI.status("⏹️", f"Cancelling {len(self._background_tasks)} background tasks...")
             for task in self._background_tasks:
                 if not task.done():
                     task.cancel()
-            
-            # Wait for all tasks to complete cancellation
             await asyncio.gather(*self._background_tasks, return_exceptions=True)
             self._background_tasks.clear()
         
@@ -843,7 +844,6 @@ class TelegramBotManager:
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = update.effective_message
         if not msg:
-            logger.warning("cmd_start: No effective_message")
             return
         
         await context.bot.send_chat_action(chat_id=msg.chat_id, action=ChatAction.TYPING)
@@ -853,6 +853,7 @@ class TelegramBotManager:
             "¡Bienvenido al sistema Enterprise de monitorización de vuelos!\n\n"
             "*Comandos disponibles:*\n"
             "/scan - Escanear rutas configuradas\n"
+            "/clearcache - Limpiar caché (fuerza APIs reales)\n"
             "/status - Ver estado del sistema\n"
             "/help - Ayuda detallada\n\n"
             "💡 _Usa los botones para interactuar_"
@@ -866,12 +867,11 @@ class TelegramBotManager:
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await msg.reply_text(welcome, parse_mode='Markdown', reply_markup=reply_markup)
-        logger.info(f"✅ /start command executed for user {msg.from_user.id}")
+        logger.info(f"✅ /start executed")
     
     async def cmd_scan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = update.effective_message
         if not msg:
-            logger.warning("cmd_scan: No effective_message")
             return
         
         await context.bot.send_chat_action(chat_id=msg.chat_id, action=ChatAction.TYPING)
@@ -901,10 +901,36 @@ class TelegramBotManager:
         else:
             await msg.reply_text("❌ No se obtuvieron resultados")
     
+    async def cmd_clearcache(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        ⭐ NUEVO COMANDO: Limpia el caché para forzar llamadas reales a APIs
+        """
+        msg = update.effective_message
+        if not msg:
+            return
+        
+        await context.bot.send_chat_action(chat_id=msg.chat_id, action=ChatAction.TYPING)
+        
+        # Get cache stats before clearing
+        cache_size = self.scanner.cache.size
+        hit_rate = self.scanner.cache.hit_rate
+        
+        # Clear cache
+        cleared = self.scanner.cache.clear()
+        
+        response = (
+            f"🗑️ *Caché limpiado*\n\n"
+            f"📄 Items eliminados: {cleared}\n"
+            f"🎯 Hit rate anterior: {hit_rate:.1%}\n\n"
+            f"✅ El próximo /scan usará APIs reales"
+        )
+        
+        await msg.reply_text(response, parse_mode='Markdown')
+        logger.info(f"🗑️ Cache cleared: {cleared} items")
+    
     async def cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = update.effective_message
         if not msg:
-            logger.warning("cmd_status: No effective_message")
             return
         
         await context.bot.send_chat_action(chat_id=msg.chat_id, action=ChatAction.TYPING)
@@ -942,7 +968,6 @@ class TelegramBotManager:
     async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = update.effective_message
         if not msg:
-            logger.warning("cmd_help: No effective_message")
             return
         
         help_text = (
@@ -950,6 +975,7 @@ class TelegramBotManager:
             "*Comandos:*\n"
             "/start - Iniciar bot\n"
             "/scan - Escanear rutas\n"
+            "/clearcache - Limpiar caché\n"
             "/status - Ver estado sistema\n"
             "/help - Esta ayuda\n\n"
             "*Características:*\n"
@@ -966,7 +992,6 @@ class TelegramBotManager:
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         if not query:
-            logger.warning("handle_callback: No callback_query")
             return
         
         await query.answer()
@@ -980,9 +1005,6 @@ class TelegramBotManager:
             await self.cmd_status(update, context)
         elif callback_data == "help":
             await self.cmd_help(update, context)
-        else:
-            if query.message:
-                await query.message.reply_text(f"❓ Callback desconocido: {callback_data}")
 
 # 🚀 MAIN
 async def main():
@@ -996,11 +1018,9 @@ async def main():
         
         await bot_mgr.start()
         
-        # Keep running
         while bot_mgr.running:
             await asyncio.sleep(1)
             
-            # Check degradation periodically
             if int(time.time()) % 60 == 0:
                 alerts = metrics_dashboard.check_degradation()
                 if alerts:
