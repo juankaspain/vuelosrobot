@@ -3,13 +3,51 @@
 ![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-production-success)
-![Version](https://img.shields.io/badge/version-12.1.1-orange)
+![Version](https://img.shields.io/badge/version-12.1.2-orange)
 
 Sistema **profesional de nivel empresarial** para monitorizar precios de vuelos con arquitectura POO, integración SerpAPI Google Flights, Machine Learning avanzado, webhooks para producción, y alertas inteligentes en tiempo real vía Telegram.
 
 ---
 
 ## 📋 Release Notes
+
+### 🔧 v12.1.2 - SerpAPI Fix (2026-01-13)
+
+**Correcciones Críticas:**
+
+- ✅ **FIX: Error 400 Bad Request en SerpAPI**
+  - Añadido parámetro `'type': '2'` para especificar vuelos one-way (solo ida)
+  - Eliminado requerimiento de `return_date` que causaba error 400
+  - SerpAPI ahora funciona correctamente sin necesidad de fecha de retorno
+  - Logs mejorados para debugging de parámetros enviados
+
+**Problema resuelto:**
+```json
+{
+  "error": "`return_date` is required if `type` is `1` (Round trip)."
+}
+```
+
+**Solución implementada:**
+```python
+params = {
+    'engine': 'google_flights',
+    'departure_id': route.origin,
+    'arrival_id': route.dest,
+    'outbound_date': departure_date,
+    'type': '2',  # 2 = One way (no necesita return_date)
+    'currency': 'EUR',
+    'hl': 'es',
+    'api_key': api_key
+}
+```
+
+**Por qué es importante:**
+- `type=1` = Round trip (❌ requiere `return_date`)
+- **`type=2` = One way** (✅ NO requiere `return_date`)
+- Las búsquedas ahora funcionan correctamente con SerpAPI
+
+---
 
 ### 🔧 v12.1.1 - Testing Tools (2026-01-13)
 
@@ -88,7 +126,7 @@ Sistema **profesional de nivel empresarial** para monitorizar precios de vuelos 
 **Cómo actualizar:**
 ```bash
 git pull origin main
-python cazador_supremo_v12.0_enterprise.py
+python cazador_supremo_enterprise.py
 ```
 
 ---
@@ -145,7 +183,17 @@ python cazador_supremo_v12.0_enterprise.py
 
 # Opción 2: Reiniciar bot (limpia caché automáticamente)
 Ctrl+C
-python cazador_supremo_v12.0_enterprise.py
+python cazador_supremo_enterprise.py
+```
+
+### Error: 400 Bad Request - "return_date is required"
+
+**Causa:** Versión anterior a v12.1.2 sin parámetro `type=2`.
+
+**Solución:**
+```bash
+git pull origin main  # Actualiza a v12.1.2+
+python cazador_supremo_enterprise.py
 ```
 
 ### Error: Circuit Breaker OPEN
@@ -173,8 +221,8 @@ python cazador_supremo_v12.0_enterprise.py
 
 **Solución:**
 ```bash
-git pull origin main  # Actualiza a v12.1.1+
-python cazador_supremo_v12.0_enterprise.py
+git pull origin main  # Actualiza a v12.1.2+
+python cazador_supremo_enterprise.py
 ```
 
 ---
@@ -194,6 +242,7 @@ python cazador_supremo_v12.0_enterprise.py
 | /clearcache | No | Sí | ✅ Nuevo |
 | Métricas por API | No | Sí | ✅ Nuevo |
 | ML Algorithm | Básico | DecisionTree Enhanced | +40% Accuracy |
+| SerpAPI Integration | No | Sí (one-way flights) | ✅ v12.1.2 |
 
 ---
 
@@ -244,7 +293,7 @@ pip install -r requirements.txt
 
 4. **Ejecutar:**
 ```bash
-python cazador_supremo_v12.0_enterprise.py
+python cazador_supremo_enterprise.py
 ```
 
 ---
