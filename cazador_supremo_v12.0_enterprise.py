@@ -2,38 +2,30 @@
 # -*- coding: utf-8 -*-
 """
 ═════════════════════════════════════════════════════════════════════════════
-║       🎆 CAZADOR SUPREMO v12.0 ENTERPRISE EDITION 🎆                    ║
+║       🎆 CAZADOR SUPREMO v12.1 ENTERPRISE EDITION 🎆                    ║
 ║   🚀 Sistema Profesional de Monitorización de Vuelos 2026 🚀           ║
 ═════════════════════════════════════════════════════════════════════════════
 
-👨‍💻 Autor: @Juanka_Spain | 🏷️ v12.0.3 Enterprise | 📅 2026-01-13 | 📋 MIT License
+👨‍💻 Autor: @Juanka_Spain | 🏷️ v12.1.0 Enterprise | 📅 2026-01-13 | 📋 MIT License
 
-🌟 ENTERPRISE FEATURES V12.0:
-✅ SerpAPI Enhanced Google Flights   ✅ Webhooks para Producción     ✅ ML Confidence Scores
+🌟 ENTERPRISE FEATURES V12.1:
+✅ SerpAPI Real Google Flights       ✅ Webhooks para Producción     ✅ ML Confidence Scores
 ✅ Rate Limiting Inteligente         ✅ Retry Logic Robusto          ✅ DecisionTree Patterns
 ✅ Fallback Multi-Nivel              ✅ Input Validation Pro         ✅ Alertas Proactivas
 ✅ Heartbeat Monitoring (opcional)   ✅ Inline Keyboards             ✅ Métricas por Fuente
 ✅ Typing Indicators UX              ✅ Markdown Estratégico         ✅ Console Coloreado
 ✅ Health Checks Avanzados           ✅ Status por Componente        ✅ Degradation Alerts
 
-🆕 NUEVO EN v12.0:
-⭐ SERPAPI GOOGLE FLIGHTS - Integración premium con rate limiting
-⭐ WEBHOOKS TELEGRAM - Para producción (más eficiente que polling)
-⭐ ML CONFIDENCE SCORES - Predicciones con nivel de confianza
-⭐ DECISION TREE PATTERNS - Basado en estudios reales de pricing
-⭐ INLINE KEYBOARDS - Interacción fluida con botones
-⭐ TYPING INDICATORS - Feedback visual UX 2026
-⭐ HEARTBEAT MONITORING - Health checks para containers (opcional)
-⭐ METRICS DASHBOARD - Métricas detalladas por fuente
-⭐ PROACTIVE ALERTS - Sistema de alertas de degradación
-⭐ COLORIZED OUTPUT - Console logging profesional
+🆕 NUEVO EN v12.1:
+⭐ SERPAPI REAL INTEGRATION - Llamadas reales a Google Flights API
+⭐ PRICE EXTRACTION - Parsing inteligente de respuestas JSON
+⭐ ERROR HANDLING - Manejo robusto de errores de red y API
+⭐ RESPONSE TIME METRICS - Métricas detalladas de rendimiento
 
 🐛 FIXES:
+- v12.1.0: Implementa integración real SerpAPI Google Flights
 - v12.0.3: Agrega método UI.section() faltante
 - v12.0.2: Corregido AttributeError 'NoneType' en update.message para callbacks
-- v12.0.2: Usa update.effective_message en todos los handlers
-- v12.0.2: Mejora gestión async tasks en shutdown (elimina GeneratorExit)
-- v12.0.2: Fix handle_callback para inline keyboards
 
 📦 Dependencies: python-telegram-bot pandas requests feedparser colorama
 📦 Optional: python-telegram-bot[job-queue] (para heartbeat)
@@ -77,7 +69,7 @@ if sys.platform == 'win32':
     except: pass
 
 # 🌐 GLOBAL CONFIG
-VERSION = "12.0.3 Enterprise"
+VERSION = "12.1.0 Enterprise"
 APP_NAME = "Cazador Supremo"
 CONFIG_FILE, LOG_FILE, CSV_FILE = "config.json", "cazador_supremo.log", "deals_history.csv"
 MAX_WORKERS, API_TIMEOUT = 25, 15
@@ -412,7 +404,6 @@ class UI:
     
     @staticmethod
     def section(title: str):
-        """⚠️ MÉTODO AGREGADO: Imprime una sección con separadores"""
         UI.print(f"\n{'─'*80}", Fore.CYAN)
         UI.print(f"📍 {title}", Fore.CYAN + Style.BRIGHT)
         UI.print(f"{'─'*80}\n", Fore.CYAN)
@@ -637,6 +628,9 @@ class FlightScanner:
         return price
     
     def _fetch_serpapi(self, route: FlightRoute) -> Optional[FlightPrice]:
+        """
+        ⭐ NUEVA IMPLEMENTACIÓN REAL: Llamada real a SerpAPI Google Flights
+        """
         # Check rate limit
         if self.serpapi_last_reset != datetime.now().date():
             self.serpapi_calls_today = 0
@@ -645,9 +639,101 @@ class FlightScanner:
         if self.serpapi_calls_today >= SERPAPI_RATE_LIMIT:
             raise Exception("SERPAPI rate limit reached")
         
-        # Simulate API call
-        self.serpapi_calls_today += 1
-        raise Exception("SERPAPI not configured")  # Placeholder
+        # Get API key
+        api_key = self.config.api_keys.get('serpapi_key')
+        if not api_key:
+            raise Exception("SERPAPI key not configured")
+        
+        # Prepare request
+        departure_date = (datetime.now() + timedelta(days=45)).strftime('%Y-%m-%d')
+        
+        params = {
+            'engine': 'google_flights',
+            'departure_id': route.origin,
+            'arrival_id': route.dest,
+            'outbound_date': departure_date,
+            'currency': 'EUR',
+            'hl': 'es',
+            'api_key': api_key
+        }
+        
+        url = 'https://serpapi.com/search'
+        
+        # Make request with timeout and metrics
+        start_time = time.time()
+        try:
+            response = requests.get(url, params=params, timeout=API_TIMEOUT)
+            duration = time.time() - start_time
+            
+            response.raise_for_status()
+            data = response.json()
+            
+            # Extract price from response
+            price_value = self._extract_price_from_serpapi(data)
+            
+            if price_value:
+                self.serpapi_calls_today += 1
+                metrics_dashboard.record_call('serpapi', True, duration)
+                
+                price_obj = FlightPrice(
+                    route=route.route_code,
+                    name=route.name,
+                    price=price_value,
+                    source=PriceSource.SERP_API,
+                    timestamp=datetime.now(),
+                    confidence=0.95,
+                    metadata={
+                        'api': 'serpapi',
+                        'response_time': duration,
+                        'departure_date': departure_date
+                    }
+                )
+                
+                logger.info(f"🔍 {route.route_code}: €{price_value} (SerpAPI Google Flights, {duration:.2f}s)")
+                return price_obj
+            else:
+                raise Exception("No price found in response")
+                
+        except requests.exceptions.Timeout:
+            duration = time.time() - start_time
+            metrics_dashboard.record_call('serpapi', False, duration, error="Timeout")
+            raise Exception(f"SERPAPI timeout after {duration:.1f}s")
+        except requests.exceptions.RequestException as e:
+            duration = time.time() - start_time
+            metrics_dashboard.record_call('serpapi', False, duration, error=str(e))
+            raise Exception(f"SERPAPI request failed: {e}")
+        except Exception as e:
+            duration = time.time() - start_time
+            metrics_dashboard.record_call('serpapi', False, duration, error=str(e))
+            raise
+    
+    def _extract_price_from_serpapi(self, data: Dict) -> Optional[float]:
+        """
+        ⭐ NUEVA FUNCIÓN: Extrae precio de respuesta JSON de SerpAPI
+        """
+        try:
+            # Try best_flights first
+            if 'best_flights' in data and len(data['best_flights']) > 0:
+                flight = data['best_flights'][0]
+                if 'price' in flight:
+                    return float(flight['price'])
+            
+            # Try other_flights
+            if 'other_flights' in data and len(data['other_flights']) > 0:
+                flight = data['other_flights'][0]
+                if 'price' in flight:
+                    return float(flight['price'])
+            
+            # Try price_insights
+            if 'price_insights' in data:
+                insights = data['price_insights']
+                if 'lowest_price' in insights:
+                    return float(insights['lowest_price'])
+            
+            return None
+        except (KeyError, ValueError, TypeError) as e:
+            logger.warning(f"⚠️ Failed to extract price from SerpAPI response: {e}")
+            return None
 
 # 💾 DATA MANAGER
 class DataManager:
@@ -867,6 +953,7 @@ class TelegramBotManager:
             "/status - Ver estado sistema\n"
             "/help - Esta ayuda\n\n"
             "*Características:*\n"
+            "✅ SerpAPI Google Flights Real\n"
             "✅ ML Smart Predictions\n"
             "✅ Circuit Breaker Pattern\n"
             "✅ Intelligent Caching\n"
