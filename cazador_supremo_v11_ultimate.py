@@ -222,9 +222,9 @@ class UI:
     
     @staticmethod
     def header(title: str):
-        UI.print(f"\n{'═'*80}", UI.CYAN)
+        UI.print(f"\n{'='*80}", UI.CYAN)
         UI.print(f"{title.center(80)}", UI.BOLD + UI.CYAN)
-        UI.print(f"{'═'*80}\n", UI.CYAN)
+        UI.print(f"{'='*80}\n", UI.CYAN)
     
     @staticmethod
     def section(title: str):
@@ -532,7 +532,7 @@ _Precio < €{self.config.alert_threshold:.0f}_"""
 
 ─────────────────────
 
-📝 *COMANDOS:*
+📋 *COMANDOS:*
 
 🔥 `/supremo` - Escaneo completo
 📊 `/status` - Dashboard stats
@@ -769,7 +769,8 @@ def main():
         UI.print(f"   📡 APIs: {len(config.api_keys)}")
         UI.print(f"   📰 RSS: {len(config.rss_feeds)}")
         UI.print(f"   🗃️ Cache TTL: {CACHE_TTL}s")
-        UI.print(f"   ⚔️ Circuit: {CIRCUIT_BREAK_THRESHOLD} fails")\n
+        UI.print(f"   ⚔️ Circuit: {CIRCUIT_BREAK_THRESHOLD} fails")
+        
         # Create Telegram app
         UI.section("STARTING TELEGRAM BOT")
         app = Application.builder().token(config.bot_token).build()
@@ -818,7 +819,7 @@ def main():
     except Exception as e:
         UI.header("❌ CRITICAL ERROR")
         UI.status("⚠️", f"Error: {e}", "ERROR")
-        UI.print(f"\n   📝 Check logs: {LOG_FILE}\n")
+        UI.print(f"\n   📋 Check logs: {LOG_FILE}\n")
         logger.critical(f"Critical error: {e}")
         raise
 
