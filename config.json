@@ -5,29 +5,32 @@
   },
   "flights": [
     {
+      "type": "roundtrip",
       "origin": "MAD",
       "dest": "MGA",
-      "name": "Madrid-Managua"
+      "name": "Madrid-Managua (Ida y Vuelta)",
+      "outbound_date": "2026-06-15",
+      "return_date": "2026-06-30",
+      "alert_min": 900,
+      "description": "Viaje completo ida y vuelta"
     },
     {
+      "type": "oneway",
+      "origin": "MAD",
+      "dest": "MGA",
+      "name": "Madrid-Managua (Solo Ida)",
+      "outbound_date": "2026-06-15",
+      "alert_min": 500,
+      "description": "Solo vuelo de ida"
+    },
+    {
+      "type": "oneway",
       "origin": "MGA",
       "dest": "MAD",
-      "name": "Managua-Madrid"
-    },
-    {
-      "origin": "MAD",
-      "dest": "BOG",
-      "name": "Madrid-Bogotá (stopover)"
-    },
-    {
-      "origin": "MAD",
-      "dest": "MIA",
-      "name": "Madrid-Miami (conexión)"
-    },
-    {
-      "origin": "BCN",
-      "dest": "MGA",
-      "name": "Barcelona-Managua"
+      "name": "Managua-Madrid (Solo Vuelta)",
+      "outbound_date": "2026-06-30",
+      "alert_min": 500,
+      "description": "Solo vuelo de vuelta"
     }
   ],
   "apis": {
