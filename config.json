@@ -1,153 +1,69 @@
 {
   "telegram": {
-    "token": "8543611357:AAH_X0A79CDV7vzN4_T8u0v6WLljs6lBLQo",
-    "chat_id": "915723710"
+    "token": "7904506426:AAEhWCYFMVyj-hg8WVzf7eOa0GUuS0FvCfo",
+    "chat_id": "5845787316"
   },
   "flights": [
     {
-      "type": "roundtrip",
       "origin": "MAD",
       "dest": "MGA",
-      "name": "Madrid-Managua (Ida y Vuelta)",
-      "outbound_date": "2026-06-15",
-      "return_date": "2026-06-30",
-      "alert_min": 900,
-      "stops": "any",
-      "cabin_class": "economy",
-      "description": "Viaje completo ida y vuelta en clase económica"
+      "name": "Madrid-Managua"
     },
     {
-      "type": "oneway",
-      "origin": "MAD",
-      "dest": "MGA",
-      "name": "Madrid-Managua (Solo Ida - Directo)",
-      "outbound_date": "2026-06-15",
-      "alert_min": 600,
-      "stops": "0",
-      "cabin_class": "economy",
-      "description": "Solo vuelo de ida, SOLO DIRECTOS sin escalas"
-    },
-    {
-      "type": "oneway",
-      "origin": "MAD",
-      "dest": "MGA",
-      "name": "Madrid-Managua (Solo Ida - Con Escalas)",
-      "outbound_date": "2026-06-15",
-      "alert_min": 450,
-      "stops": "1+",
-      "cabin_class": "economy",
-      "description": "Solo vuelo de ida, acepta 1 o más escalas (más barato)"
-    },
-    {
-      "type": "oneway",
       "origin": "MGA",
       "dest": "MAD",
-      "name": "Managua-Madrid (Solo Vuelta)",
-      "outbound_date": "2026-06-30",
-      "alert_min": 500,
-      "stops": "any",
-      "cabin_class": "economy",
-      "description": "Solo vuelo de vuelta, cualquier número de escalas"
+      "name": "Managua-Madrid"
     },
     {
-      "type": "roundtrip",
       "origin": "MAD",
-      "dest": "MGA",
-      "name": "Madrid-Managua BUSINESS (Ida y Vuelta)",
-      "outbound_date": "2026-06-15",
-      "return_date": "2026-06-30",
-      "alert_min": 2500,
-      "stops": "any",
-      "cabin_class": "business",
-      "description": "Viaje completo en Business Class - Lujo a buen precio"
+      "dest": "BOG",
+      "name": "Madrid-Bogotá"
     },
     {
-      "type": "oneway",
-      "origin": "MAD",
-      "dest": "MGA",
-      "name": "Madrid-Managua BUSINESS (Solo Ida)",
-      "outbound_date": "2026-06-15",
-      "alert_min": 1400,
-      "stops": "any",
-      "cabin_class": "business",
-      "description": "Solo ida en Business - Máximo confort"
-    },
-    {
-      "type": "oneway",
       "origin": "MAD",
       "dest": "MIA",
-      "name": "Madrid-Miami BUSINESS (Solo Ida)",
-      "outbound_date": "2026-07-01",
-      "alert_min": 1200,
-      "stops": "0",
-      "cabin_class": "business",
-      "description": "Miami en Business directo - Ideal para negocios"
+      "name": "Madrid-Miami"
+    },
+    {
+      "origin": "BCN",
+      "dest": "MGA",
+      "name": "Barcelona-Managua"
+    },
+    {
+      "origin": "MAD",
+      "dest": "LIM",
+      "name": "Madrid-Lima"
+    },
+    {
+      "origin": "MAD",
+      "dest": "MEX",
+      "name": "Madrid-Ciudad de México"
+    },
+    {
+      "origin": "MAD",
+      "dest": "GUA",
+      "name": "Madrid-Guatemala"
+    },
+    {
+      "origin": "MAD",
+      "dest": "PTY",
+      "name": "Madrid-Panamá"
+    },
+    {
+      "origin": "MAD",
+      "dest": "SJO",
+      "name": "Madrid-San José (Costa Rica)"
     }
   ],
+  "alert_min": 500,
   "apis": {
     "aviationstack": "cf33c5341fad0bd359d8c41d6902ce1c",
     "serpapi": "KGGvesNWaiWBew83i2MD2C7w"
   },
-  "alert_min": 500,
-  "business_class_thresholds": {
-    "MAD-MGA": {
-      "roundtrip": 2500,
-      "oneway": 1400,
-      "normal_price": 4500,
-      "description": "Madrid-Managua en Business suele costar €4500-5500. Por debajo de €2500 (RT) es chollo."
-    },
-    "MAD-MIA": {
-      "roundtrip": 2000,
-      "oneway": 1200,
-      "normal_price": 3500,
-      "description": "Madrid-Miami en Business suele costar €3500-4200. Por debajo de €2000 (RT) es chollo."
-    },
-    "MAD-BOG": {
-      "roundtrip": 2200,
-      "oneway": 1300,
-      "normal_price": 4000,
-      "description": "Madrid-Bogotá en Business suele costar €4000-4800. Por debajo de €2200 (RT) es chollo."
-    },
-    "default": {
-      "roundtrip": 2500,
-      "oneway": 1500,
-      "normal_price": 5000,
-      "description": "Business Class genérico. Precios normales €5000+."
-    }
-  },
   "rss_feeds": [
     "https://www.secretflying.com/feed/",
-    "https://www.fly4free.com/feed/"
-  ],
-  "_cabin_class_options": {
-    "economy": "Clase económica (turista)",
-    "premium_economy": "Económica premium (más espacio)",
-    "business": "Clase business (ejecutiva)",
-    "first": "Primera clase (lujo máximo)"
-  },
-  "_stops_options": {
-    "0": "Solo vuelos directos (sin escalas)",
-    "1": "Máximo 1 escala",
-    "1+": "1 o más escalas (cualquier cantidad con escalas)",
-    "2": "Máximo 2 escalas",
-    "any": "Cualquier opción (directos o con escalas)"
-  },
-  "_api_info": {
-    "aviationstack": {
-      "plan": "Free tier",
-      "limite_mensual": "100 requests/month",
-      "nota": "Clave API real activa - Usar con moderación"
-    },
-    "serpapi": {
-      "plan": "Free tier",
-      "limite_mensual": "100 searches/month",
-      "nota": "Clave API real activa - Usar con moderación"
-    },
-    "warning": "⚠️ Las APIs gratuitas tienen límites estrictos. El bot usará ML estimates cuando se agoten."
-  },
-  "_notes": {
-    "business_pricing": "Los precios de Business Class son 3-5x más que Economy. Un chollo en Business es cuando está a menos del 60% del precio normal.",
-    "customization": "Puedes ajustar los umbrales en 'business_class_thresholds' según tus preferencias y presupuesto.",
-    "api_usage": "Con las APIs reales configuradas, el bot intentará primero AviationStack, luego SerpAPI, y finalmente ML estimates como fallback."
-  }
+    "https://www.fly4free.com/feed/",
+    "https://www.travelcodex.com/feed/",
+    "https://thepointsguy.com/feed/"
+  ]
 }
