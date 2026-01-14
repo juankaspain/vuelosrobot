@@ -1,227 +1,214 @@
 {
   "es": {
-    "app": {
+    "bot": {
       "name": "Cazador Supremo",
-      "version": "v12.2.0 Enterprise",
-      "tagline": "Sistema Profesional de Monitorización de Vuelos",
-      "author": "@Juanka_Spain"
+      "version": "v13.0 Enterprise",
+      "tagline": "Sistema Profesional de Monitorización de Vuelos"
     },
     "commands": {
       "start": {
-        "welcome": "🎆 *{app_name} {version}* 🎆\n\n¡Bienvenido al sistema Enterprise de monitorización de vuelos!\n\n*Comandos disponibles:*\n{commands_list}\n\n🌍 _Idioma: Español_ | Cambiar: /language",
-        "commands_list": "/scan - Escanear rutas configuradas\n/route - Búsqueda personalizada\n/deals - Ver chollos disponibles\n/trends - Análisis de tendencias\n/alerts - Configurar alertas\n/status - Estado del sistema\n/help - Ayuda completa"
+        "welcome": "🎆 *{name} {version}* 🎆\n\n¡Bienvenido al sistema Enterprise!\n\n*Comandos disponibles:*\n/scan - Escanear rutas\n/route - Búsqueda personalizada\n/deals - Ver chollos\n/trends - Análisis tendencias\n/clearcache - Limpiar caché\n/status - Estado sistema\n/help - Ayuda",
+        "buttons": {
+          "scan": "🔍 Escanear",
+          "deals": "💰 Chollos",
+          "trends": "📈 Tendencias",
+          "status": "📊 Estado",
+          "help": "❓ Ayuda"
+        }
       },
       "scan": {
-        "starting": "🔍 Iniciando escaneo de {count} rutas...",
-        "processing": "⏳ Procesando... {current}/{total}",
-        "completed": "✅ *Escaneo completado*\n\n{results}\n\n_Total: {total} precios | Tiempo: {elapsed}s_",
-        "no_results": "❌ No se obtuvieron resultados. Intenta de nuevo.",
-        "error": "⚠️ Error al escanear: {error}"
+        "starting": "🔍 Iniciando escaneo...",
+        "completed": "✅ *Escaneo completado*\n\n",
+        "result_line": "{emoji} {name}: {price} ({source})\n",
+        "more_results": "\n_...y {count} resultados más_",
+        "no_results": "❌ No se obtuvieron resultados",
+        "error": "❌ Error al escanear: {error}"
       },
       "route": {
-        "usage": "📋 *Uso:* `/route ORIGEN DESTINO [FECHA]`\n\n*Ejemplos:*\n• `/route MAD BCN 2026-02-15`\n• `/route MAD MIA`\n\nBusca vuelos con fechas flexibles (±3 días)",
-        "searching": "🔍 Buscando vuelos {origin} → {dest} para {date} (±3 días)...",
-        "results": "✅ *Encontrados {count} vuelos*\n\n{flights}",
-        "no_flights": "😞 No se encontraron vuelos para esta ruta y fecha.\n\nIntenta con:\n• Fechas diferentes\n• Otra ruta cercana\n• Escaneo general con /scan",
-        "invalid_route": "❌ Códigos IATA inválidos. Usa 3 letras (ej: MAD, BCN, MIA)",
-        "invalid_date": "❌ Fecha inválida. Formato: YYYY-MM-DD (ej: 2026-02-15)"
+        "usage": "📋 *Uso:* `/route ORIGEN DESTINO [FECHA]`\n\n*Ejemplos:*\n`/route MAD BCN 2026-02-15`\n`/route MAD MIA`\n\nBusca vuelos con fechas flexibles (±3 días)",
+        "searching": "🔍 Buscando {origin} → {dest} para {date} (±3 días)...",
+        "results_title": "✅ *Resultados {origin} → {dest}*\n\n",
+        "result_line": "{num}️⃣ {price}",
+        "airline": " - {airline}",
+        "departure": "\n   📅 {date}",
+        "stops": " | {stops} escalas\n",
+        "no_results": "❌ No se encontraron vuelos",
+        "invalid_codes": "❌ Error: Códigos IATA inválidos. Usa 3 letras (ej: MAD, BCN)",
+        "invalid_date": "❌ Error: Fecha inválida. Usa formato YYYY-MM-DD"
       },
       "deals": {
         "searching": "💰 Buscando chollos...",
-        "found": "🔥 *¡{count} chollos detectados!*\n\n{deals}",
-        "none": "😕 No hay chollos disponibles ahora.\n\nSe te notificará automáticamente cuando detectemos uno.\n\n💡 Consejo: Activa auto-scan con /settings",
-        "deal_format": "🔥 *¡CHOLLO!* 🔥\n\n✈️ *Ruta:* {route_name}\n💰 *Precio:* {price} ({source})\n📉 *Ahorro:* {savings_pct}% vs histórico\n📊 *Media:* {historical_avg}\n📅 *Salida:* {departure_date}\n🛫 *Aerolínea:* {airline}\n🔗 *Escalas:* {stops}\n{confidence_emoji} *Confianza:* {confidence}"
+        "deal_title": "🔥 *¡CHOLLO DETECTADO!* 🔥\n\n",
+        "route": "✈️ *Ruta:* {name}\n",
+        "price": "💰 *Precio:* {price} ({source})\n",
+        "savings": "📉 *Ahorro:* {percent}% vs histórico\n",
+        "avg": "📊 *Media histórica:* €{avg}\n",
+        "departure": "📅 *Salida:* {date}\n",
+        "airline": "🛫 *Aerolínea:* {airline}\n",
+        "stops": "🔗 *Escalas:* {stops}\n",
+        "confidence": "{emoji} *Confianza:* {percent}%",
+        "no_deals": "😟 No hay chollos disponibles en este momento",
+        "error": "❌ Error al buscar chollos"
       },
       "trends": {
-        "usage": "📋 *Uso:* `/trends RUTA`\n\n*Ejemplo:* `/trends MAD-MIA`\n\nAnaliza tendencias de precios de los últimos 30 días.",
-        "analyzing": "📈 Analizando tendencias para {route}...",
-        "results": "📈 *Tendencia: {route}*\n\n📊 *Media:* {avg}\n💰 *Mínimo:* {min}\n💸 *Máximo:* {max}\n📊 *Datos:* {count} precios\n{trend_emoji} *Tendencia:* {trend}\n\n💡 *Recomendación:* {recommendation}",
-        "no_data": "❌ No hay datos históricos para esta ruta.\n\nEscanea primero con /scan para generar datos.",
-        "trend_up": "Subiendo",
-        "trend_down": "Bajando",
-        "trend_stable": "Estable",
-        "recommendation_buy": "Buen momento para comprar",
-        "recommendation_wait": "Espera, los precios están bajando",
-        "recommendation_monitor": "Monitorea, tendencia incierta"
-      },
-      "status": {
-        "title": "📊 *Estado del Sistema*",
-        "cache": "🗃️ Caché: {size} items ({hit_rate} hit rate)",
-        "circuit": "⚡ Circuit Breaker: {state}",
-        "apis": "🎯 APIs activas: {count}",
-        "uptime": "⏰ Uptime: {uptime}",
-        "version": "🏷️ Versión: {version}",
-        "health": "💚 Estado: {status}"
+        "usage": "📋 *Uso:* `/trends RUTA`\n\n*Ejemplo:* `/trends MAD-MIA`",
+        "title": "📈 *Tendencia: {route}*\n\n",
+        "avg": "📊 *Media:* €{avg}\n",
+        "min": "💰 *Mínimo:* €{min}\n",
+        "max": "💸 *Máximo:* €{max}\n",
+        "count": "📊 *Datos:* {count} precios\n",
+        "trend_up": "📈 *Tendencia:* Subiendo",
+        "trend_down": "📉 *Tendencia:* Bajando",
+        "no_data": "❌ No hay datos históricos para esta ruta"
       },
       "clearcache": {
-        "clearing": "🗑️ Limpiando caché...",
         "cleared": "🗑️ *Caché limpiado*\n\n📄 Items eliminados: {count}\n✅ Próximo scan usará APIs reales"
       },
+      "status": {
+        "title": "📊 *Estado del Sistema*\n\n",
+        "cache": "🗃️ Caché: {size} items ({rate}% hit rate)\n",
+        "circuit": "⚡ Circuit Breaker: {state}\n",
+        "uptime": "⏱️ Uptime: {uptime}\n",
+        "memory": "💾 Memoria: {memory} MB\n",
+        "active_users": "👥 Usuarios activos: {count}"
+      },
       "help": {
-        "title": "📚 *Ayuda - {app_name}*",
-        "commands_section": "*Comandos:*\n{commands}",
-        "examples_section": "\n*Ejemplos de uso:*\n{examples}",
-        "support": "\n👨‍💻 *Soporte:* {support_link}\n📝 *Docs:* {docs_link}",
-        "footer": "\n_Versión: {version}_"
-      },
-      "language": {
-        "current": "🌍 Idioma actual: *{language}*",
-        "change": "\n¿Cambiar idioma?\n🇪🇸 Español\n🇬🇧 English",
-        "changed": "✅ Idioma cambiado a: *{language}*"
-      },
-      "alerts": {
-        "title": "🔔 *Configurar Alertas*",
-        "current": "\n*Configuración actual:*\n• Umbral de precio: {threshold}\n• Auto-scan: {auto_scan}\n• Notificaciones: {notifications}",
-        "configure": "\n¿Qué deseas cambiar?",
-        "threshold_changed": "✅ Umbral actualizado a {threshold}",
-        "autoscan_enabled": "✅ Auto-scan activado (cada {interval})",
-        "autoscan_disabled": "❌ Auto-scan desactivado"
+        "title": "📚 *Ayuda - {name}*\n\n*Comandos:*\n",
+        "start": "/start - Iniciar bot\n",
+        "scan": "/scan - Escanear todas las rutas\n",
+        "route": "/route MAD BCN 2026-02-15 - Búsqueda personalizada\n",
+        "deals": "/deals - Ver chollos disponibles\n",
+        "trends": "/trends MAD-MIA - Tendencias de precio\n",
+        "clearcache": "/clearcache - Limpiar caché\n",
+        "status": "/status - Estado del sistema\n\n",
+        "footer": "_Versión: {version}_"
       }
     },
-    "messages": {
-      "typing": "Escribiendo...",
-      "processing": "Procesando...",
-      "error_generic": "❌ Error inesperado. Inténtalo de nuevo.",
-      "maintenance": "🛠️ Sistema en mantenimiento. Vuelve pronto.",
-      "rate_limited": "⏳ Demasiadas peticiones. Espera {seconds}s.",
-      "unauthorized": "🚫 No autorizado. Contacta al administrador."
+    "errors": {
+      "generic": "❌ Error: {message}",
+      "api_failed": "❌ Error de API: {api_name}",
+      "rate_limit": "⏳ Límite de uso alcanzado. Inténtalo en {seconds}s",
+      "invalid_input": "❌ Entrada inválida: {details}",
+      "no_permission": "🚫 No tienes permiso para este comando",
+      "maintenance": "🛠️ Sistema en mantenimiento. Vuelve en {minutes} minutos"
     },
-    "buttons": {
-      "scan": "🔍 Escanear",
-      "deals": "💰 Chollos",
-      "trends": "📈 Tendencias",
-      "status": "📊 Estado",
-      "help": "❓ Ayuda",
-      "refresh": "🔄 Actualizar",
-      "settings": "⚙️ Ajustes",
-      "language": "🌍 Idioma",
-      "alerts": "🔔 Alertas",
-      "back": "⬅️ Volver",
-      "cancel": "❌ Cancelar",
-      "confirm": "✅ Confirmar"
+    "notifications": {
+      "deal_detected": "🔔 Nuevo chollo detectado!",
+      "price_drop": "📉 Bajada de precio: {route}",
+      "system_alert": "⚠️ Alerta del sistema: {message}"
     },
-    "units": {
-      "currency": "€",
-      "days": "días",
-      "hours": "horas",
-      "minutes": "minutos",
-      "seconds": "segundos"
+    "misc": {
+      "loading": "⏳ Cargando...",
+      "processing": "⚙️ Procesando...",
+      "done": "✅ Listo!",
+      "cancelled": "❌ Cancelado",
+      "timeout": "⏱️ Tiempo agotado"
     }
   },
   "en": {
-    "app": {
-      "name": "Supreme Hunter",
-      "version": "v12.2.0 Enterprise",
-      "tagline": "Professional Flight Monitoring System",
-      "author": "@Juanka_Spain"
+    "bot": {
+      "name": "Flight Hunter Supreme",
+      "version": "v13.0 Enterprise",
+      "tagline": "Professional Flight Monitoring System"
     },
     "commands": {
       "start": {
-        "welcome": "🎆 *{app_name} {version}* 🎆\n\nWelcome to the Enterprise flight monitoring system!\n\n*Available commands:*\n{commands_list}\n\n🌍 _Language: English_ | Change: /language",
-        "commands_list": "/scan - Scan configured routes\n/route - Custom search\n/deals - View available deals\n/trends - Trend analysis\n/alerts - Configure alerts\n/status - System status\n/help - Full help"
+        "welcome": "🎆 *{name} {version}* 🎆\n\nWelcome to the Enterprise system!\n\n*Available commands:*\n/scan - Scan routes\n/route - Custom search\n/deals - View deals\n/trends - Trends analysis\n/clearcache - Clear cache\n/status - System status\n/help - Help",
+        "buttons": {
+          "scan": "🔍 Scan",
+          "deals": "💰 Deals",
+          "trends": "📈 Trends",
+          "status": "📊 Status",
+          "help": "❓ Help"
+        }
       },
       "scan": {
-        "starting": "🔍 Starting scan of {count} routes...",
-        "processing": "⏳ Processing... {current}/{total}",
-        "completed": "✅ *Scan completed*\n\n{results}\n\n_Total: {total} prices | Time: {elapsed}s_",
-        "no_results": "❌ No results obtained. Try again.",
-        "error": "⚠️ Scan error: {error}"
+        "starting": "🔍 Starting scan...",
+        "completed": "✅ *Scan completed*\n\n",
+        "result_line": "{emoji} {name}: {price} ({source})\n",
+        "more_results": "\n_...and {count} more results_",
+        "no_results": "❌ No results obtained",
+        "error": "❌ Scan error: {error}"
       },
       "route": {
-        "usage": "📋 *Usage:* `/route ORIGIN DEST [DATE]`\n\n*Examples:*\n• `/route MAD BCN 2026-02-15`\n• `/route MAD MIA`\n\nSearches flights with flexible dates (±3 days)",
-        "searching": "🔍 Searching flights {origin} → {dest} for {date} (±3 days)...",
-        "results": "✅ *Found {count} flights*\n\n{flights}",
-        "no_flights": "😞 No flights found for this route and date.\n\nTry:\n• Different dates\n• Nearby route\n• General scan with /scan",
-        "invalid_route": "❌ Invalid IATA codes. Use 3 letters (e.g.: MAD, BCN, MIA)",
-        "invalid_date": "❌ Invalid date. Format: YYYY-MM-DD (e.g.: 2026-02-15)"
+        "usage": "📋 *Usage:* `/route ORIGIN DEST [DATE]`\n\n*Examples:*\n`/route MAD BCN 2026-02-15`\n`/route MAD MIA`\n\nSearches flights with flexible dates (±3 days)",
+        "searching": "🔍 Searching {origin} → {dest} for {date} (±3 days)...",
+        "results_title": "✅ *Results {origin} → {dest}*\n\n",
+        "result_line": "{num}️⃣ {price}",
+        "airline": " - {airline}",
+        "departure": "\n   📅 {date}",
+        "stops": " | {stops} stops\n",
+        "no_results": "❌ No flights found",
+        "invalid_codes": "❌ Error: Invalid IATA codes. Use 3 letters (e.g: MAD, BCN)",
+        "invalid_date": "❌ Error: Invalid date. Use format YYYY-MM-DD"
       },
       "deals": {
         "searching": "💰 Searching for deals...",
-        "found": "🔥 *{count} deals detected!*\n\n{deals}",
-        "none": "😕 No deals available right now.\n\nYou'll be notified automatically when we detect one.\n\n💡 Tip: Enable auto-scan with /settings",
-        "deal_format": "🔥 *DEAL!* 🔥\n\n✈️ *Route:* {route_name}\n💰 *Price:* {price} ({source})\n📉 *Savings:* {savings_pct}% vs historical\n📊 *Average:* {historical_avg}\n📅 *Departure:* {departure_date}\n🛫 *Airline:* {airline}\n🔗 *Stops:* {stops}\n{confidence_emoji} *Confidence:* {confidence}"
+        "deal_title": "🔥 *DEAL DETECTED!* 🔥\n\n",
+        "route": "✈️ *Route:* {name}\n",
+        "price": "💰 *Price:* {price} ({source})\n",
+        "savings": "📉 *Savings:* {percent}% vs historical\n",
+        "avg": "📊 *Historical avg:* €{avg}\n",
+        "departure": "📅 *Departure:* {date}\n",
+        "airline": "🛫 *Airline:* {airline}\n",
+        "stops": "🔗 *Stops:* {stops}\n",
+        "confidence": "{emoji} *Confidence:* {percent}%",
+        "no_deals": "😟 No deals available right now",
+        "error": "❌ Error searching for deals"
       },
       "trends": {
-        "usage": "📋 *Usage:* `/trends ROUTE`\n\n*Example:* `/trends MAD-MIA`\n\nAnalyzes price trends for the last 30 days.",
-        "analyzing": "📈 Analyzing trends for {route}...",
-        "results": "📈 *Trend: {route}*\n\n📊 *Average:* {avg}\n💰 *Minimum:* {min}\n💸 *Maximum:* {max}\n📊 *Data:* {count} prices\n{trend_emoji} *Trend:* {trend}\n\n💡 *Recommendation:* {recommendation}",
-        "no_data": "❌ No historical data for this route.\n\nScan first with /scan to generate data.",
-        "trend_up": "Rising",
-        "trend_down": "Falling",
-        "trend_stable": "Stable",
-        "recommendation_buy": "Good time to buy",
-        "recommendation_wait": "Wait, prices are falling",
-        "recommendation_monitor": "Monitor, uncertain trend"
-      },
-      "status": {
-        "title": "📊 *System Status*",
-        "cache": "🗃️ Cache: {size} items ({hit_rate} hit rate)",
-        "circuit": "⚡ Circuit Breaker: {state}",
-        "apis": "🎯 Active APIs: {count}",
-        "uptime": "⏰ Uptime: {uptime}",
-        "version": "🏷️ Version: {version}",
-        "health": "💚 Status: {status}"
+        "usage": "📋 *Usage:* `/trends ROUTE`\n\n*Example:* `/trends MAD-MIA`",
+        "title": "📈 *Trend: {route}*\n\n",
+        "avg": "📊 *Average:* €{avg}\n",
+        "min": "💰 *Minimum:* €{min}\n",
+        "max": "💸 *Maximum:* €{max}\n",
+        "count": "📊 *Data points:* {count} prices\n",
+        "trend_up": "📈 *Trend:* Rising",
+        "trend_down": "📉 *Trend:* Falling",
+        "no_data": "❌ No historical data for this route"
       },
       "clearcache": {
-        "clearing": "🗑️ Clearing cache...",
         "cleared": "🗑️ *Cache cleared*\n\n📄 Items removed: {count}\n✅ Next scan will use real APIs"
       },
+      "status": {
+        "title": "📊 *System Status*\n\n",
+        "cache": "🗃️ Cache: {size} items ({rate}% hit rate)\n",
+        "circuit": "⚡ Circuit Breaker: {state}\n",
+        "uptime": "⏱️ Uptime: {uptime}\n",
+        "memory": "💾 Memory: {memory} MB\n",
+        "active_users": "👥 Active users: {count}"
+      },
       "help": {
-        "title": "📚 *Help - {app_name}*",
-        "commands_section": "*Commands:*\n{commands}",
-        "examples_section": "\n*Usage examples:*\n{examples}",
-        "support": "\n👨‍💻 *Support:* {support_link}\n📝 *Docs:* {docs_link}",
-        "footer": "\n_Version: {version}_"
-      },
-      "language": {
-        "current": "🌍 Current language: *{language}*",
-        "change": "\nChange language?\n🇪🇸 Español\n🇬🇧 English",
-        "changed": "✅ Language changed to: *{language}*"
-      },
-      "alerts": {
-        "title": "🔔 *Configure Alerts*",
-        "current": "\n*Current settings:*\n• Price threshold: {threshold}\n• Auto-scan: {auto_scan}\n• Notifications: {notifications}",
-        "configure": "\nWhat do you want to change?",
-        "threshold_changed": "✅ Threshold updated to {threshold}",
-        "autoscan_enabled": "✅ Auto-scan enabled (every {interval})",
-        "autoscan_disabled": "❌ Auto-scan disabled"
+        "title": "📚 *Help - {name}*\n\n*Commands:*\n",
+        "start": "/start - Start bot\n",
+        "scan": "/scan - Scan all routes\n",
+        "route": "/route MAD BCN 2026-02-15 - Custom search\n",
+        "deals": "/deals - View available deals\n",
+        "trends": "/trends MAD-MIA - Price trends\n",
+        "clearcache": "/clearcache - Clear cache\n",
+        "status": "/status - System status\n\n",
+        "footer": "_Version: {version}_"
       }
     },
-    "messages": {
-      "typing": "Typing...",
-      "processing": "Processing...",
-      "error_generic": "❌ Unexpected error. Try again.",
-      "maintenance": "🛠️ System under maintenance. Come back soon.",
-      "rate_limited": "⏳ Too many requests. Wait {seconds}s.",
-      "unauthorized": "🚫 Unauthorized. Contact administrator."
+    "errors": {
+      "generic": "❌ Error: {message}",
+      "api_failed": "❌ API Error: {api_name}",
+      "rate_limit": "⏳ Rate limit reached. Try again in {seconds}s",
+      "invalid_input": "❌ Invalid input: {details}",
+      "no_permission": "🚫 You don't have permission for this command",
+      "maintenance": "🛠️ System under maintenance. Back in {minutes} minutes"
     },
-    "buttons": {
-      "scan": "🔍 Scan",
-      "deals": "💰 Deals",
-      "trends": "📈 Trends",
-      "status": "📊 Status",
-      "help": "❓ Help",
-      "refresh": "🔄 Refresh",
-      "settings": "⚙️ Settings",
-      "language": "🌍 Language",
-      "alerts": "🔔 Alerts",
-      "back": "⬅️ Back",
-      "cancel": "❌ Cancel",
-      "confirm": "✅ Confirm"
+    "notifications": {
+      "deal_detected": "🔔 New deal detected!",
+      "price_drop": "📉 Price drop: {route}",
+      "system_alert": "⚠️ System alert: {message}"
     },
-    "units": {
-      "currency": "$",
-      "days": "days",
-      "hours": "hours",
-      "minutes": "minutes",
-      "seconds": "seconds"
+    "misc": {
+      "loading": "⏳ Loading...",
+      "processing": "⚙️ Processing...",
+      "done": "✅ Done!",
+      "cancelled": "❌ Cancelled",
+      "timeout": "⏱️ Timeout"
     }
-  },
-  "_meta": {
-    "version": "1.0.0",
-    "last_updated": "2026-01-14",
-    "supported_languages": ["es", "en"],
-    "default_language": "es",
-    "fallback_language": "en"
   }
 }
