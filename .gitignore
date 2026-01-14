@@ -1,14 +1,16 @@
-# Cazador Supremo - Git Ignore
-
-# Archivos de configuración sensibles
-config_private.json
+# Archivos sensibles - NUNCA SUBIR
+config.json
+*.key
+*.pem
 *.env
-.env.local
 
-# Archivos generados
-deals_history.csv
+# Logs
 *.log
-cazador_supremo.log
+cazador_supremo.log*
+
+# Datos
+*.csv
+deals_history.csv
 
 # Python
 __pycache__/
@@ -35,11 +37,11 @@ share/python-wheels/
 *.egg
 PIPFILE.lock
 
-# Virtual Environment
+# Entornos virtuales
 venv/
 ENV/
 env/
-.venv/
+.venv
 
 # IDEs
 .vscode/
@@ -49,52 +51,11 @@ env/
 *~
 .DS_Store
 
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# pyenv
-.python-version
-
-# Celery
-celerybeat-schedule
-celerybeat.pid
-
-# Unit test / coverage
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-.hypothesis/
+# Testing
 .pytest_cache/
+.coverage
+htmlcov/
 
-# Translations
-*.mo
-*.pot
-
-# Scrapy
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-target/
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# OS specific
-Thumbs.db
+# Otros
+*.bak
+*.tmp
