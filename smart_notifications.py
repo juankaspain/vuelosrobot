@@ -2,17 +2,17 @@
 # -*- coding: utf-8 -*-
 """
 ┌────────────────────────────────────────────────────────────────┐
-│  🔔 SMART NOTIFICATIONS ENGINE                                 │
+│  🔔 SMART NOTIFICATIONS ENGINE                             │
 │  🚀 Cazador Supremo v13.0 Enterprise                          │
-│  🎯 Target: 60% open rate, <5min latency                      │
+│  🧠 AI-Powered Personalized Notifications                    │
 └────────────────────────────────────────────────────────────────┘
 
-Sistema inteligente de notificaciones que:
-- Aprende mejores horas por usuario
-- Monitoriza watchlist automáticamente
-- Envía recordatorios de daily rewards
-- Rate limiting anti-spam
-- Priority queue para deals críticos
+Sistema inteligente de notificaciones con:
+- Optimal send time learning
+- Watchlist monitoring
+- Daily reminders
+- Rate limiting
+- Priority queue
 
 Autor: @Juanka_Spain
 Version: 13.0.0
@@ -20,15 +20,14 @@ Date: 2026-01-14
 """
 
 import asyncio
-import json
 import logging
-from datetime import datetime, timedelta, time as dt_time
-from pathlib import Path
+from datetime import datetime, timedelta, time
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
+import json
+from pathlib import Path
 from collections import defaultdict
-import statistics
 
 logger = logging.getLogger(__name__)
 
@@ -37,31 +36,40 @@ logger = logging.getLogger(__name__)
 #  ENUMS & CONSTANTS
 # ═══════════════════════════════════════════════════════════════
 
+class NotificationPriority(Enum):
+    """Prioridad de notificaciones"""
+    CRITICAL = 1   # Price drop watchlist
+    HIGH = 2       # Daily reminder
+    MEDIUM = 3     # Weekly summary
+    LOW = 4        # Tips & tricks
+
+
 class NotificationType(Enum):
     """Tipos de notificaciones"""
-    PRICE_DROP = "price_drop"              # Bajada de precio en watchlist
-    DAILY_REWARD = "daily_reward"          # Recordatorio claim diario
-    ACHIEVEMENT = "achievement"            # Logro desbloqueado
-    STREAK_WARNING = "streak_warning"      # Racha en riesgo
-    DEAL_RECOMMENDATION = "deal_rec"       # Deal personalizado
-    LEVEL_UP = "level_up"                  # Subida de tier
-    WATCHLIST_FULL = "watchlist_full"      # Watchlist llena
-
-
-class Priority(Enum):
-    """Prioridad de notificación"""
-    LOW = 1
-    MEDIUM = 2
-    HIGH = 3
-    CRITICAL = 4
+    PRICE_DROP = "price_drop"
+    DAILY_REMINDER = "daily_reminder"
+    WEEKLY_SUMMARY = "weekly_summary"
+    ACHIEVEMENT = "achievement"
+    TIER_UPGRADE = "tier_upgrade"
+    DEAL_FOUND = "deal_found"
+    TIP = "tip"
 
 
 # Rate limiting
-MAX_NOTIFICATIONS_PER_DAY = 3
-PRICE_DROP_COOLDOWN = 3600  # 1 hora entre notifs de mismo deal
-DIGEST_HOUR = 8  # 8am para morning digest
-EVENING_HOUR = 20  # 8pm para evening summary
-MIN_ENGAGEMENT_SAMPLES = 5  # Mínimo de interacciones para aprender patrón
+RATE_LIMIT_FREE = 3      # Max notificaciones/día (free tier)
+RATE_LIMIT_PREMIUM = 10  # Max notificaciones/día (premium)
+
+# Quiet hours
+QUIET_START = time(22, 0)  # 22:00
+QUIET_END = time(8, 0)     # 08:00
+
+# Monitoring intervals
+WATCHLIST_CHECK_INTERVAL = 1800  # 30 minutos
+DAILY_REMINDER_TIME = time(9, 0)  # 09:00 por defecto
+
+# Cooldowns
+PRICE_DROP_COOLDOWN = 3600       # 1 hora entre alerts del mismo vuelo
+DAILY_REMINDER_COOLDOWN = 86400  # 1 día
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -69,18 +77,27 @@ MIN_ENGAGEMENT_SAMPLES = 5  # Mínimo de interacciones para aprender patrón
 # ═══════════════════════════════════════════════════════════════
 
 @dataclass
-class NotificationEvent:
-    """Evento de notificación"""
+class Notification:
+    """Notificación pendiente de enviar"""
     user_id: int
     type: NotificationType
-    priority: Priority
+    priority: NotificationPriority
     message: str
     created_at: datetime
+    scheduled_for: Optional[datetime] = None
     metadata: Dict = field(default_factory=dict)
     sent: bool = False
     sent_at: Optional[datetime] = None
-    opened: bool = False
-    opened_at: Optional[datetime] = None
+    
+    def is_ready(self) -> bool:
+        """Verifica si está lista para enviar."""
+        if self.sent:
+            return False
+        
+        if self.scheduled_for:
+            return datetime.now() >= self.scheduled_for
+        
+        return True
     
     def to_dict(self) -> Dict:
         return {
@@ -89,84 +106,58 @@ class NotificationEvent:
             'priority': self.priority.value,
             'message': self.message,
             'created_at': self.created_at.isoformat(),
+            'scheduled_for': self.scheduled_for.isoformat() if self.scheduled_for else None,
             'metadata': self.metadata,
             'sent': self.sent,
-            'sent_at': self.sent_at.isoformat() if self.sent_at else None,
-            'opened': self.opened,
-            'opened_at': self.opened_at.isoformat() if self.opened_at else None,
+            'sent_at': self.sent_at.isoformat() if self.sent_at else None
         }
 
 
 @dataclass
-class UserEngagement:
-    """Historial de engagement del usuario"""
+class UserActivity:
+    """Actividad del usuario para analytics"""
     user_id: int
-    interaction_times: List[datetime] = field(default_factory=list)
-    notification_opens: List[datetime] = field(default_factory=list)
-    optimal_hour: Optional[int] = None
-    timezone_offset: int = 0  # Horas de diferencia con UTC
+    activity_times: List[datetime] = field(default_factory=list)
     
-    def add_interaction(self, timestamp: datetime):
-        """Registra interacción del usuario"""
-        self.interaction_times.append(timestamp)
-        # Mantener últimas 100 interacciones
-        if len(self.interaction_times) > 100:
-            self.interaction_times = self.interaction_times[-100:]
-        self._recalculate_optimal_hour()
+    def add_activity(self, timestamp: datetime):
+        """Registra actividad."""
+        self.activity_times.append(timestamp)
+        # Mantener solo últimos 30 días
+        cutoff = datetime.now() - timedelta(days=30)
+        self.activity_times = [t for t in self.activity_times if t >= cutoff]
     
-    def add_notification_open(self, timestamp: datetime):
-        """Registra apertura de notificación"""
-        self.notification_opens.append(timestamp)
-        if len(self.notification_opens) > 50:
-            self.notification_opens = self.notification_opens[-50:]
-    
-    def _recalculate_optimal_hour(self):
-        """Recalcula hora óptima basada en historial"""
-        if len(self.interaction_times) < MIN_ENGAGEMENT_SAMPLES:
-            self.optimal_hour = DIGEST_HOUR  # Default
-            return
+    def get_peak_hour(self) -> int:
+        """Calcula hora pico de actividad (0-23)."""
+        if not self.activity_times:
+            return 9  # Default 9am
         
-        # Extraer horas de interacciones
-        hours = [dt.hour for dt in self.interaction_times]
-        
-        # Calcular moda (hora más frecuente)
         hour_counts = defaultdict(int)
-        for hour in hours:
-            hour_counts[hour] += 1
+        for timestamp in self.activity_times:
+            hour_counts[timestamp.hour] += 1
         
-        # Hora más común
-        most_common_hour = max(hour_counts, key=hour_counts.get)
-        
-        # Enviar 5 minutos antes de la hora pico
-        optimal = (most_common_hour - 1) % 24 if most_common_hour > 0 else 23
-        self.optimal_hour = optimal
-        
-        logger.info(f"📊 User {self.user_id} optimal hour: {optimal}:00 (based on {len(hours)} interactions)")
+        return max(hour_counts.items(), key=lambda x: x[1])[0]
     
-    @property
-    def engagement_rate(self) -> float:
-        """Tasa de engagement (opens/sent)"""
-        if not self.notification_opens:
-            return 0.0
-        return len(self.notification_opens) / max(len(self.interaction_times), 1)
+    def get_optimal_send_time(self) -> time:
+        """Calcula mejor hora para enviar notificaciones."""
+        peak_hour = self.get_peak_hour()
+        
+        # Enviar 5 minutos antes del peak
+        optimal_hour = peak_hour if peak_hour > 0 else 9
+        optimal_minute = 55 if peak_hour > 0 else 0
+        
+        return time(optimal_hour, optimal_minute)
     
     def to_dict(self) -> Dict:
         return {
             'user_id': self.user_id,
-            'interaction_times': [dt.isoformat() for dt in self.interaction_times],
-            'notification_opens': [dt.isoformat() for dt in self.notification_opens],
-            'optimal_hour': self.optimal_hour,
-            'timezone_offset': self.timezone_offset,
+            'activity_times': [t.isoformat() for t in self.activity_times]
         }
     
     @classmethod
-    def from_dict(cls, data: Dict) -> 'UserEngagement':
+    def from_dict(cls, data: Dict) -> 'UserActivity':
         return cls(
             user_id=data['user_id'],
-            interaction_times=[datetime.fromisoformat(dt) for dt in data.get('interaction_times', [])],
-            notification_opens=[datetime.fromisoformat(dt) for dt in data.get('notification_opens', [])],
-            optimal_hour=data.get('optimal_hour'),
-            timezone_offset=data.get('timezone_offset', 0),
+            activity_times=[datetime.fromisoformat(t) for t in data.get('activity_times', [])]
         )
 
 
@@ -176,343 +167,352 @@ class UserEngagement:
 
 class SmartNotifier:
     """
-    Motor inteligente de notificaciones.
+    Sistema inteligente de notificaciones.
     
-    Responsabilidades:
-    - Aprender patrones de uso por usuario
-    - Calcular mejores horas para notificar
-    - Rate limiting anti-spam
-    - Priority queue para deals críticos
-    - Watchlist monitoring
-    - Daily reminders
+    Features:
+    - Aprende mejor hora por usuario
+    - Rate limiting personalizado
+    - Priority queue
+    - Quiet hours
+    - Analytics de actividad
     """
     
-    def __init__(self, engagement_file: str = 'user_engagement.json'):
-        self.engagement_file = Path(engagement_file)
-        self.user_engagement: Dict[int, UserEngagement] = {}
-        self.notification_queue: List[NotificationEvent] = []
-        self.notifications_sent_today: Dict[int, int] = defaultdict(int)
-        self.last_notification_time: Dict[Tuple[int, str], datetime] = {}
-        self._load_engagement()
+    def __init__(self, 
+                 activity_file: str = 'user_activity.json',
+                 queue_file: str = 'notification_queue.json'):
+        self.activity_file = Path(activity_file)
+        self.queue_file = Path(queue_file)
         
-        logger.info(f"🔔 SmartNotifier initialized with {len(self.user_engagement)} user profiles")
+        self.user_activities: Dict[int, UserActivity] = {}
+        self.notification_queue: List[Notification] = []
+        self.daily_sent_count: Dict[int, int] = defaultdict(int)
+        self.last_sent: Dict[str, datetime] = {}  # key: f"{user_id}:{type}"
+        
+        self._load_data()
+        
+        logger.info("🔔 SmartNotifier initialized")
     
-    def _load_engagement(self):
-        """Carga engagement history desde JSON"""
-        if not self.engagement_file.exists():
-            logger.warning(f"⚠️ Engagement file not found: {self.engagement_file}")
-            return
+    def _load_data(self):
+        """Carga datos desde archivos."""
+        # Load user activities
+        if self.activity_file.exists():
+            try:
+                with open(self.activity_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                
+                for user_id_str, activity_data in data.items():
+                    user_id = int(user_id_str)
+                    self.user_activities[user_id] = UserActivity.from_dict(activity_data)
+                
+                logger.info(f"✅ Loaded {len(self.user_activities)} user activities")
+            except Exception as e:
+                logger.error(f"❌ Error loading activities: {e}")
         
+        # Load notification queue
+        if self.queue_file.exists():
+            try:
+                with open(self.queue_file, 'r', encoding='utf-8') as f:
+                    queue_data = json.load(f)
+                
+                for notif_data in queue_data:
+                    # Reconstruct notification (simplified)
+                    if not notif_data.get('sent', False):
+                        self.notification_queue.append(Notification(
+                            user_id=notif_data['user_id'],
+                            type=NotificationType(notif_data['type']),
+                            priority=NotificationPriority(notif_data['priority']),
+                            message=notif_data['message'],
+                            created_at=datetime.fromisoformat(notif_data['created_at']),
+                            scheduled_for=datetime.fromisoformat(notif_data['scheduled_for']) if notif_data.get('scheduled_for') else None,
+                            metadata=notif_data.get('metadata', {})
+                        ))
+                
+                logger.info(f"✅ Loaded {len(self.notification_queue)} pending notifications")
+            except Exception as e:
+                logger.error(f"❌ Error loading queue: {e}")
+    
+    def _save_data(self):
+        """Guarda datos a archivos."""
         try:
-            with open(self.engagement_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+            # Save activities
+            activities_data = {
+                str(user_id): activity.to_dict()
+                for user_id, activity in self.user_activities.items()
+            }
+            with open(self.activity_file, 'w', encoding='utf-8') as f:
+                json.dump(activities_data, f, indent=2, ensure_ascii=False)
             
-            for user_id_str, engagement_data in data.items():
-                user_id = int(user_id_str)
-                self.user_engagement[user_id] = UserEngagement.from_dict(engagement_data)
+            # Save queue
+            queue_data = [notif.to_dict() for notif in self.notification_queue]
+            with open(self.queue_file, 'w', encoding='utf-8') as f:
+                json.dump(queue_data, f, indent=2, ensure_ascii=False)
             
-            logger.info(f"✅ Loaded {len(self.user_engagement)} engagement profiles")
-        
+            logger.debug("💾 Notification data saved")
         except Exception as e:
-            logger.error(f"❌ Error loading engagement: {e}")
+            logger.error(f"❌ Error saving data: {e}")
     
-    def _save_engagement(self):
-        """Guarda engagement history a JSON"""
-        try:
-            data = {str(user_id): engagement.to_dict() 
-                   for user_id, engagement in self.user_engagement.items()}
-            
-            with open(self.engagement_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-            
-            logger.debug(f"💾 Saved {len(self.user_engagement)} engagement profiles")
+    def track_activity(self, user_id: int, timestamp: datetime = None):
+        """Registra actividad del usuario."""
+        if timestamp is None:
+            timestamp = datetime.now()
         
-        except Exception as e:
-            logger.error(f"❌ Error saving engagement: {e}")
+        if user_id not in self.user_activities:
+            self.user_activities[user_id] = UserActivity(user_id=user_id)
+        
+        self.user_activities[user_id].add_activity(timestamp)
+        self._save_data()
     
-    def track_user_activity(self, user_id: int, timestamp: datetime = None):
-        """Registra actividad del usuario"""
-        timestamp = timestamp or datetime.now()
+    def get_optimal_send_time(self, user_id: int) -> time:
+        """Obtiene hora óptima de envío para usuario."""
+        if user_id in self.user_activities:
+            return self.user_activities[user_id].get_optimal_send_time()
         
-        if user_id not in self.user_engagement:
-            self.user_engagement[user_id] = UserEngagement(user_id=user_id)
-        
-        self.user_engagement[user_id].add_interaction(timestamp)
-        self._save_engagement()
+        return DAILY_REMINDER_TIME  # Default
     
-    def track_notification_open(self, user_id: int, timestamp: datetime = None):
-        """Registra apertura de notificación"""
-        timestamp = timestamp or datetime.now()
+    def is_quiet_hours(self) -> bool:
+        """Verifica si estamos en quiet hours."""
+        now = datetime.now().time()
         
-        if user_id in self.user_engagement:
-            self.user_engagement[user_id].add_notification_open(timestamp)
-            self._save_engagement()
+        if QUIET_START < QUIET_END:
+            # Normal case: 22:00 - 08:00
+            return QUIET_START <= now or now <= QUIET_END
+        else:
+            # Edge case: quiet hours cross midnight
+            return QUIET_START <= now <= time(23, 59) or time(0, 0) <= now <= QUIET_END
     
-    def get_optimal_send_time(self, user_id: int) -> int:
-        """
-        Obtiene hora óptima para notificar al usuario.
-        
-        Returns:
-            int: Hora del día (0-23)
-        """
-        if user_id in self.user_engagement:
-            optimal = self.user_engagement[user_id].optimal_hour
-            if optimal is not None:
-                return optimal
-        
-        # Default: 8am
-        return DIGEST_HOUR
-    
-    def can_send_notification(self, user_id: int, notif_type: NotificationType) -> bool:
-        """
-        Verifica si se puede enviar notificación al usuario.
-        
-        Checks:
-        - Rate limit diario
-        - Cooldown por tipo
-        
-        Returns:
-            bool: True si puede enviar
-        """
-        # Check daily limit
-        if self.notifications_sent_today.get(user_id, 0) >= MAX_NOTIFICATIONS_PER_DAY:
-            logger.debug(f"⛔ User {user_id} reached daily notification limit")
+    def can_send_notification(self, user_id: int, is_premium: bool = False) -> bool:
+        """Verifica si puede enviar notificación al usuario."""
+        # Check quiet hours
+        if self.is_quiet_hours():
             return False
         
-        # Check cooldown por tipo
-        cooldown_key = (user_id, notif_type.value)
-        if cooldown_key in self.last_notification_time:
-            last_time = self.last_notification_time[cooldown_key]
-            elapsed = (datetime.now() - last_time).seconds
-            
-            if elapsed < PRICE_DROP_COOLDOWN:
-                logger.debug(f"⏱️ Cooldown active for user {user_id} type {notif_type.value}")
-                return False
+        # Check rate limit
+        limit = RATE_LIMIT_PREMIUM if is_premium else RATE_LIMIT_FREE
+        if self.daily_sent_count.get(user_id, 0) >= limit:
+            return False
         
         return True
     
-    def queue_notification(self, event: NotificationEvent) -> bool:
-        """
-        Encola notificación para envío.
+    def add_notification(self, 
+                        user_id: int,
+                        notif_type: NotificationType,
+                        priority: NotificationPriority,
+                        message: str,
+                        metadata: Dict = None,
+                        schedule_for: datetime = None):
+        """Añade notificación a la cola."""
+        notif = Notification(
+            user_id=user_id,
+            type=notif_type,
+            priority=priority,
+            message=message,
+            created_at=datetime.now(),
+            scheduled_for=schedule_for,
+            metadata=metadata or {}
+        )
         
-        Returns:
-            bool: True si encolada exitosamente
-        """
-        if not self.can_send_notification(event.user_id, event.type):
-            return False
+        self.notification_queue.append(notif)
+        self.notification_queue.sort(key=lambda n: n.priority.value)
         
-        self.notification_queue.append(event)
+        self._save_data()
         
-        # Sort por prioridad (CRITICAL primero)
-        self.notification_queue.sort(key=lambda x: x.priority.value, reverse=True)
-        
-        logger.info(f"📬 Queued {event.type.value} notification for user {event.user_id} (priority: {event.priority.value})")
-        return True
+        logger.info(f"📬 Added notification for user {user_id}: {notif_type.value}")
     
-    async def send_notification(self, event: NotificationEvent, bot, chat_id: int) -> bool:
-        """
-        Envía notificación al usuario.
+    def check_cooldown(self, user_id: int, notif_type: NotificationType) -> bool:
+        """Verifica cooldown de tipo de notificación."""
+        key = f"{user_id}:{notif_type.value}"
         
-        Args:
-            event: NotificationEvent
-            bot: Telegram bot instance
-            chat_id: Telegram chat ID
-        
-        Returns:
-            bool: True si enviada exitosamente
-        """
-        try:
-            await bot.send_message(
-                chat_id=chat_id,
-                text=event.message,
-                parse_mode='Markdown'
-            )
-            
-            # Actualizar estado
-            event.sent = True
-            event.sent_at = datetime.now()
-            
-            # Update counters
-            self.notifications_sent_today[event.user_id] += 1
-            self.last_notification_time[(event.user_id, event.type.value)] = datetime.now()
-            
-            logger.info(f"✅ Sent {event.type.value} notification to user {event.user_id}")
+        if key not in self.last_sent:
             return True
         
-        except Exception as e:
-            logger.error(f"❌ Failed to send notification: {e}")
-            return False
+        last_sent = self.last_sent[key]
+        
+        # Cooldowns por tipo
+        cooldowns = {
+            NotificationType.PRICE_DROP: PRICE_DROP_COOLDOWN,
+            NotificationType.DAILY_REMINDER: DAILY_REMINDER_COOLDOWN,
+        }
+        
+        cooldown = cooldowns.get(notif_type, 0)
+        elapsed = (datetime.now() - last_sent).seconds
+        
+        return elapsed >= cooldown
     
-    async def process_queue(self, bot, get_chat_id_func):
+    async def process_queue(self, send_func):
         """
         Procesa cola de notificaciones.
         
         Args:
-            bot: Telegram bot instance
-            get_chat_id_func: Function(user_id) -> chat_id
+            send_func: Async function(user_id, message) para enviar
         """
-        if not self.notification_queue:
-            return
+        processed = []
         
-        logger.info(f"📤 Processing {len(self.notification_queue)} queued notifications")
-        
-        sent_count = 0
-        failed_count = 0
-        
-        # Process hasta 10 notificaciones por ciclo
-        for _ in range(min(10, len(self.notification_queue))):
-            if not self.notification_queue:
-                break
-            
-            event = self.notification_queue.pop(0)
-            
-            # Obtener chat_id del usuario
-            chat_id = get_chat_id_func(event.user_id)
-            if not chat_id:
-                failed_count += 1
+        for notif in self.notification_queue:
+            if notif.sent:
                 continue
             
-            # Enviar
-            success = await self.send_notification(event, bot, chat_id)
-            if success:
-                sent_count += 1
-            else:
-                failed_count += 1
+            if not notif.is_ready():
+                continue
             
-            # Esperar 100ms entre envíos
-            await asyncio.sleep(0.1)
+            # Check if can send
+            is_premium = notif.metadata.get('is_premium', False)
+            if not self.can_send_notification(notif.user_id, is_premium):
+                logger.debug(f"⚠️ Cannot send to user {notif.user_id} (rate limit or quiet hours)")
+                continue
+            
+            # Check cooldown
+            if not self.check_cooldown(notif.user_id, notif.type):
+                logger.debug(f"⏰ Cooldown active for user {notif.user_id} ({notif.type.value})")
+                continue
+            
+            # Send notification
+            try:
+                await send_func(notif.user_id, notif.message)
+                
+                # Mark as sent
+                notif.sent = True
+                notif.sent_at = datetime.now()
+                
+                # Update counters
+                self.daily_sent_count[notif.user_id] += 1
+                self.last_sent[f"{notif.user_id}:{notif.type.value}"] = datetime.now()
+                
+                processed.append(notif)
+                
+                logger.info(f"✅ Sent {notif.type.value} notification to user {notif.user_id}")
+            
+            except Exception as e:
+                logger.error(f"❌ Error sending notification to user {notif.user_id}: {e}")
         
-        logger.info(f"📊 Sent: {sent_count}, Failed: {failed_count}, Remaining: {len(self.notification_queue)}")
+        # Remove sent notifications
+        self.notification_queue = [n for n in self.notification_queue if not n.sent]
+        
+        self._save_data()
+        
+        return len(processed)
     
-    def create_price_drop_notification(self, user_id: int, route: str, 
-                                      new_price: float, threshold: float) -> NotificationEvent:
-        """Crea notificación de bajada de precio"""
-        savings = threshold - new_price
-        savings_pct = (savings / threshold) * 100
+    def reset_daily_limits(self):
+        """Resetea contadores diarios (llamar a medianoche)."""
+        self.daily_sent_count.clear()
+        logger.info("🔄 Daily notification limits reset")
+
+
+# ═══════════════════════════════════════════════════════════════
+#  MESSAGE TEMPLATES
+# ═══════════════════════════════════════════════════════════════
+
+class NotificationTemplates:
+    """Templates para notificaciones personalizadas."""
+    
+    @staticmethod
+    def price_drop(route: str, old_price: float, new_price: float, savings: float) -> str:
+        """Template para price drop."""
+        savings_pct = ((old_price - new_price) / old_price) * 100
         
-        message = (
-            f"🔥 *¡ALERTA DE PRECIO!* 🔥\n\n"
+        return (
+            f"🚨 *¡ALERTA DE PRECIO!* 🚨\n\n"
             f"✈️ *Ruta:* {route}\n"
-            f"💰 *Nuevo precio:* €{new_price:.0f}\n"
-            f"📉 *Tu threshold:* €{threshold:.0f}\n"
-            f"💵 *Ahorras:* €{savings:.0f} ({savings_pct:.0f}%)\n\n"
-            f"_¡Reserva ahora antes que suba!_"
-        )
-        
-        return NotificationEvent(
-            user_id=user_id,
-            type=NotificationType.PRICE_DROP,
-            priority=Priority.HIGH,
-            message=message,
-            created_at=datetime.now(),
-            metadata={'route': route, 'price': new_price, 'savings': savings}
+            f"💰 *Precio anterior:* €{old_price:.0f}\n"
+            f"🔥 *Precio actual:* €{new_price:.0f}\n"
+            f"📉 *Ahorro:* €{savings:.0f} ({savings_pct:.0f}%)\n\n"
+            f"_¡Actúa rápido! Estos precios no duran mucho_"
         )
     
-    def create_daily_reminder(self, user_id: int, streak: int) -> NotificationEvent:
-        """Crea recordatorio de daily reward"""
-        message = (
-            f"☀️ *¡Buenos días!* ☀️\n\n"
-            f"🎁 Tu reward diario te espera\n"
-            f"🔥 Racha actual: {streak} días\n\n"
-            f"Usa /daily para reclamar\n\n"
-            f"_No pierdas tu racha 💪_"
-        )
-        
-        return NotificationEvent(
-            user_id=user_id,
-            type=NotificationType.DAILY_REWARD,
-            priority=Priority.MEDIUM,
-            message=message,
-            created_at=datetime.now(),
-            metadata={'streak': streak}
-        )
+    @staticmethod
+    def daily_reminder(username: str, streak: int, coins_yesterday: int = 0) -> str:
+        """Template para daily reminder."""
+        if streak == 0:
+            return (
+                f"🌅 *¡Buenos días @{username}!*\n\n"
+                f"💰 No olvides reclamar tu reward diario con /daily\n"
+                f"🎁 Gana entre 50-200 FlightCoins\n\n"
+                f"_¡Empieza tu racha hoy!_ 🔥"
+            )
+        else:
+            return (
+                f"🔥 *¡Racha activa @{username}!*\n\n"
+                f"🏆 Llevas {streak} días consecutivos\n"
+                f"💰 Ayer ganaste: {coins_yesterday} coins\n\n"
+                f"🚀 Reclama tu reward con /daily\n"
+                f"_+{(streak+1)*10} bonus si lo haces hoy_ 💪"
+            )
     
-    def create_streak_warning(self, user_id: int, streak: int, hours_left: float) -> NotificationEvent:
-        """Crea warning de racha en riesgo"""
-        message = (
-            f"⚠️ *¡TU RACHA ESTÁ EN RIESGO!* ⚠️\n\n"
-            f"🔥 Racha actual: {streak} días\n"
-            f"⏰ Tiempo restante: {hours_left:.1f} horas\n\n"
-            f"Usa /daily para mantener tu racha\n\n"
-            f"_¡No la pierdas ahora!_ 🙏"
-        )
-        
-        return NotificationEvent(
-            user_id=user_id,
-            type=NotificationType.STREAK_WARNING,
-            priority=Priority.CRITICAL,
-            message=message,
-            created_at=datetime.now(),
-            metadata={'streak': streak, 'hours_left': hours_left}
-        )
-    
-    def create_achievement_notification(self, user_id: int, achievement_name: str, 
-                                       coins_earned: int) -> NotificationEvent:
-        """Crea notificación de logro desbloqueado"""
-        message = (
-            f"🏆 *¡ACHIEVEMENT DESBLOQUEADO!* 🏆\n\n"
-            f"🎯 *{achievement_name.replace('_', ' ').title()}*\n"
-            f"💰 +{coins_earned} FlightCoins\n\n"
-            f"Usa /profile para ver todos tus logros\n\n"
-            f"_¡Sigue así campeón!_ 💪"
-        )
-        
-        return NotificationEvent(
-            user_id=user_id,
-            type=NotificationType.ACHIEVEMENT,
-            priority=Priority.MEDIUM,
-            message=message,
-            created_at=datetime.now(),
-            metadata={'achievement': achievement_name, 'coins': coins_earned}
-        )
-    
-    def reset_daily_counters(self):
-        """Resetea contadores diarios (llamar a medianoche)"""
-        self.notifications_sent_today.clear()
-        logger.info("🔄 Daily notification counters reset")
-    
-    def get_stats(self) -> Dict:
-        """Obtiene estadísticas del notifier"""
-        total_users = len(self.user_engagement)
-        avg_engagement = sum(e.engagement_rate for e in self.user_engagement.values()) / total_users if total_users > 0 else 0
-        
-        return {
-            'total_users': total_users,
-            'avg_engagement_rate': avg_engagement,
-            'queued_notifications': len(self.notification_queue),
-            'notifications_sent_today': sum(self.notifications_sent_today.values()),
+    @staticmethod
+    def achievement_unlocked(achievement_name: str, coins_earned: int) -> str:
+        """Template para achievement unlocked."""
+        emoji_map = {
+            'early_bird': '🌅',
+            'deal_hunter': '🎯',
+            'globe_trotter': '🌍',
+            'speed_demon': '⚡',
+            'money_saver': '💰',
+            'week_warrior': '🔥',
+            'month_master': '🏆',
+            'referral_king': '👑',
+            'power_user': '⚡'
         }
+        
+        emoji = emoji_map.get(achievement_name, '🏆')
+        title = achievement_name.replace('_', ' ').title()
+        
+        return (
+            f"{emoji} *¡LOGRO DESBLOQUEADO!* {emoji}\n\n"
+            f"🏆 *{title}*\n\n"
+            f"💰 +{coins_earned} FlightCoins\n\n"
+            f"_¡Sigue así! Consulta todos tus logros con /profile_"
+        )
+    
+    @staticmethod
+    def tier_upgrade(old_tier: str, new_tier: str) -> str:
+        """Template para tier upgrade."""
+        tier_emojis = {
+            'bronze': '🥉',
+            'silver': '🥈',
+            'gold': '🥇',
+            'diamond': '💎'
+        }
+        
+        old_emoji = tier_emojis.get(old_tier, '')
+        new_emoji = tier_emojis.get(new_tier, '')
+        
+        return (
+            f"🎉 *¡SUBISTE DE NIVEL!* 🎉\n\n"
+            f"{old_emoji} {old_tier.upper()} → {new_emoji} {new_tier.upper()}\n\n"
+            f"🎁 *Nuevos beneficios desbloqueados:*\n"
+            f"• Más búsquedas diarias\n"
+            f"• Más watchlist slots\n"
+            f"• Más alertas personalizadas\n\n"
+            f"_Consulta tu perfil con /profile_"
+        )
 
 
 if __name__ == '__main__':
     # 🧪 Tests rápidos
     print("🧪 Testing SmartNotifier...\n")
     
-    notifier = SmartNotifier('test_engagement.json')
+    async def mock_send(user_id, message):
+        print(f"\n📨 Sending to user {user_id}:")
+        print(message)
+    
+    notifier = SmartNotifier('test_activity.json', 'test_queue.json')
     
     # Test 1: Track activity
     print("1. Tracking user activity...")
-    notifier.track_user_activity(12345)
-    notifier.track_user_activity(12345, datetime.now() - timedelta(hours=2))
-    print(f"   Optimal hour: {notifier.get_optimal_send_time(12345)}:00\n")
+    notifier.track_activity(12345)
+    optimal_time = notifier.get_optimal_send_time(12345)
+    print(f"   Optimal send time: {optimal_time}")
     
-    # Test 2: Create notifications
-    print("2. Creating notifications...")
-    notif1 = notifier.create_price_drop_notification(12345, 'MAD-MIA', 420, 500)
-    notif2 = notifier.create_daily_reminder(12345, 5)
-    print(f"   Created {notif1.type.value} notification")
-    print(f"   Created {notif2.type.value} notification\n")
+    # Test 2: Add notifications
+    print("\n2. Adding notifications...")
+    notifier.add_notification(
+        user_id=12345,
+        notif_type=NotificationType.DAILY_REMINDER,
+        priority=NotificationPriority.HIGH,
+        message=NotificationTemplates.daily_reminder('testuser', 5, 150)
+    )
     
-    # Test 3: Queue management
-    print("3. Testing queue...")
-    notifier.queue_notification(notif1)
-    notifier.queue_notification(notif2)
-    print(f"   Queue size: {len(notifier.notification_queue)}\n")
-    
-    # Test 4: Stats
-    print("4. Stats:")
-    stats = notifier.get_stats()
-    for key, value in stats.items():
-        print(f"   {key}: {value}")
+    # Test 3: Process queue
+    print("\n3. Processing queue...")
+    asyncio.run(notifier.process_queue(mock_send))
     
     print("\n✅ All tests completed!")
