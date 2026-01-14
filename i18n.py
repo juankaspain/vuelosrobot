@@ -1,12 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-🌍 i18n - Sistema de Internacionalización
-Soporte para múltiples idiomas con auto-detección
+┌────────────────────────────────────────────────────────┐
+│  🌍 I18N MODULE - Internationalization Manager           │
+│  🚀 Cazador Supremo v13.0 Enterprise                      │
+└────────────────────────────────────────────────────────┘
+
+Módulo de internacionalización con soporte para:
+- Español (es)
+- Inglés (en)
+- Auto-detección desde Telegram
+- Templates con variables
+- Fallback automático
 
 Autor: @Juanka_Spain
-Fecha: 2026-01-14
-Versión: 1.0.0
+Version: 13.0.0
+Date: 2026-01-14
 """
 
 import json
@@ -16,25 +25,33 @@ from typing import Dict, Optional, Any
 from functools import lru_cache
 import threading
 
+# Logger
 logger = logging.getLogger(__name__)
 
-class TranslationManager:
+
+class I18nManager:
     """
-    Gestor de traducciones con soporte multi-idioma.
+    Gestor de internacionalización con auto-detección de idioma.
     
-    Características:
-    - Auto-detección de idioma del usuario
-    - Fallback inteligente (key específica -> idioma -> default)
-    - Cache de traducciones para performance
+    Features:
+    - Carga traducciones desde JSON
+    - Auto-detección de idioma del usuario (Telegram language_code)
+    - Template engine con variables
+    - Fallback automático (lang solicitado → default → EN)
+    - Cache de traducciones
     - Thread-safe
-    - Formateo con variables {var}
+    
+    Uso:
+    >>> i18n = I18nManager(default_lang='es')
+    >>> i18n._('commands.start.welcome', lang='es', name='Bot', version='v13.0')
+    '🎆 *Bot v13.0* 🎆...'
     """
     
     _instance = None
     _lock = threading.Lock()
     
     def __new__(cls, *args, **kwargs):
-        """Singleton pattern para instancia única global"""
+        """Singleton pattern para evitar múltiples cargas del JSON"""
         if not cls._instance:
             with cls._lock:
                 if not cls._instance:
@@ -42,271 +59,337 @@ class TranslationManager:
         return cls._instance
     
     def __init__(self, 
-                 translations_file: str = "translations.json",
-                 default_language: str = "es",
-                 fallback_language: str = "en",
+                 translations_file: str = 'translations.json',
+                 default_lang: str = 'es',
                  auto_detect: bool = True):
+        """
+        Inicializa el gestor de traducciones.
         
-        # Evitar reinicializar si ya está configurado
+        Args:
+            translations_file: Ruta al archivo JSON de traducciones
+            default_lang: Idioma por defecto ('es' o 'en')
+            auto_detect: Si auto-detectar idioma del usuario
+        """
+        # Evitar re-inicialización en singleton
         if hasattr(self, '_initialized'):
             return
         
         self.translations_file = Path(translations_file)
-        self.default_language = default_language
-        self.fallback_language = fallback_language
+        self.default_lang = default_lang
         self.auto_detect = auto_detect
         self.translations: Dict[str, Dict] = {}
-        self.user_languages: Dict[int, str] = {}  # user_id -> language
+        self.supported_langs = ['es', 'en']
         
+        # Carga inicial
         self._load_translations()
+        
         self._initialized = True
-        
-        logger.info(f"🌍 TranslationManager initialized: "
-                   f"default={default_language}, fallback={fallback_language}")
+        logger.info(f"🌍 I18nManager initialized: default={default_lang}, auto_detect={auto_detect}")
     
-    def _load_translations(self):
-        """Carga el archivo de traducciones"""
+    def _load_translations(self) -> None:
+        """
+        Carga traducciones desde el archivo JSON.
+        
+        Raises:
+            FileNotFoundError: Si el archivo no existe
+            JSONDecodeError: Si el JSON es inválido
+        """
+        if not self.translations_file.exists():
+            logger.error(f"❌ Translations file not found: {self.translations_file}")
+            raise FileNotFoundError(f"Translations file not found: {self.translations_file}")
+        
         try:
-            if not self.translations_file.exists():
-                logger.error(f"❌ {self.translations_file} not found")
-                raise FileNotFoundError(f"Translations file not found: {self.translations_file}")
-            
             with open(self.translations_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+                self.translations = json.load(f)
             
-            # Filtrar metadata
-            self.translations = {k: v for k, v in data.items() if not k.startswith('_')}
+            loaded_langs = list(self.translations.keys())
+            logger.info(f"✅ Loaded translations for: {', '.join(loaded_langs)}")
             
-            supported_langs = list(self.translations.keys())
-            logger.info(f"✅ Loaded translations for: {', '.join(supported_langs)}")
+            # Validar que existen los idiomas soportados
+            for lang in self.supported_langs:
+                if lang not in self.translations:
+                    logger.warning(f"⚠️ Language '{lang}' not found in translations file")
+        
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ Invalid JSON in translations file: {e}")
+            raise
+    
+    def reload(self) -> None:
+        """
+        Recarga las traducciones desde el archivo.
+        Útil después de actualizar translations.json en caliente.
+        """
+        logger.info("🔄 Reloading translations...")
+        self._load_translations()
+        self.get_text.cache_clear()  # Limpiar cache
+    
+    def detect_language(self, user) -> str:
+        """
+        Detecta el idioma del usuario desde Telegram.
+        
+        Args:
+            user: Objeto User de Telegram (tiene language_code)
+        
+        Returns:
+            Código de idioma detectado ('es' o 'en')
+        """
+        if not self.auto_detect:
+            return self.default_lang
+        
+        try:
+            # Telegram language_code es ISO 639-1 (2 letras)
+            user_lang = getattr(user, 'language_code', None)
             
-            # Validar que existen los idiomas configurados
-            if self.default_language not in self.translations:
-                logger.warning(f"⚠️ Default language '{self.default_language}' not found")
-            if self.fallback_language not in self.translations:
-                logger.warning(f"⚠️ Fallback language '{self.fallback_language}' not found")
+            if user_lang:
+                # Normalizar (puede venir 'es-ES', 'en-US')
+                lang_code = user_lang.split('-')[0].lower()
                 
+                if lang_code in self.supported_langs:
+                    logger.debug(f"🌍 Detected language: {lang_code} for user {user.id}")
+                    return lang_code
+        
         except Exception as e:
-            logger.error(f"❌ Error loading translations: {e}", exc_info=True)
-            # Crear traducciones mínimas de emergencia
-            self.translations = {
-                "es": {"messages": {"error_generic": "❌ Error inesperado"}},
-                "en": {"messages": {"error_generic": "❌ Unexpected error"}}
-            }
+            logger.warning(f"⚠️ Error detecting language: {e}")
+        
+        # Fallback al idioma por defecto
+        return self.default_lang
     
-    def set_user_language(self, user_id: int, language: str):
+    @lru_cache(maxsize=256)
+    def get_text(self, key: str, lang: str = None) -> Optional[str]:
         """
-        Establece el idioma para un usuario específico.
+        Obtiene texto traducido por clave jerárquica.
         
         Args:
-            user_id: ID del usuario de Telegram
-            language: Código de idioma ("es", "en", etc.)
-        """
-        if language in self.translations:
-            self.user_languages[user_id] = language
-            logger.info(f"🌍 User {user_id} language set to: {language}")
-        else:
-            logger.warning(f"⚠️ Language '{language}' not supported")
-    
-    def get_user_language(self, user_id: Optional[int] = None, 
-                         user_language_code: Optional[str] = None) -> str:
-        """
-        Obtiene el idioma del usuario con auto-detección.
-        
-        Prioridad:
-        1. Configuración manual del usuario (user_languages)
-        2. Auto-detección desde Telegram (user_language_code)
-        3. Default language
-        
-        Args:
-            user_id: ID del usuario
-            user_language_code: Código de idioma de Telegram ("es", "en-US", etc.)
+            key: Clave jerárquica (ej: 'commands.start.welcome')
+            lang: Idioma solicitado (None = usar default)
         
         Returns:
-            Código de idioma final
-        """
-        # 1. Usuario tiene configuración manual
-        if user_id and user_id in self.user_languages:
-            return self.user_languages[user_id]
-        
-        # 2. Auto-detección desde Telegram
-        if self.auto_detect and user_language_code:
-            # Extraer código base ("en-US" -> "en")
-            lang_code = user_language_code.split('-')[0].lower()
-            if lang_code in self.translations:
-                # Guardar para futuras peticiones
-                if user_id:
-                    self.user_languages[user_id] = lang_code
-                return lang_code
-        
-        # 3. Default
-        return self.default_language
-    
-    @lru_cache(maxsize=512)
-    def _get_nested_value(self, data: tuple, keys: tuple, default: Any = None) -> Any:
-        """
-        Obtiene valor anidado de diccionario de forma segura.
-        Usa tuplas para hacer cache con lru_cache.
-        
-        Args:
-            data: Tupla de items del diccionario
-            keys: Tupla de claves separadas por punto
-            default: Valor por defecto si no encuentra
-        
-        Returns:
-            Valor encontrado o default
-        """
-        # Convertir tupla de vuelta a dict
-        current = dict(data)
-        
-        for key in keys:
-            if isinstance(current, dict) and key in current:
-                current = current[key]
-            else:
-                return default
-        return current
-    
-    def get(self, key: str, language: str = None, **kwargs) -> str:
-        """
-        Obtiene una traducción con formateo de variables.
-        
-        Args:
-            key: Clave de traducción con notación de punto ("commands.start.welcome")
-            language: Idioma (None = usar default)
-            **kwargs: Variables para formatear en el mensaje {var}
-        
-        Returns:
-            String traducido y formateado
+            Texto traducido o None si no existe
         
         Ejemplos:
-            t.get("commands.scan.starting", count=10)
-            t.get("messages.error_generic", language="en")
+            >>> get_text('commands.start.welcome', lang='es')
+            '🎆 *{name} {version}* 🎆...'
         """
-        lang = language or self.default_language
+        target_lang = lang or self.default_lang
         
-        # Split key por puntos
-        keys = key.split('.')
+        # Validar idioma
+        if target_lang not in self.translations:
+            logger.warning(f"⚠️ Language '{target_lang}' not available, using '{self.default_lang}'")
+            target_lang = self.default_lang
         
-        # Intentar obtener de idioma solicitado
-        if lang in self.translations:
-            # Convertir a tupla para cache
-            data_tuple = tuple(self.translations[lang].items())
-            keys_tuple = tuple(keys)
-            value = self._get_nested_value(data_tuple, keys_tuple)
+        # Navegar jerarquía de keys
+        try:
+            parts = key.split('.')
+            value = self.translations[target_lang]
             
-            if value:
-                # Formatear con variables si las hay
-                try:
-                    return value.format(**kwargs) if kwargs else value
-                except KeyError as e:
-                    logger.warning(f"⚠️ Missing variable {e} in translation: {key}")
-                    return value
-        
-        # Fallback a idioma alternativo
-        if self.fallback_language != lang and self.fallback_language in self.translations:
-            data_tuple = tuple(self.translations[self.fallback_language].items())
-            keys_tuple = tuple(keys)
-            value = self._get_nested_value(data_tuple, keys_tuple)
+            for part in parts:
+                value = value[part]
             
-            if value:
-                logger.debug(f"🔄 Using fallback for key: {key}")
-                try:
-                    return value.format(**kwargs) if kwargs else value
-                except KeyError:
-                    return value
+            return value
         
-        # Último recurso: devolver la key misma
-        logger.error(f"❌ Translation not found: {key} (lang: {lang})")
-        return f"[{key}]"
+        except (KeyError, TypeError) as e:
+            # Intentar fallback a inglés
+            if target_lang != 'en':
+                try:
+                    parts = key.split('.')
+                    value = self.translations['en']
+                    for part in parts:
+                        value = value[part]
+                    logger.warning(f"⚠️ Key '{key}' not found in '{target_lang}', using 'en' fallback")
+                    return value
+                except:
+                    pass
+            
+            logger.error(f"❌ Translation key not found: '{key}' (lang: {target_lang})")
+            return None
     
-    def __call__(self, key: str, user_id: Optional[int] = None, 
-                user_language_code: Optional[str] = None, **kwargs) -> str:
+    def _(self, key: str, lang: str = None, **kwargs) -> str:
         """
-        Método shortcut para llamar como función: t(key, **kwargs)
+        Función universal de traducción con template engine.
         
-        Detecta automáticamente el idioma del usuario.
+        Args:
+            key: Clave de traducción
+            lang: Idioma (None = usar default)
+            **kwargs: Variables para formatear el template
+        
+        Returns:
+            Texto traducido y formateado
+        
+        Ejemplos:
+            >>> _('commands.start.welcome', lang='es', name='Bot', version='v13.0')
+            '🎆 *Bot v13.0* 🎆...'
+            
+            >>> _('commands.route.searching', origin='MAD', dest='BCN', date='2026-02-15')
+            '🔍 Buscando MAD → BCN para 2026-02-15 (±3 días)...'
         """
-        language = self.get_user_language(user_id, user_language_code)
-        return self.get(key, language=language, **kwargs)
+        text = self.get_text(key, lang)
+        
+        if text is None:
+            # Fallback: devolver la key en mayúsculas como indicador de error
+            return f"[MISSING: {key}]"
+        
+        # Formatear template con kwargs
+        if kwargs:
+            try:
+                return text.format(**kwargs)
+            except KeyError as e:
+                logger.error(f"❌ Missing template variable in '{key}': {e}")
+                return text  # Devolver sin formatear
+        
+        return text
+    
+    def get_all(self, lang: str = None) -> Dict[str, Any]:
+        """
+        Obtiene todas las traducciones de un idioma.
+        
+        Args:
+            lang: Idioma (None = usar default)
+        
+        Returns:
+            Diccionario completo de traducciones
+        """
+        target_lang = lang or self.default_lang
+        return self.translations.get(target_lang, {})
+    
+    def format_price(self, price: float, currency: str = 'EUR', lang: str = None) -> str:
+        """
+        Formatea un precio según el idioma.
+        
+        Args:
+            price: Precio numérico
+            currency: Moneda (EUR, USD, GBP)
+            lang: Idioma
+        
+        Returns:
+            Precio formateado
+        
+        Ejemplos:
+            >>> format_price(500, 'EUR', 'es')
+            '500€'
+            >>> format_price(500, 'USD', 'en')
+            '$500'
+        """
+        symbols = {'EUR': '€', 'USD': '$', 'GBP': '£'}
+        symbol = symbols.get(currency, currency)
+        
+        target_lang = lang or self.default_lang
+        
+        # Español: precio + símbolo
+        if target_lang == 'es':
+            return f"{price:.0f}{symbol}"
+        # Inglés: símbolo + precio
+        else:
+            return f"{symbol}{price:.0f}"
+    
+    def format_date(self, date_str: str, lang: str = None) -> str:
+        """
+        Formatea una fecha según el idioma.
+        
+        Args:
+            date_str: Fecha en formato YYYY-MM-DD
+            lang: Idioma
+        
+        Returns:
+            Fecha formateada
+        
+        Ejemplos:
+            >>> format_date('2026-02-15', 'es')
+            '15/02/2026'
+            >>> format_date('2026-02-15', 'en')
+            '02/15/2026'
+        """
+        from datetime import datetime
+        
+        try:
+            date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+            target_lang = lang or self.default_lang
+            
+            # Español: DD/MM/YYYY
+            if target_lang == 'es':
+                return date_obj.strftime('%d/%m/%Y')
+            # Inglés: MM/DD/YYYY
+            else:
+                return date_obj.strftime('%m/%d/%Y')
+        
+        except ValueError:
+            logger.error(f"❌ Invalid date format: {date_str}")
+            return date_str
+    
+    def __repr__(self) -> str:
+        return f"I18nManager(default_lang='{self.default_lang}', langs={self.supported_langs})"
 
-# Instancia global singleton
-t = TranslationManager()
 
-# Función helper para importar fácilmente
-def _(key: str, user_id: Optional[int] = None, 
-     user_language_code: Optional[str] = None, **kwargs) -> str:
+# 🌐 INSTANCIA GLOBAL (Singleton)
+_i18n_instance: Optional[I18nManager] = None
+
+
+def get_i18n(translations_file: str = 'translations.json',
+             default_lang: str = 'es',
+             auto_detect: bool = True) -> I18nManager:
     """
-    Función universal de traducción.
-    
-    Uso:
-        from i18n import _
-        
-        msg = _("commands.start.welcome", 
-               user_id=123, 
-               app_name="Cazador", 
-               version="v12.2")
+    Obtiene la instancia global del I18nManager (Singleton).
     
     Args:
-        key: Clave de traducción
-        user_id: ID del usuario (para auto-detección)
-        user_language_code: Código de idioma Telegram
-        **kwargs: Variables para formatear
+        translations_file: Archivo de traducciones
+        default_lang: Idioma por defecto
+        auto_detect: Auto-detectar idioma
     
     Returns:
-        String traducido
+        Instancia de I18nManager
     """
-    return t(key, user_id=user_id, user_language_code=user_language_code, **kwargs)
+    global _i18n_instance
+    
+    if _i18n_instance is None:
+        _i18n_instance = I18nManager(
+            translations_file=translations_file,
+            default_lang=default_lang,
+            auto_detect=auto_detect
+        )
+    
+    return _i18n_instance
 
-# Alias para botones
-def btn(key: str, user_id: Optional[int] = None, **kwargs) -> str:
+
+def _(key: str, lang: str = None, **kwargs) -> str:
     """
-    Helper específico para botones.
+    Función global de traducción (shorthand).
     
     Uso:
-        from i18n import btn
-        button_text = btn("scan", user_id=123)
+        >>> from i18n import _
+        >>> _('commands.start.welcome', name='Bot', version='v13.0')
     """
-    return _(f"buttons.{key}", user_id=user_id, **kwargs)
+    i18n = get_i18n()
+    return i18n._(key, lang, **kwargs)
 
-if __name__ == "__main__":
-    # Tests rápidos
-    print("🌍 Testing TranslationManager...\n")
+
+if __name__ == '__main__':
+    # 🧪 Tests rápidos
+    print("🧪 Testing I18nManager...\n")
     
-    # Test 1: Español
-    print("Test 1 - Español:")
-    msg_es = _("commands.start.welcome", 
-              user_id=1, 
-              user_language_code="es",
-              app_name="Cazador Supremo",
-              version="v12.2",
-              commands_list="/scan, /route")
-    print(msg_es)
-    print()
+    # Crear instancia
+    i18n = I18nManager(default_lang='es')
     
-    # Test 2: Inglés
-    print("Test 2 - English:")
-    msg_en = _("commands.start.welcome",
-              user_id=2,
-              user_language_code="en",
-              app_name="Supreme Hunter",
-              version="v12.2",
-              commands_list="/scan, /route")
-    print(msg_en)
-    print()
+    # Test 1: Traducción básica
+    print("1. Basic translation:")
+    print(f"   ES: {i18n._('commands.scan.starting', lang='es')}")
+    print(f"   EN: {i18n._('commands.scan.starting', lang='en')}")
     
-    # Test 3: Botón
-    print("Test 3 - Button:")
-    btn_es = btn("scan", user_id=1)
-    btn_en = btn("scan", user_id=2)
-    print(f"ES: {btn_es}")
-    print(f"EN: {btn_en}")
-    print()
+    # Test 2: Template con variables
+    print("\n2. Template with variables:")
+    print(f"   ES: {i18n._('commands.route.searching', lang='es', origin='MAD', dest='BCN', date='2026-02-15')}")
+    print(f"   EN: {i18n._('commands.route.searching', lang='en', origin='MAD', dest='BCN', date='2026-02-15')}")
     
-    # Test 4: Auto-detección
-    print("Test 4 - Auto-detect:")
-    t.set_user_language(999, "en")
-    msg_auto = _("commands.scan.starting", user_id=999, count=5)
-    print(msg_auto)
-    print()
+    # Test 3: Precio formateado
+    print("\n3. Price formatting:")
+    print(f"   ES: {i18n.format_price(500, 'EUR', 'es')}")
+    print(f"   EN: {i18n.format_price(500, 'USD', 'en')}")
     
-    print("✅ All tests passed!")
+    # Test 4: Fecha formateada
+    print("\n4. Date formatting:")
+    print(f"   ES: {i18n.format_date('2026-02-15', 'es')}")
+    print(f"   EN: {i18n.format_date('2026-02-15', 'en')}")
+    
+    # Test 5: Key inexistente (fallback)
+    print("\n5. Missing key (fallback):")
+    print(f"   Result: {i18n._('non.existent.key', lang='es')}")
+    
+    print("\n✅ All tests completed!")
