@@ -3,6 +3,8 @@
     "token": "8543611357:AAH_X0A79CDV7vzN4_T8u0v6WLljs6lBLQo",
     "chat_id": "5845787316"
   },
+  "language": "es",
+  "auto_detect_language": true,
   "flights": [
     {
       "origin": "MAD",
@@ -56,6 +58,8 @@
     }
   ],
   "alert_min": 500,
+  "deal_threshold_pct": 20,
+  "auto_scan": false,
   "apis": {
     "aviationstack_key": "cf33c5341fad0bd359d8c41d6902ce1c",
     "serpapi_key": "fa30a7f1e8bb7cfaccc95b95906d5db350bbb303a003be88bb86e1884deb7fc9"
