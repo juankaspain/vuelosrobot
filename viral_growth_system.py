@@ -4,15 +4,15 @@
 ┌────────────────────────────────────────────────────────────────┐
 │  🦠 VIRAL GROWTH SYSTEM - Two-Sided Referrals              │
 │  🚀 Cazador Supremo v13.0 Enterprise                          │
-│  🎯 Target: Viral Coefficient >1.0                           │
+│  🎯 Target: K > 1.0 (Self-sustaining growth)                 │
 └────────────────────────────────────────────────────────────────┘
 
-Sistema de crecimiento viral con referidos:
-- Two-sided referral rewards
-- Unique referral codes
-- Multi-tier bonus system
-- Fraud prevention
-- Analytics tracking
+Sistema viral de crecimiento con referidos bidireccionales:
+- Incentivos para ambas partes
+- Lifetime commission 10%
+- Referral tiers progresivos
+- Social sharing optimizado
+- Anti-fraud protection
 
 Autor: @Juanka_Spain
 Version: 13.0.0
@@ -21,13 +21,14 @@ Date: 2026-01-14
 
 import json
 import logging
-import random
-import string
+import hashlib
+import secrets
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, field, asdict
 from enum import Enum
+from urllib.parse import urlencode
 
 logger = logging.getLogger(__name__)
 
@@ -36,41 +37,78 @@ logger = logging.getLogger(__name__)
 #  CONSTANTS & ENUMS
 # ═══════════════════════════════════════════════════════════════
 
-class ReferralStatus(Enum):
-    """Estados del referido"""
-    PENDING = "pending"          # Registrado pero no completó onboarding
-    COMPLETED = "completed"      # Completó onboarding
-    ACTIVE = "active"            # Usó el bot 3+ veces
-    CHURNED = "churned"          # No vuelve en 7+ días
+class ReferralTier(Enum):
+    """Tiers de referidos"""
+    STARTER = "starter"        # 1-5 refs
+    BUILDER = "builder"        # 6-15 refs
+    EXPERT = "expert"          # 16-50 refs
+    AMBASSADOR = "ambassador"  # 50+ refs
 
 
-class RewardTier(Enum):
-    """Tiers de rewards por referidos"""
-    TIER_1 = "tier_1"   # 1 ref
-    TIER_2 = "tier_2"   # 5 refs
-    TIER_3 = "tier_3"   # 10 refs
-    TIER_4 = "tier_4"   # 25 refs
-    TIER_5 = "tier_5"   # 50 refs
+class SharePlatform(Enum):
+    """Plataformas de compartir"""
+    TELEGRAM = "telegram"
+    WHATSAPP = "whatsapp"
+    TWITTER = "twitter"
+    FACEBOOK = "facebook"
+    LINK = "link"  # Copy link
 
 
-# Rewards por tier
+# Recompensas por tier
 REFERRAL_REWARDS = {
-    'base_referrer': 500,      # Referrer gana por cada referido
-    'base_referee': 200,       # Referee gana al registrarse
-    RewardTier.TIER_1: 500,    # 1 ref
-    RewardTier.TIER_2: 1000,   # 5 refs bonus
-    RewardTier.TIER_3: 3000,   # 10 refs bonus + badge
-    RewardTier.TIER_4: 10000,  # 25 refs bonus + premium
-    RewardTier.TIER_5: 25000   # 50 refs bonus + legend
+    ReferralTier.STARTER: {
+        'coins_per_ref': 500,
+        'bonus': 0,
+        'badge': None
+    },
+    ReferralTier.BUILDER: {
+        'coins_per_ref': 750,
+        'bonus': 2000,  # Bonus al alcanzar tier
+        'badge': '🌟 Builder'
+    },
+    ReferralTier.EXPERT: {
+        'coins_per_ref': 1000,
+        'bonus': 5000,
+        'badge': '💎 Expert Recruiter'
+    },
+    ReferralTier.AMBASSADOR: {
+        'coins_per_ref': 1500,
+        'bonus': 10000,
+        'badge': '👑 Brand Ambassador'
+    }
 }
 
-# Prefijos para códigos
-CODE_PREFIXES = ['FLIGHT', 'DEALS', 'SAVE', 'FLY', 'TRAVEL']
+# Recompensas base
+REFERRER_BASE_COINS = 500
+REFEREE_WELCOME_COINS = 300
+LIFETIME_COMMISSION_PCT = 0.10  # 10%
 
-# Fraud prevention
-MIN_TIME_BETWEEN_REFS = 60  # segundos
-MAX_REFS_PER_DAY = 10
-MAX_REFS_SAME_IP = 3
+# Anti-fraud
+MIN_ACTIVITY_FOR_REWARD = 3  # Mínimo 3 acciones
+MIN_TIME_ACTIVE_HOURS = 24   # Mínimo 24h activo
+
+# Share messages
+SHARE_MESSAGES = {
+    SharePlatform.TELEGRAM: (
+        "🚀 ¡Únete a Cazador Supremo y ahorra hasta 30% en vuelos!\n\n"
+        "✈️ Encuentra los mejores precios\n"
+        "💰 Gana FlightCoins\n"
+        "🔔 Alertas de chollos\n\n"
+        "👉 Usa mi código y consigue +300 coins de bienvenida:\n"
+        "{link}"
+    ),
+    SharePlatform.WHATSAPP: (
+        "🚀 *Cazador Supremo* - ¡Ahorra en vuelos!\n\n"
+        "Pruébalo gratis y consigue +300 coins con mi código:\n"
+        "{link}"
+    ),
+    SharePlatform.TWITTER: (
+        "✈️ Ahorra hasta 30% en vuelos con @CazadorSupremo\n\n"
+        "Consigue +300 coins de bienvenida con mi código:\n"
+        "{link}\n\n"
+        "#VuelosBaratos #Viajes #Ahorro"
+    )
+}
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -78,58 +116,15 @@ MAX_REFS_SAME_IP = 3
 # ═══════════════════════════════════════════════════════════════
 
 @dataclass
-class Referral:
-    """Referido individual"""
-    referee_id: int                      # Usuario referido
-    referee_username: str
-    referrer_id: int                     # Usuario que refirió
-    referrer_username: str
-    referral_code: str                   # Código usado
-    status: ReferralStatus
-    
-    # Timestamps
-    created_at: str
-    completed_at: Optional[str] = None
-    last_active_at: Optional[str] = None
-    
-    # Metadata
-    device_info: Optional[str] = None
-    ip_address: Optional[str] = None
-    
-    # Rewards
-    referrer_reward_given: bool = False
-    referee_reward_given: bool = False
-    referrer_coins_earned: int = 0
-    referee_coins_earned: int = 0
-    
-    def to_dict(self) -> Dict:
-        return {
-            **asdict(self),
-            'status': self.status.value
-        }
-    
-    @classmethod
-    def from_dict(cls, data: Dict) -> 'Referral':
-        data['status'] = ReferralStatus(data['status'])
-        return cls(**data)
-
-
-@dataclass
 class ReferralCode:
-    """Código de referido"""
+    """Código de referido único"""
     code: str
-    owner_id: int
-    owner_username: str
+    user_id: int
     created_at: str
-    
-    # Stats
     uses: int = 0
-    successful_conversions: int = 0
-    total_coins_earned: int = 0
-    
-    # Metadata
+    conversions: int = 0  # Referidos que completaron actividad mínima
+    total_earned: float = 0.0
     is_active: bool = True
-    expires_at: Optional[str] = None
     
     def to_dict(self) -> Dict:
         return asdict(self)
@@ -140,52 +135,74 @@ class ReferralCode:
 
 
 @dataclass
+class Referral:
+    """Registro de un referido"""
+    referee_id: int
+    referrer_id: int
+    referral_code: str
+    created_at: str
+    platform: str  # Desde dónde vino (telegram, whatsapp, etc)
+    
+    # Tracking de actividad
+    is_active: bool = False  # Completó actividad mínima
+    activation_date: Optional[str] = None
+    total_actions: int = 0
+    
+    # Comisiones
+    coins_earned_by_referee: float = 0.0  # Coins ganados por el referido
+    commission_paid: float = 0.0  # Comisión pagada al referrer
+    
+    def to_dict(self) -> Dict:
+        return asdict(self)
+    
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'Referral':
+        return cls(**data)
+
+
+@dataclass
 class ReferralStats:
     """Estadísticas de referidos por usuario"""
     user_id: int
-    
-    # Contadores
     total_referrals: int = 0
-    pending_referrals: int = 0
-    completed_referrals: int = 0
-    active_referrals: int = 0
+    active_referrals: int = 0  # Referidos activos
+    pending_referrals: int = 0  # Esperando activación
     
-    # Rewards
-    total_coins_earned: int = 0
-    current_tier: Optional[RewardTier] = None
-    next_tier_refs_needed: int = 5
+    # Earnings
+    total_coins_earned: float = 0.0
+    lifetime_commissions: float = 0.0
     
-    # Achievements
-    referral_king_unlocked: bool = False
-    premium_unlocked: bool = False
-    legend_unlocked: bool = False
+    # Tier
+    current_tier: ReferralTier = ReferralTier.STARTER
+    
+    # Network
+    network_size: int = 0  # Total incluyendo sub-referidos
+    network_depth: int = 0  # Niveles de profundidad
     
     def to_dict(self) -> Dict:
         data = asdict(self)
-        if self.current_tier:
-            data['current_tier'] = self.current_tier.value
+        data['current_tier'] = self.current_tier.value
         return data
     
     @classmethod
     def from_dict(cls, data: Dict) -> 'ReferralStats':
-        if data.get('current_tier'):
-            data['current_tier'] = RewardTier(data['current_tier'])
+        data['current_tier'] = ReferralTier(data['current_tier'])
         return cls(**data)
 
 
 # ═══════════════════════════════════════════════════════════════
-#  REFERRAL MANAGER
+#  VIRAL GROWTH MANAGER
 # ═══════════════════════════════════════════════════════════════
 
-class ReferralManager:
+class ViralGrowthManager:
     """
-    Gestor del sistema de referidos.
+    Gestor del sistema viral de crecimiento.
     
     Responsabilidades:
-    - Generar códigos únicos
+    - Generación de códigos de referido
     - Tracking de referidos
-    - Distribución de rewards
-    - Fraud prevention
+    - Cálculo de recompensas
+    - Comisiones lifetime
     - Analytics
     """
     
@@ -197,54 +214,48 @@ class ReferralManager:
         self.referrals_file = Path(referrals_file)
         self.stats_file = Path(stats_file)
         
-        # Data structures
-        self.codes: Dict[str, ReferralCode] = {}          # code -> ReferralCode
-        self.user_codes: Dict[int, str] = {}              # user_id -> code
-        self.referrals: Dict[int, List[Referral]] = {}    # referrer_id -> [Referral]
-        self.stats: Dict[int, ReferralStats] = {}         # user_id -> ReferralStats
-        
-        # Fraud prevention tracking
-        self.recent_refs: Dict[int, List[datetime]] = {}  # user_id -> [timestamps]
-        self.ip_refs: Dict[str, List[int]] = {}           # ip -> [user_ids]
+        self.codes: Dict[str, ReferralCode] = {}  # code -> ReferralCode
+        self.user_codes: Dict[int, str] = {}  # user_id -> code
+        self.referrals: Dict[int, List[Referral]] = {}  # referrer_id -> [Referral]
+        self.stats: Dict[int, ReferralStats] = {}  # user_id -> ReferralStats
         
         self._load_data()
         
-        logger.info("🦠 ReferralManager initialized")
+        logger.info("🦠 ViralGrowthManager initialized")
     
     def _load_data(self):
         """Carga datos desde archivos."""
-        # Load codes
+        # Cargar códigos
         if self.codes_file.exists():
             try:
                 with open(self.codes_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                 
                 for code_str, code_data in data.items():
-                    code = ReferralCode.from_dict(code_data)
-                    self.codes[code_str] = code
-                    self.user_codes[code.owner_id] = code_str
+                    self.codes[code_str] = ReferralCode.from_dict(code_data)
+                    self.user_codes[code_data['user_id']] = code_str
                 
                 logger.info(f"✅ Loaded {len(self.codes)} referral codes")
             except Exception as e:
                 logger.error(f"❌ Error loading codes: {e}")
         
-        # Load referrals
+        # Cargar referrals
         if self.referrals_file.exists():
             try:
                 with open(self.referrals_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                 
-                for user_id_str, refs_data in data.items():
-                    user_id = int(user_id_str)
-                    self.referrals[user_id] = [
-                        Referral.from_dict(ref_data) for ref_data in refs_data
+                for referrer_id_str, referrals_data in data.items():
+                    referrer_id = int(referrer_id_str)
+                    self.referrals[referrer_id] = [
+                        Referral.from_dict(r) for r in referrals_data
                     ]
                 
                 logger.info(f"✅ Loaded referrals for {len(self.referrals)} users")
             except Exception as e:
                 logger.error(f"❌ Error loading referrals: {e}")
         
-        # Load stats
+        # Cargar stats
         if self.stats_file.exists():
             try:
                 with open(self.stats_file, 'r', encoding='utf-8') as f:
@@ -261,383 +272,311 @@ class ReferralManager:
     def _save_data(self):
         """Guarda datos a archivos."""
         try:
-            # Save codes
+            # Guardar códigos
+            codes_data = {
+                code: ref_code.to_dict()
+                for code, ref_code in self.codes.items()
+            }
             with open(self.codes_file, 'w', encoding='utf-8') as f:
-                data = {code: obj.to_dict() for code, obj in self.codes.items()}
-                json.dump(data, f, indent=2, ensure_ascii=False)
+                json.dump(codes_data, f, indent=2, ensure_ascii=False)
             
-            # Save referrals
+            # Guardar referrals
+            referrals_data = {
+                str(user_id): [r.to_dict() for r in referrals]
+                for user_id, referrals in self.referrals.items()
+            }
             with open(self.referrals_file, 'w', encoding='utf-8') as f:
-                data = {
-                    str(user_id): [ref.to_dict() for ref in refs]
-                    for user_id, refs in self.referrals.items()
-                }
-                json.dump(data, f, indent=2, ensure_ascii=False)
+                json.dump(referrals_data, f, indent=2, ensure_ascii=False)
             
-            # Save stats
+            # Guardar stats
+            stats_data = {
+                str(user_id): stats.to_dict()
+                for user_id, stats in self.stats.items()
+            }
             with open(self.stats_file, 'w', encoding='utf-8') as f:
-                data = {
-                    str(user_id): stats.to_dict()
-                    for user_id, stats in self.stats.items()
-                }
-                json.dump(data, f, indent=2, ensure_ascii=False)
+                json.dump(stats_data, f, indent=2, ensure_ascii=False)
             
-            logger.debug("💾 Referral data saved")
+            logger.debug("💾 Viral growth data saved")
         except Exception as e:
             logger.error(f"❌ Error saving data: {e}")
     
-    def _generate_unique_code(self) -> str:
-        """Genera código de referido único."""
-        while True:
-            prefix = random.choice(CODE_PREFIXES)
-            suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
-            code = f"{prefix}-{suffix}"
-            
-            if code not in self.codes:
-                return code
-    
-    def get_or_create_referral_code(self, user_id: int, username: str) -> str:
-        """Obtiene o crea código de referido para usuario."""
-        # Si ya tiene código
+    def generate_referral_code(self, user_id: int) -> str:
+        """
+        Genera código de referido único para usuario.
+        
+        Args:
+            user_id: ID del usuario
+        
+        Returns:
+            Código de referido (ej: 'FLY8X2K')
+        """
+        # Si ya tiene código, retornarlo
         if user_id in self.user_codes:
             return self.user_codes[user_id]
         
-        # Generar nuevo código
-        code = self._generate_unique_code()
+        # Generar código único
+        while True:
+            # Código de 7 caracteres alfanuméricos
+            code = secrets.token_urlsafe(6)[:7].upper().replace('-', 'X').replace('_', 'Y')
+            
+            if code not in self.codes:
+                break
         
-        referral_code = ReferralCode(
+        # Crear registro
+        ref_code = ReferralCode(
             code=code,
-            owner_id=user_id,
-            owner_username=username,
+            user_id=user_id,
             created_at=datetime.now().isoformat()
         )
         
-        self.codes[code] = referral_code
+        self.codes[code] = ref_code
         self.user_codes[user_id] = code
+        
+        # Inicializar stats
+        if user_id not in self.stats:
+            self.stats[user_id] = ReferralStats(user_id=user_id)
+        
         self._save_data()
         
-        logger.info(f"🎫 Generated referral code {code} for user {user_id}")
+        logger.info(f"🎫 Generated referral code for user {user_id}: {code}")
         return code
     
-    def validate_referral_code(self, code: str) -> Tuple[bool, Optional[str]]:
-        """Valida código de referido."""
-        if code not in self.codes:
-            return False, "Código inválido"
-        
-        ref_code = self.codes[code]
-        
-        if not ref_code.is_active:
-            return False, "Código desactivado"
-        
-        if ref_code.expires_at:
-            expiry = datetime.fromisoformat(ref_code.expires_at)
-            if datetime.now() > expiry:
-                return False, "Código expirado"
-        
-        return True, None
-    
-    def check_fraud_flags(self,
-                         referrer_id: int,
-                         referee_id: int,
-                         ip_address: Optional[str] = None) -> Tuple[bool, Optional[str]]:
-        """Verifica señales de fraude."""
-        # No auto-referirse
-        if referrer_id == referee_id:
-            return False, "No puedes referirte a ti mismo"
-        
-        # Rate limiting temporal
-        if referrer_id in self.recent_refs:
-            recent = self.recent_refs[referrer_id]
-            # Limpiar referencias antiguas
-            cutoff = datetime.now() - timedelta(seconds=MIN_TIME_BETWEEN_REFS)
-            recent = [ts for ts in recent if ts > cutoff]
-            self.recent_refs[referrer_id] = recent
-            
-            if recent:
-                return False, f"Espera {MIN_TIME_BETWEEN_REFS}s entre referidos"
-        
-        # Max refs por día
-        if referrer_id in self.referrals:
-            today = datetime.now().date()
-            refs_today = sum(
-                1 for ref in self.referrals[referrer_id]
-                if datetime.fromisoformat(ref.created_at).date() == today
-            )
-            
-            if refs_today >= MAX_REFS_PER_DAY:
-                return False, "Límite diario de referidos alcanzado"
-        
-        # IP tracking
-        if ip_address:
-            if ip_address in self.ip_refs:
-                if len(self.ip_refs[ip_address]) >= MAX_REFS_SAME_IP:
-                    return False, "Demasiados referidos desde esta IP"
-        
-        return True, None
-    
-    def register_referral(self,
-                         referral_code: str,
-                         referee_id: int,
-                         referee_username: str,
-                         device_info: Optional[str] = None,
-                         ip_address: Optional[str] = None) -> Tuple[bool, Optional[str]]:
+    def process_referral(self,
+                        referee_id: int,
+                        referral_code: str,
+                        platform: str = 'telegram') -> Tuple[bool, str]:
         """
-        Registra nuevo referido.
+        Procesa un nuevo referido.
+        
+        Args:
+            referee_id: ID del usuario referido
+            referral_code: Código usado
+            platform: Plataforma origen
         
         Returns:
-            (success, error_message)
+            (success: bool, message: str)
         """
         # Validar código
-        valid, error = self.validate_referral_code(referral_code)
-        if not valid:
-            return False, error
+        if referral_code not in self.codes:
+            return False, "Código de referido inválido"
         
         ref_code = self.codes[referral_code]
-        referrer_id = ref_code.owner_id
+        referrer_id = ref_code.user_id
         
-        # Check fraud
-        valid, error = self.check_fraud_flags(referrer_id, referee_id, ip_address)
-        if not valid:
-            return False, error
+        # No puede referirse a sí mismo
+        if referee_id == referrer_id:
+            return False, "No puedes usar tu propio código"
+        
+        # Verificar si ya fue referido
+        for referrals in self.referrals.values():
+            if any(r.referee_id == referee_id for r in referrals):
+                return False, "Ya fuiste referido anteriormente"
         
         # Crear referral
         referral = Referral(
             referee_id=referee_id,
-            referee_username=referee_username,
             referrer_id=referrer_id,
-            referrer_username=ref_code.owner_username,
             referral_code=referral_code,
-            status=ReferralStatus.PENDING,
             created_at=datetime.now().isoformat(),
-            device_info=device_info,
-            ip_address=ip_address
+            platform=platform
         )
         
-        # Guardar referral
+        # Guardar
         if referrer_id not in self.referrals:
             self.referrals[referrer_id] = []
         self.referrals[referrer_id].append(referral)
         
-        # Update code stats
+        # Update código
         ref_code.uses += 1
         
         # Update stats
         if referrer_id not in self.stats:
             self.stats[referrer_id] = ReferralStats(user_id=referrer_id)
-        self.stats[referrer_id].total_referrals += 1
-        self.stats[referrer_id].pending_referrals += 1
         
-        # Track for fraud prevention
-        if referrer_id not in self.recent_refs:
-            self.recent_refs[referrer_id] = []
-        self.recent_refs[referrer_id].append(datetime.now())
-        
-        if ip_address:
-            if ip_address not in self.ip_refs:
-                self.ip_refs[ip_address] = []
-            self.ip_refs[ip_address].append(referee_id)
+        stats = self.stats[referrer_id]
+        stats.total_referrals += 1
+        stats.pending_referrals += 1
         
         self._save_data()
         
         logger.info(
-            f"✅ Registered referral: {referee_username} referred by "
-            f"{ref_code.owner_username} (code: {referral_code})"
+            f"🎉 New referral: User {referee_id} referred by {referrer_id} "
+            f"via {platform}"
         )
         
-        return True, None
+        return True, f"¡Bienvenido! +{REFEREE_WELCOME_COINS} FlightCoins de regalo"
     
-    def complete_referral(self,
-                         referee_id: int,
-                         retention_manager) -> Tuple[int, int]:
+    def activate_referral(self, referee_id: int) -> Optional[float]:
         """
-        Completa referido cuando referee termina onboarding.
+        Activa un referido cuando completa actividad mínima.
+        Paga recompensas a ambas partes.
         
         Args:
-            referee_id: Usuario referido
-            retention_manager: RetentionManager para dar rewards
+            referee_id: ID del referido
         
         Returns:
-            (referrer_coins, referee_coins)
+            Coins ganados por el referrer (None si no aplica)
         """
         # Buscar referral
         referral = None
         referrer_id = None
         
-        for r_id, refs in self.referrals.items():
-            for ref in refs:
-                if ref.referee_id == referee_id and ref.status == ReferralStatus.PENDING:
-                    referral = ref
-                    referrer_id = r_id
+        for rid, referrals in self.referrals.items():
+            for r in referrals:
+                if r.referee_id == referee_id and not r.is_active:
+                    referral = r
+                    referrer_id = rid
                     break
             if referral:
                 break
         
         if not referral:
-            return 0, 0
+            return None
         
-        # Update referral status
-        referral.status = ReferralStatus.COMPLETED
-        referral.completed_at = datetime.now().isoformat()
+        # Activar
+        referral.is_active = True
+        referral.activation_date = datetime.now().isoformat()
         
-        # Award coins
-        referrer_coins = REFERRAL_REWARDS['base_referrer']
-        referee_coins = REFERRAL_REWARDS['base_referee']
-        
-        # Give rewards
-        retention_manager.add_coins(
-            referrer_id,
-            referrer_coins,
-            reason=f"Referido: @{referral.referee_username}"
-        )
-        
-        retention_manager.add_coins(
-            referee_id,
-            referee_coins,
-            reason="Bonus de bienvenida por referido"
-        )
-        
-        # Update referral
-        referral.referrer_reward_given = True
-        referral.referee_reward_given = True
-        referral.referrer_coins_earned = referrer_coins
-        referral.referee_coins_earned = referee_coins
-        
-        # Update code stats
-        code = self.codes[referral.referral_code]
-        code.successful_conversions += 1
-        code.total_coins_earned += referrer_coins
+        # Update código
+        ref_code = self.codes[referral.referral_code]
+        ref_code.conversions += 1
         
         # Update stats
         stats = self.stats[referrer_id]
-        stats.completed_referrals += 1
         stats.pending_referrals -= 1
-        stats.total_coins_earned += referrer_coins
+        stats.active_referrals += 1
         
-        # Check tier upgrades
-        self._check_tier_upgrades(referrer_id, retention_manager)
+        # Calcular tier
+        tier = self._get_tier(stats.active_referrals)
+        old_tier = stats.current_tier
+        stats.current_tier = tier
+        
+        # Calcular recompensa
+        tier_config = REFERRAL_REWARDS[tier]
+        coins = tier_config['coins_per_ref']
+        
+        # Bonus por nuevo tier
+        bonus = 0
+        if tier != old_tier:
+            bonus = tier_config['bonus']
+            logger.info(f"🎊 User {referrer_id} reached tier {tier.value}!")
+        
+        total_coins = coins + bonus
+        
+        stats.total_coins_earned += total_coins
+        ref_code.total_earned += total_coins
         
         self._save_data()
         
         logger.info(
-            f"💰 Referral completed: {referrer_id} earned {referrer_coins} coins, "
-            f"{referee_id} earned {referee_coins} coins"
+            f"✅ Referral activated: {referee_id} -> {referrer_id} "
+            f"(+{total_coins} coins)"
         )
         
-        return referrer_coins, referee_coins
+        return total_coins
     
-    def _check_tier_upgrades(self, user_id: int, retention_manager):
-        """Verifica y otorga bonos de tier."""
-        stats = self.stats[user_id]
-        total = stats.completed_referrals
+    def _get_tier(self, active_refs: int) -> ReferralTier:
+        """Calcula tier basado en referidos activos."""
+        if active_refs >= 50:
+            return ReferralTier.AMBASSADOR
+        elif active_refs >= 16:
+            return ReferralTier.EXPERT
+        elif active_refs >= 6:
+            return ReferralTier.BUILDER
+        else:
+            return ReferralTier.STARTER
+    
+    def get_referral_link(self, user_id: int, bot_username: str) -> str:
+        """
+        Genera link de referido para usuario.
         
-        # Tier 2: 5 refs
-        if total >= 5 and (not stats.current_tier or stats.current_tier.value < RewardTier.TIER_2.value):
-            bonus = REFERRAL_REWARDS[RewardTier.TIER_2]
-            retention_manager.add_coins(user_id, bonus, reason="Bonus 5 referidos")
-            stats.current_tier = RewardTier.TIER_2
-            stats.next_tier_refs_needed = 10 - total
-            logger.info(f"🎁 User {user_id} reached TIER 2: +{bonus} coins")
+        Args:
+            user_id: ID del usuario
+            bot_username: Username del bot
         
-        # Tier 3: 10 refs + badge
-        if total >= 10 and (not stats.current_tier or stats.current_tier.value < RewardTier.TIER_3.value):
-            bonus = REFERRAL_REWARDS[RewardTier.TIER_3]
-            retention_manager.add_coins(user_id, bonus, reason="Bonus 10 referidos")
-            stats.current_tier = RewardTier.TIER_3
-            stats.next_tier_refs_needed = 25 - total
-            stats.referral_king_unlocked = True
-            
-            # Unlock Referral King achievement
-            from retention_system import AchievementType
-            retention_manager.unlock_achievement(user_id, AchievementType.REFERRAL_KING)
-            
-            logger.info(f"👑 User {user_id} reached TIER 3: +{bonus} coins + Referral King badge")
+        Returns:
+            Deep link (ej: https://t.me/bot?start=ref_FLY8X2K)
+        """
+        code = self.generate_referral_code(user_id)
+        return f"https://t.me/{bot_username}?start=ref_{code}"
+    
+    def get_share_message(self,
+                         user_id: int,
+                         platform: SharePlatform,
+                         bot_username: str) -> str:
+        """
+        Genera mensaje para compartir en plataforma.
         
-        # Tier 4: 25 refs + premium
-        if total >= 25 and (not stats.current_tier or stats.current_tier.value < RewardTier.TIER_4.value):
-            bonus = REFERRAL_REWARDS[RewardTier.TIER_4]
-            retention_manager.add_coins(user_id, bonus, reason="Bonus 25 referidos")
-            stats.current_tier = RewardTier.TIER_4
-            stats.next_tier_refs_needed = 50 - total
-            stats.premium_unlocked = True
-            logger.info(f"💎 User {user_id} reached TIER 4: +{bonus} coins + Premium")
+        Args:
+            user_id: ID del usuario
+            platform: Plataforma destino
+            bot_username: Username del bot
         
-        # Tier 5: 50 refs + legend
-        if total >= 50 and (not stats.current_tier or stats.current_tier.value < RewardTier.TIER_5.value):
-            bonus = REFERRAL_REWARDS[RewardTier.TIER_5]
-            retention_manager.add_coins(user_id, bonus, reason="Bonus 50 referidos")
-            stats.current_tier = RewardTier.TIER_5
-            stats.legend_unlocked = True
-            logger.info(f"⚡ User {user_id} reached TIER 5: +{bonus} coins + LEGEND")
+        Returns:
+            Mensaje formateado con link
+        """
+        link = self.get_referral_link(user_id, bot_username)
+        template = SHARE_MESSAGES.get(platform, SHARE_MESSAGES[SharePlatform.TELEGRAM])
+        return template.format(link=link)
     
     def get_user_stats(self, user_id: int) -> Optional[ReferralStats]:
         """Obtiene stats de referidos del usuario."""
         return self.stats.get(user_id)
     
-    def get_leaderboard(self, limit: int = 10) -> List[Tuple[int, int]]:
-        """Obtiene top referrers."""
-        sorted_users = sorted(
+    def get_leaderboard(self, limit: int = 10) -> List[Tuple[int, ReferralStats]]:
+        """
+        Obtiene leaderboard de top referrers.
+        
+        Args:
+            limit: Número de resultados
+        
+        Returns:
+            Lista de (user_id, ReferralStats) ordenada
+        """
+        sorted_stats = sorted(
             self.stats.items(),
-            key=lambda x: x[1].completed_referrals,
+            key=lambda x: x[1].active_referrals,
             reverse=True
         )
-        return [(user_id, stats.completed_referrals) for user_id, stats in sorted_users[:limit]]
-    
-    def get_viral_coefficient(self) -> float:
-        """
-        Calcula K-factor (viral coefficient).
-        
-        K = (# invites sent per user) × (conversion rate)
-        K > 1 = exponential growth
-        """
-        if not self.stats:
-            return 0.0
-        
-        total_users = len(self.stats)
-        total_invites = sum(s.total_referrals for s in self.stats.values())
-        total_conversions = sum(s.completed_referrals for s in self.stats.values())
-        
-        if total_invites == 0:
-            return 0.0
-        
-        avg_invites = total_invites / total_users
-        conversion_rate = total_conversions / total_invites
-        
-        k_factor = avg_invites * conversion_rate
-        
-        return k_factor
+        return sorted_stats[:limit]
 
 
 if __name__ == '__main__':
     # 🧪 Tests rápidos
-    print("🧪 Testing ReferralManager...\n")
+    print("🧪 Testing ViralGrowthManager...\n")
     
-    mgr = ReferralManager('test_codes.json', 'test_refs.json', 'test_stats.json')
+    mgr = ViralGrowthManager(
+        'test_ref_codes.json',
+        'test_referrals.json',
+        'test_ref_stats.json'
+    )
     
     # Test 1: Generate code
     print("1. Generating referral code...")
-    code = mgr.get_or_create_referral_code(12345, "juan")
+    code = mgr.generate_referral_code(12345)
     print(f"   Code: {code}\n")
     
-    # Test 2: Validate code
-    print("2. Validating code...")
-    valid, error = mgr.validate_referral_code(code)
-    print(f"   Valid: {valid}\n")
+    # Test 2: Process referral
+    print("2. Processing referral...")
+    success, msg = mgr.process_referral(67890, code, 'telegram')
+    print(f"   Success: {success}")
+    print(f"   Message: {msg}\n")
     
-    # Test 3: Register referral
-    print("3. Registering referral...")
-    success, error = mgr.register_referral(code, 67890, "maria")
-    print(f"   Success: {success}\n")
+    # Test 3: Activate referral
+    print("3. Activating referral...")
+    coins = mgr.activate_referral(67890)
+    print(f"   Coins earned: {coins}\n")
     
-    # Test 4: Stats
-    print("4. Getting stats...")
+    # Test 4: Get stats
+    print("4. Getting user stats...")
     stats = mgr.get_user_stats(12345)
-    if stats:
-        print(f"   Total referrals: {stats.total_referrals}")
-        print(f"   Pending: {stats.pending_referrals}\n")
+    print(f"   Total referrals: {stats.total_referrals}")
+    print(f"   Active: {stats.active_referrals}")
+    print(f"   Tier: {stats.current_tier.value}\n")
     
-    # Test 5: Viral coefficient
-    print("5. Calculating K-factor...")
-    k = mgr.get_viral_coefficient()
-    print(f"   K-factor: {k:.2f}\n")
+    # Test 5: Generate link
+    print("5. Generating referral link...")
+    link = mgr.get_referral_link(12345, 'CazadorSupremoBot')
+    print(f"   Link: {link}\n")
     
     print("✅ All tests completed!")
