@@ -1,13 +1,13 @@
-# 🚀 Cazador Supremo v13.0 Enterprise
+# 🚀 Cazador Supremo v13.1 Enterprise
 
 ![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)
-![Version](https://img.shields.io/badge/version-13.0.0-green)
+![Version](https://img.shields.io/badge/version-13.1.0-green)
 ![Status](https://img.shields.io/badge/status-production_ready-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-**Sistema profesional de monitorización de vuelos con IA, gamificación y retención de usuarios**
+**Sistema profesional de monitorización de vuelos con IA, gamificación, retención y crecimiento viral**
 
-*Última verificación de permisos: 15 de enero de 2026*
+*Última actualización: 15 de enero de 2026, 23:45 CET*
 
 ---
 
@@ -36,11 +36,184 @@
 - ✅ **Smart Notifications** - IA aprende hora óptima
 - ✅ **Background Tasks** - Automation completa
 - ✅ **Interactive Onboarding** - TTFV <90s
-- ✅ **Quick Actions Bar** - 1-tap access ✨ NEW
+- ✅ **Quick Actions Bar** - 1-tap access
+
+### 🔥 Viral Growth System (IT5) **✨ NEW - COMPLETE**
+- ✅ **Referral System** - Sistema bilateral con anti-fraude
+- ✅ **Deal Sharing** - Links únicos rastreables
+- ✅ **Group Hunting** - Caza colaborativa de chollos
+- ✅ **Leaderboards** - Rankings competitivos con premios
+- ✅ **Social Sharing** - Botones multi-platform
+- ✅ **Viral Mechanics** - K-factor tracking
+- ✅ **Season System** - Temporadas con recompensas
+- ✅ **Milestone Rewards** - Premios por hitos virales
 
 ---
 
-## ⚡ Quick Actions Bar **✨ NEW**
+## 👥 Sistema de Referidos
+
+### Códigos de Referido Únicos
+
+Cada usuario obtiene un código único:
+```
+VUELOS-A3F9-X7K2
+```
+
+**Recompensas Tier-Based**:
+
+| Tier | Referrer Gana | Referee Gana | Bonus Referrer | Bonus Referee |
+|------|---------------|--------------|----------------|---------------|
+| 🥉 Bronze | 500 coins | 300 coins | +3 búsquedas | +1 watchlist slot |
+| 🥈 Silver | 750 coins | 400 coins | +5 búsquedas | +2 watchlist slots |
+| 🥇 Gold | 1000 coins | 500 coins | +10 búsquedas | +5 watchlist slots |
+| 💎 Diamond | 1500 coins | 750 coins | Ilimitadas 7d | +10 watchlist slots |
+
+### Milestones de Referidos
+
+- **5 referidos**: +1000 coins bonus 🎖️
+- **10 referidos**: +2500 coins + Badge 🏆
+- **25 referidos**: +5000 coins + Feature exclusiva 👑
+- **50 referidos**: +10000 coins + VIP Status 💎
+
+### Anti-Fraude
+
+- ✅ No auto-referirse
+- ✅ Un referido por usuario
+- ✅ Máx 50 usos por código
+- ✅ Rate limiting por dispositivo
+- ✅ Activación tras primera búsqueda
+
+---
+
+## 🔗 Compartir Chollos
+
+### Botones de Share
+
+Cada chollo incluye botones para compartir:
+
+```
+[📱 Telegram] [🟢 WhatsApp]
+[🐦 Twitter] [🔗 Copiar]
+```
+
+### Links Únicos Rastreables
+
+Formato del deep link:
+```
+https://t.me/VuelosRobot?start=deal_{short_code}
+```
+
+### Recompensas por Compartir
+
+| Acción | Coins | Frecuencia |
+|--------|-------|------------|
+| Compartir deal | 50 | Por share |
+| Primeros 3 shares | +100 | Bonus inicial |
+| 5+ conversiones | +500 | Viral bonus |
+
+### Analytics de Sharing
+
+- **Click-through rate** - % de clicks vs shares
+- **Conversion rate** - % de signups vs clicks
+- **Viral reach** - Total usuarios alcanzados
+- **Platform performance** - Métricas por red social
+
+---
+
+## 👥 Caza Grupal
+
+### Tipos de Grupos
+
+1. **🌍 Público** - Cualquiera puede unirse
+2. **🔒 Privado** - Solo por invitación
+3. **✈️ Ruta Específica** - Enfocado en una ruta
+4. **🌏 Destino** - Enfocado en un destino
+
+### Sistema de Puntos
+
+| Acción | Puntos |
+|--------|--------|
+| Contribuir deal | 100 |
+| Deal reclamado por otro | +50 |
+| Invitar miembro | 25 |
+
+### Roles en el Grupo
+
+- **👑 Owner** - Creador del grupo
+- **🛡️ Admin** - Administrador
+- **🎯 Hunter** - Miembro activo
+- **👁️ Observer** - Solo observa
+
+### Features
+
+- ✅ Notificaciones instantáneas a todos los miembros
+- ✅ Leaderboard interno por grupo
+- ✅ Filtros por ruta y precio máximo
+- ✅ Umbral mínimo de ahorro configurable
+- ✅ Analytics de contribuciones
+
+---
+
+## 🏆 Leaderboards Competitivos
+
+### Categorías de Competición
+
+1. **🔍 Deals Found** - Más chollos encontrados
+2. **💰 Total Savings** - Más ahorro generado
+3. **👥 Referrals** - Más referidos activos
+4. **📤 Shares** - Más compartidas virales
+5. **👥 Group Activity** - Más activo en grupos
+6. **🔥 Streak Master** - Mayor racha diaria
+7. **💸 Coins Earned** - Más coins acumulados
+
+### Temporadas
+
+- **📅 Semanal** - 7 días
+- **📆 Mensual** - 30 días
+- **📅 Trimestral** - 90 días
+- **📅 Anual** - 365 días
+
+### Premios por Ranking
+
+| Posición | Coins | Badge | Perks |
+|----------|-------|-------|-------|
+| 🥇 #1 | 5000 | Champion | VIP 30d + Custom Badge |
+| 🥈 #2 | 3000 | Runner-up | VIP 15d |
+| 🥉 #3 | 2000 | Third Place | VIP 7d |
+| 🏆 #4-10 | 1000 | Top 10 | - |
+| ⭐ #11-50 | 500 | Top 50 | - |
+
+---
+
+## 📈 KPIs Viral Growth (IT5)
+
+### Objetivos de Viralidad
+
+| Métrica | Baseline | Target IT5 | Mejora |
+|---------|----------|------------|--------|
+| **Viral Coefficient (K)** | 0.0 | **1.2** | Viral 🚀 |
+| **Referral Rate** | 0% | **15%** | +15pp ✨ |
+| **Share Rate** | 0% | **20%** | +20pp 🔥 |
+| **Group Formation** | 0 | **50+** | 50 grupos |
+| **Avg Referrals/User** | 0 | **2.5** | 2.5x 📈 |
+| **Click-Through Rate** | N/A | **>30%** | ✅ |
+| **Conversion Rate** | N/A | **>10%** | ✅ |
+| **Season Participation** | N/A | **>40%** | ✅ |
+
+### Cálculo del Viral Coefficient
+
+```
+K = Avg Referrals per User × Conversion Rate
+
+Ejemplo:
+K = 2.5 referrals × 0.40 (40% conversion) = 1.0
+
+K > 1.0 = Crecimiento viral exponencial 🚀
+```
+
+---
+
+## ⏩ Quick Actions Bar
 
 ### Acceso Rápido 1-Tap
 
@@ -50,14 +223,6 @@ Barra de acciones rápidas siempre visible:
 [🔍 Scan] [💰 Deals] [⭐ Watchlist]
 [📈 Perfil] [🔥 Daily] [⚙️ Config]
 ```
-
-**Features**:
-- ✅ **Persistent Keyboard** - Siempre visible
-- ✅ **Smart Context** - Botones adaptativos
-- ✅ **Badge Counts** - Número de items en watchlist
-- ✅ **Highlight Actions** - Daily reward disponible
-- ✅ **Analytics Tracking** - Mide engagement
-- ✅ **3 Layouts** - Compact/Standard/Extended
 
 **Mejoras**:
 - Reduce clicks: **3→1** (≢70% menos fricción)
@@ -110,272 +275,103 @@ python cazador_supremo_enterprise.py
 /help         - Ayuda
 ```
 
-### Retention Commands **🆕 NEW**
+### Retention Commands
 ```
 /daily        - Reclama reward diario (50-200 coins)
 /watchlist    - Gestiona tu watchlist personal
-  • add ROUTE PRICE  - Añadir ruta (ej: MAD-MIA 450)
-  • view             - Ver tu lista
-  • remove ROUTE     - Eliminar ruta
 /profile      - Ver perfil completo y stats
 /shop         - Tienda virtual de FlightCoins
 ```
 
----
-
-## 🎮 Sistema de Gamificación
-
-### FlightCoins Economy
-
-**Gana Coins Por**:
-
-| Acción | Coins | Frecuencia |
-|--------|-------|------------|
-| Daily login | 50-200 | Diario |
-| Streak bonus | +10/día | Por racha |
-| Primera búsqueda | 10 | Cada 10 |
-| Deal encontrado | 100 | Por deal |
-| Deal aprovechado | 500 | Manual |
-| Referir amigo | 500 | Por referido |
-| Achievement | 1000 | Por logro |
-| Compartir deal | 50 | Por share |
-| Onboarding | 200 | Una vez |
-
-### Tier System
-
-#### 🥉 BRONZE (0-500 coins)
-- 🔍 Búsquedas: 3/día
-- 📍 Watchlist: 5 slots
-- 🔔 Alertas custom: 2
-
-#### 🥈 SILVER (500-2000 coins)
-- 🔍 Búsquedas: 10/día
-- 📍 Watchlist: 15 slots
-- 🔔 Alertas custom: 5
-
-#### 🥇 GOLD (2000-5000 coins)
-- 🔍 Búsquedas: Unlimited
-- 📍 Watchlist: 30 slots
-- 🔔 Alertas custom: 15
-
-#### 💎 DIAMOND (5000+ coins)
-- 🔍 Búsquedas: Unlimited
-- 📍 Watchlist: 50 slots
-- 🔔 Alertas custom: Unlimited
-- 👑 Priority support
-
-### Achievement System
-
-| Achievement | Requisito | Coins |
-|-------------|-----------|-------|
-| 🌅 **Early Bird** | Búsqueda antes 7am | 1000 |
-| 🎯 **Deal Hunter** | 10 deals encontrados | 1000 |
-| 🌍 **Globe Trotter** | 20 rutas diferentes | 1000 |
-| ⚡ **Speed Demon** | 100 búsquedas/mes | 1000 |
-| 💰 **Money Saver** | Ahorraste €1000+ | 1000 |
-| 🔥 **Week Warrior** | 7 días de streak | 1000 |
-| 🏆 **Month Master** | 30 días de streak | 1000 |
-| 👑 **Referral King** | 10 referidos | 1000 |
-| ⚡ **Power User** | 500 comandos totales | 1000 |
-
----
-
-## 🔔 Smart Notifications
-
-### Tipos de Notificaciones
-
-1. **🚨 CRITICAL - Price Drop**
-   - Watchlist alert instantánea
-   - <5 min latency
-   - Bypass quiet hours (configurable)
-
-2. **🔔 HIGH - Daily Reminder**
-   - Recordatorio personalizado
-   - Hora óptima aprendida
-   - Solo si tiene streak
-
-3. **📅 MEDIUM - Weekly Summary**
-   - Resumen semanal (Lunes 20:00)
-   - Stats personalizadas
-   - Achievements recientes
-
-4. **💡 LOW - Tips & Tricks**
-   - Consejos de uso
-   - Features nuevas
-   - Fill notification slots
-
-### Rate Limiting
+### Viral Growth Commands **🆕 NEW**
 ```
-FREE TIER: 3 notificaciones/día
-PREMIUM: 10 notificaciones/día
-
-Quiet Hours: 22:00-08:00 (configurable)
-Priority Queue: CRITICAL > HIGH > MEDIUM > LOW
+/refer        - Obtén tu código de referido
+/myref        - Ver stats de tus referidos
+/groups       - Explorar grupos de caza
+/creategroup  - Crear grupo de caza
+/joingroup    - Unirse a un grupo
+/leaderboard  - Ver rankings globales
+/season       - Info de temporada actual
 ```
-
-### Optimal Send Time
-El sistema aprende la mejor hora para notificar a cada usuario:
-- Analiza actividad histórica (30 días)
-- Calcula peak hour de actividad
-- Envía 5 min antes del peak
-- Personalizado por usuario
-
----
-
-## ⏰ Background Tasks
-
-### Tareas Automatizadas
-
-1. **Watchlist Monitor** (cada 30 min)
-   - Escanea precios actuales
-   - Compara con thresholds
-   - Envía alertas de price drops
-   - Update watchlist items
-
-2. **Daily Reminder** (cada 1 hora)
-   - Verifica usuarios sin claim
-   - Solo si tienen streak activo
-   - Envía a hora óptima
-   - Rate limiting automático
-
-3. **Midnight Reset** (00:00 diario)
-   - Reset rate limits
-   - Limpia cache expirado
-   - Purge old notifications
-   - Stats reset
-
-4. **Weekly Summary** (Lunes 20:00)
-   - Genera resumen personalizado
-   - Stats de la semana
-   - Achievements desbloqueados
-   - Motivación customizada
-
----
-
-## 🎉 Interactive Onboarding
-
-### Flow de 3 Pasos (<90s)
-
-**Step 1: ¿Dónde viajas?**
-```
-🇪🇺 Europa  🇺🇸 USA  🌏 Asia  🌎 Latam
-```
-→ Auto-configura rutas favoritas
-
-**Step 2: ¿Tu presupuesto?**
-```
-🟢 Económico (<€300)  🟡 Moderado (€300-600)  🔵 Premium (>€600)
-```
-→ Ajusta watchlist thresholds
-
-**Step 3: ¡Tus primeros deals!**
-```
-🔍 Buscando vuelos personalizados...
-✅ 3 deals encontrados
-📍 Añadidos a tu watchlist
-```
-→ First value inmediato
-
-**Completado**:
-```
-✅ +200 FlightCoins de bienvenida
-🏆 Badge "Early Adopter" desbloqueado
-⏱️ Completado en 65 segundos
-```
-
-### Targets
-- **TTFV**: <90 segundos
-- **Completion Rate**: >75%
-- **Drop-off**: <10% per step
-- **Satisfaction**: >4.5/5
-
----
-
-## 📊 KPIs y Métricas
-
-### Objetivos IT4 - Retention
-
-| Métrica | Actual | Target IT4 | Mejora |
-|---------|--------|------------|--------|
-| **Day 7 Retention** | 35% | **60%** | +71% ✨ |
-| **Day 30 Retention** | 7% | **25%** | +257% 🚀 |
-| **Daily Active Users** | Baseline | **+200%** | 3x 🔥 |
-| **Session Length** | 2 min | **5 min** | +150% ⚡ |
-| **Commands/User** | 3/week | **10/week** | +233% |
-| **TTFV (Onboarding)** | N/A | **<90s** | ✅ |
-| **Completion Rate** | N/A | **>75%** | ✅ |
-| **Clicks to Action** | 3 | **1** | -67% ✨ |
-| **Engagement Rate** | Baseline | **+50%** | ✅ |
-
-### Notificaciones
-
-| Métrica | Target | Status |
-|---------|--------|--------|
-| **Open Rate** | >40% | ✅ Hora óptima |
-| **CTR** | >25% | ✅ Accionable |
-| **Unsubscribe Rate** | <2% | ✅ Rate limiting |
-| **Delivery Success** | >98% | ✅ Queue + retry |
-| **Latency (Price Alerts)** | <5 min | ✅ 30min monitor |
 
 ---
 
 ## 📋 Release Notes
 
+### v13.1.0 - IT5: VIRAL GROWTH LOOPS (2026-01-15) **✅ COMPLETADO**
+
+#### 📅 DAY 1/5 - Sistema de Referidos
+**Archivos**: `viral_growth_system.py` (19.4 KB)
+
+**Features**:
+- ✅ ReferralManager class
+- ✅ Códigos únicos por usuario
+- ✅ Recompensas tier-based
+- ✅ Anti-fraude completo
+- ✅ Milestones system
+- ✅ Viral coefficient tracking
+
+#### 📅 DAY 2/5 - Compartir Chollos
+**Archivos**: `deal_sharing_system.py` (20.6 KB)
+
+**Features**:
+- ✅ DealSharingManager class
+- ✅ Botones multi-platform
+- ✅ Links únicos rastreables
+- ✅ Deep links de Telegram
+- ✅ Analytics de viralidad
+- ✅ Recompensas por compartir
+
+#### 📅 DAY 3/5 - Caza Grupal
+**Archivos**: `group_hunting.py` (13.1 KB)
+
+**Features**:
+- ✅ GroupHuntingManager class
+- ✅ 4 tipos de grupos
+- ✅ Sistema de puntos
+- ✅ Roles y permisos
+- ✅ Leaderboard interno
+- ✅ Notificaciones grupales
+
+#### 📅 DAY 4/5 - Leaderboards Competitivos
+**Archivos**: `competitive_leaderboards.py` (13.0 KB)
+
+**Features**:
+- ✅ CompetitiveLeaderboardManager class
+- ✅ 7 categorías de competición
+- ✅ 4 tipos de temporadas
+- ✅ Sistema de premios automático
+- ✅ Distribución de recompensas
+- ✅ Rankings tier-based
+
+#### 📅 DAY 5/5 - Social Sharing Engine
+**Archivos**: `social_sharing.py` (16.5 KB)
+
+**Features**:
+- ✅ SocialSharingManager class
+- ✅ Message templates A/B tested
+- ✅ Social proof integration
+- ✅ Share incentives
+- ✅ Platform performance analytics
+- ✅ Viral mechanics optimizadas
+
+**Stats IT5 FINAL**:
+- 📁 **5 archivos Python** (82.6 KB código)
+- 💻 **7 comandos nuevos**
+- 👥 **Sistema de referidos completo**
+- 🔗 **Sharing viral integrado**
+- 👥 **Grupos colaborativos**
+- 🏆 **Leaderboards competitivos**
+- 📈 **K-factor tracking**
+
+**Progreso**: **✅ 100%** (5/5 días completados)
+**Status**: **🚀 PRODUCTION READY**
+
+---
+
 ### v13.0.0 - IT4: RETENTION HOOKS (2026-01-14) **✅ COMPLETADO**
 
-#### 📅 DAY 1/5 - Sistema Base
-**Archivos**: `retention_system.py` (21.3 KB)
-
-**Features**:
-- ✅ Hook Model implementation
-- ✅ FlightCoins economy
-- ✅ Tier system (4 niveles)
-- ✅ Achievement system (9 tipos)
-- ✅ Personal Watchlist
-- ✅ Daily Rewards + Streaks
-
-#### 📅 DAY 2/5 - Comandos Integrados
-**Archivos**: `bot_commands_retention.py` (14.3 KB), `README_IT4.md` (10.7 KB)
-
-**Features**:
-- ✅ Comando `/daily`
-- ✅ Comando `/watchlist`
-- ✅ Comando `/profile`
-- ✅ Comando `/shop`
-
-#### 📅 DAY 3/5 - Smart Notifications
-**Archivos**: `smart_notifications.py` (19.6 KB), `background_tasks.py` (18.3 KB)
-
-**Features**:
-- ✅ SmartNotifier class
-- ✅ Optimal send time learning
-- ✅ Priority queue (4 niveles)
-- ✅ Rate limiting
-- ✅ 5 Background tasks
-
-#### 📅 DAY 4/5 - Onboarding Flow
-**Archivos**: `onboarding_flow.py` (18.0 KB)
-
-**Features**:
-- ✅ OnboardingManager class
-- ✅ 3-Step wizard interactivo
-- ✅ First value <90s
-- ✅ Completion tracking
-
-#### 📅 DAY 5/5 - Quick Actions Bar **✨ FINAL**
-**Archivos**: `quick_actions.py` (14.5 KB)
-
-**Features**:
-- ✅ QuickActionsManager class
-- ✅ Persistent inline keyboard
-- ✅ 7 botones de acción rápida
-- ✅ Smart context adaptation
-- ✅ Badge counts & highlights
-- ✅ Analytics tracking
-- ✅ 3 layouts (compact/standard/extended)
-- ✅ Reduce clicks 3→1
-
-**Stats IT4 FINAL**:
+**Stats IT4**:
 - 📁 **7 archivos Python** (135+ KB código)
 - 💻 **9 comandos nuevos**
 - 🎮 **Gamificación completa**
@@ -384,28 +380,6 @@ El sistema aprende la mejor hora para notificar a cada usuario:
 - 🎉 **Onboarding interactivo**
 - ⚡ **Quick Actions Bar**
 
-**Progreso**: **✅ 100%** (5/5 días completados)
-**Status**: **🚀 PRODUCTION READY**
-
----
-
-### v12.2.0 - IT3: DEALS & TRENDS (2026-01-13)
-**Features**:
-- ✅ DealsManager
-- ✅ TrendsAnalyzer
-- ✅ Auto-detection chollos
-
-### v12.1.0 - IT2: PERSONALIZACION (2026-01-12)
-**Features**:
-- ✅ Comando `/route` personalizado
-- ✅ Multi-currency EUR/USD/GBP
-
-### v12.0.0 - IT1: FOUNDATION (2026-01-11)
-**Features**:
-- ✅ SerpAPI integration
-- ✅ ML Smart Predictor
-- ✅ TTL Cache
-
 ---
 
 ## 💾 Arquitectura de Archivos
@@ -413,46 +387,28 @@ El sistema aprende la mejor hora para notificar a cada usuario:
 ```
 vuelosrobot/
 ├── cazador_supremo_enterprise.py     # Bot principal
-├── retention_system.py              # Sistema de retención
-├── bot_commands_retention.py        # Comandos retención
-├── smart_notifications.py           # Notificaciones IA
-├── background_tasks.py              # Tareas background
-├── onboarding_flow.py               # Onboarding interactivo
-├── quick_actions.py                 # Quick Actions Bar ✨ NEW
+├── retention_system.py              # Sistema de retención (IT4)
+├── bot_commands_retention.py        # Comandos retención (IT4)
+├── smart_notifications.py           # Notificaciones IA (IT4)
+├── background_tasks.py              # Tareas background (IT4)
+├── onboarding_flow.py               # Onboarding (IT4)
+├── quick_actions.py                 # Quick Actions (IT4)
+├── viral_growth_system.py           # Referidos (IT5) ✨ NEW
+├── deal_sharing_system.py           # Sharing (IT5) ✨ NEW
+├── group_hunting.py                 # Grupos (IT5) ✨ NEW
+├── competitive_leaderboards.py      # Leaderboards (IT5) ✨ NEW
+├── social_sharing.py                # Social (IT5) ✨ NEW
 ├── config.json                      # Configuración
 ├── user_profiles.json               # Perfiles usuarios
-├── user_activity.json               # Analytics actividad
-├── notification_queue.json          # Cola notificaciones
-├── onboarding_progress.json         # Progreso onboarding
-├── quick_actions_analytics.json     # Analytics QA ✨ NEW
-├── deals_history.csv                # Histórico precios
+├── referral_codes.json              # Códigos referido ✨ NEW
+├── referral_relationships.json      # Relaciones ✨ NEW
+├── shared_deals.json                # Deals compartidos ✨ NEW
+├── share_links.json                 # Links de share ✨ NEW
+├── hunting_groups.json              # Grupos de caza ✨ NEW
+├── leaderboards.json                # Rankings ✨ NEW
+├── seasons.json                     # Temporadas ✨ NEW
 ├── README.md                        # Este archivo
-├── README_IT4.md                    # Docs IT4 detalladas
 └── requirements.txt                 # Dependencias
-```
-
----
-
-## 🔧 Configuración
-
-### config.json
-```json
-{
-  "telegram": {
-    "token": "YOUR_BOT_TOKEN",
-    "chat_id": "YOUR_CHAT_ID"
-  },
-  "apis": {
-    "serpapi_key": "YOUR_SERPAPI_KEY"
-  },
-  "flights": [
-    {"origin": "MAD", "dest": "BCN", "name": "Madrid-Barcelona"},
-    {"origin": "MAD", "dest": "MIA", "name": "Madrid-Miami"}
-  ],
-  "alert_min": 500,
-  "deal_threshold_pct": 20,
-  "auto_scan": true
-}
 ```
 
 ---
@@ -468,21 +424,31 @@ vuelosrobot/
 - ✅ Interactive onboarding
 - ✅ Quick Actions Bar
 
-### 🔮 IT5/11 - VIRAL GROWTH LOOPS (SIGUIENTE)
-**Features planeadas**:
-- Two-sided referral system
-- Share deal button con links
-- Group deal hunting
-- Leaderboard con prizes
-- Achievement sharing
+### ✅ IT5/11 - VIRAL GROWTH LOOPS (COMPLETADO)
+**Features**:
+- ✅ Two-sided referral system
+- ✅ Share deal button con links
+- ✅ Group deal hunting
+- ✅ Leaderboard con prizes
+- ✅ Social sharing engine
 
-### 🔮 IT6/11 - FREEMIUM CONVERSION
+### 🔮 IT6/11 - FREEMIUM CONVERSION (SIGUIENTE)
 **Features planeadas**:
 - Smart paywalls
 - In-app premium trial
 - Value metrics dashboard
 - Smart upgrade prompts
 - Flexible pricing
+- Feature gating
+- Premium analytics
+
+### 🔮 IT7/11 - ADVANCED ANALYTICS
+**Features planeadas**:
+- User cohort analysis
+- Funnel optimization
+- A/B testing framework
+- Predictive churn modeling
+- Revenue forecasting
 
 ---
 
@@ -506,4 +472,4 @@ MIT License - Ver LICENSE file
 
 ---
 
-🎉 **Hecho con ❤️ para maximizar ahorro en vuelos y retención de usuarios**
+🎉 **Hecho con ❤️ para maximizar ahorro en vuelos, retención y crecimiento viral**
