@@ -2,18 +2,19 @@
 # -*- coding: utf-8 -*-
 """
 ═════════════════════════════════════════════════════════════════════════════
-║       🎆 CAZADOR SUPREMO v12.2 ENTERPRISE EDITION 🎆                    ║
-║   🚀 Sistema Profesional de Monitorización de Vuelos 2026 🚀           ║
+║       🎆 CAZADOR SUPREMO v13.0 ENTERPRISE EDITION 🎆                    ║
+║   🚀 Sistema Profesional de Monitorización de Vuelos + Retention 2026 🚀║
 ═════════════════════════════════════════════════════════════════════════════
 
-👨‍💻 Autor: @Juanka_Spain | 🏷️ v12.2.0 Enterprise | 📅 2026-01-14 | 📋 MIT License
+👨‍💻 Autor: @Juanka_Spain | 🏷️ v13.0.0 Enterprise | 📅 2026-01-15 | 📋 MIT License
 
-🌟 ENTERPRISE FEATURES V12.2 - COMPLETO (3 ITERACIONES):
-✅ /route - Búsqueda personalizada    ✅ /deals - Detección chollos       ✅ /trends - Análisis tendencias
-✅ Auto-Scan Scheduler             ✅ Notificaciones automáticas      ✅ Búsqueda flexible ±3d
-✅ DealsManager                    ✅ TrendsAnalyzer                 ✅ ML 50+ rutas
-✅ Multi-Currency EUR/USD/GBP      ✅ SerpAPI Real Integration       ✅ Circuit Breaker
-✅ TTL Cache + /clearcache         ✅ Health Monitoring              ✅ Inline Keyboards
+🌟 ENTERPRISE FEATURES V13.0 - IT4 RETENTION COMPLETE:
+✅ Hook Model Completo               ✅ FlightCoins Economy           ✅ Tier System (4 niveles)
+✅ Achievement System (9 tipos)      ✅ Daily Rewards + Streaks       ✅ Personal Watchlist
+✅ Smart Notifications IA            ✅ Background Tasks (5)          ✅ Interactive Onboarding
+✅ Quick Actions Bar                 ✅ /daily command               ✅ /watchlist command
+✅ /profile command                  ✅ Auto-Scan Scheduler          ✅ Deals Detection
+✅ Trends Analysis                   ✅ Multi-Currency EUR/USD/GBP   ✅ SerpAPI Real Integration
 
 📦 Dependencies: python-telegram-bot>=20.0 pandas requests colorama
 🚀 Usage: python cazador_supremo_enterprise.py
@@ -34,6 +35,19 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from telegram.constants import ChatAction
 
+# Importar módulos de retención
+try:
+    from retention_system import RetentionManager, UserTier, AchievementType, TIER_BENEFITS
+    from bot_commands_retention import RetentionCommandHandler
+    from smart_notifications import SmartNotifier
+    from background_tasks import BackgroundTaskManager
+    from onboarding_flow import OnboardingManager
+    from quick_actions import QuickActionsManager
+    RETENTION_ENABLED = True
+except ImportError as e:
+    print(f"⚠️ Módulos de retención no disponibles: {e}")
+    RETENTION_ENABLED = False
+
 try:
     from colorama import init, Fore, Style
     init(autoreset=True)
@@ -52,7 +66,7 @@ if sys.platform == 'win32':
     except: pass
 
 # CONFIG
-VERSION = "12.2.0 Enterprise"
+VERSION = "13.0.0 Enterprise"
 APP_NAME = "Cazador Supremo"
 CONFIG_FILE, LOG_FILE, CSV_FILE = "config.json", "cazador_supremo.log", "deals_history.csv"
 MAX_WORKERS, API_TIMEOUT = 25, 15
@@ -454,9 +468,25 @@ class TelegramBotManager:
         self.config, self.scanner, self.data_mgr = config, scanner, data_mgr
         self.deals_mgr = DealsManager(data_mgr, config)
         self.app, self.running = None, False
+        
+        # Inicializar módulos de retención si están disponibles
+        if RETENTION_ENABLED:
+            try:
+                self.retention_mgr = RetentionManager()
+                self.smart_notifier = SmartNotifier(config.bot_token)
+                self.background_tasks = None  # Se inicializa después del start
+                self.onboarding_mgr = OnboardingManager()
+                self.quick_actions_mgr = QuickActionsManager()
+                self.retention_cmds = None  # Se inicializa después del start
+                logger.info("✅ Módulos de retención cargados correctamente")
+            except Exception as e:
+                logger.error(f"❌ Error cargando módulos de retención: {e}")
+                RETENTION_ENABLED = False
     
     async def start(self):
         self.app = Application.builder().token(self.config.bot_token).build()
+        
+        # Comandos core
         self.app.add_handler(CommandHandler('start', self.cmd_start))
         self.app.add_handler(CommandHandler('scan', self.cmd_scan))
         self.app.add_handler(CommandHandler('route', self.cmd_route))
@@ -465,16 +495,45 @@ class TelegramBotManager:
         self.app.add_handler(CommandHandler('clearcache', self.cmd_clearcache))
         self.app.add_handler(CommandHandler('status', self.cmd_status))
         self.app.add_handler(CommandHandler('help', self.cmd_help))
+        
+        # Comandos de retención
+        if RETENTION_ENABLED:
+            self.retention_cmds = RetentionCommandHandler(
+                self.retention_mgr, 
+                self.scanner,
+                self.deals_mgr
+            )
+            self.app.add_handler(CommandHandler('daily', self.cmd_daily))
+            self.app.add_handler(CommandHandler('watchlist', self.cmd_watchlist))
+            self.app.add_handler(CommandHandler('profile', self.cmd_profile))
+            self.app.add_handler(CommandHandler('shop', self.cmd_shop))
+            
+            # Inicializar background tasks
+            self.background_tasks = BackgroundTaskManager(
+                self.app.bot,
+                self.retention_mgr,
+                self.scanner,
+                self.smart_notifier
+            )
+        
         self.app.add_handler(CallbackQueryHandler(self.handle_callback))
+        
         self.running = True
         await self.app.initialize()
         await self.app.start()
         await self.app.updater.start_polling(drop_pending_updates=True)
+        
+        # Iniciar tareas automáticas
         if self.config.auto_scan_enabled:
             asyncio.create_task(self.auto_scan_loop())
+        
+        if RETENTION_ENABLED and self.background_tasks:
+            await self.background_tasks.start()
     
     async def stop(self):
         self.running = False
+        if RETENTION_ENABLED and self.background_tasks:
+            await self.background_tasks.stop()
         if self.app:
             if self.app.updater and self.app.updater.running:
                 await self.app.updater.stop()
@@ -502,32 +561,74 @@ class TelegramBotManager:
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = update.effective_message
         if not msg: return
+        user = update.effective_user
+        
         await context.bot.send_chat_action(chat_id=msg.chat_id, action=ChatAction.TYPING)
+        
+        # Check si es nuevo usuario y hacer onboarding
+        if RETENTION_ENABLED:
+            profile = self.retention_mgr.get_or_create_profile(user.id, user.username or "user")
+            
+            # Si es nuevo (sin búsquedas), iniciar onboarding
+            if profile.total_searches == 0:
+                await self.onboarding_mgr.start_onboarding(update, context, self.retention_mgr)
+                return
+        
         welcome = (
             f"🎆 *{APP_NAME} v{VERSION}* 🎆\n\n"
-            "*Comandos disponibles:*\n"
+            "*Comandos Core:*\n"
             "/scan - Escanear rutas\n"
             "/route - Búsqueda personalizada\n"
             "/deals - Ver chollos\n"
             "/trends - Análisis tendencias\n"
             "/clearcache - Limpiar caché\n"
             "/status - Estado sistema\n"
-            "/help - Ayuda"
+            "/help - Ayuda\n"
         )
+        
+        if RETENTION_ENABLED:
+            welcome += (
+                "\n*Comandos Gamificación:* 🎮\n"
+                "/daily - Reward diario 💰\n"
+                "/watchlist - Tu watchlist 📍\n"
+                "/profile - Tu perfil 📊\n"
+                "/shop - Tienda FlightCoins 🛒"
+            )
+        
         keyboard = [
             [InlineKeyboardButton("🔍 Escanear", callback_data="scan")],
             [InlineKeyboardButton("💰 Chollos", callback_data="deals")],
             [InlineKeyboardButton("📈 Tendencias", callback_data="trends")]
         ]
+        
+        if RETENTION_ENABLED:
+            keyboard.append([InlineKeyboardButton("🎁 Reward Diario", callback_data="daily")])
+            keyboard.append([InlineKeyboardButton("📊 Mi Perfil", callback_data="profile")])
+        
         await msg.reply_text(welcome, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
+        
+        # Mostrar Quick Actions Bar si está disponible
+        if RETENTION_ENABLED:
+            qa_keyboard = self.quick_actions_mgr.get_keyboard(user.id, self.retention_mgr)
+            if qa_keyboard:
+                await msg.reply_text("⚡ *Acciones Rápidas*", parse_mode='Markdown', reply_markup=qa_keyboard)
     
     async def cmd_scan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = update.effective_message
         if not msg: return
+        user = update.effective_user
+        
         await context.bot.send_chat_action(chat_id=msg.chat_id, action=ChatAction.TYPING)
         await msg.reply_text("🔍 Iniciando escaneo...")
+        
         routes = [FlightRoute(**f) for f in self.config.flights]
         prices = self.scanner.scan_routes(routes)
+        
+        if RETENTION_ENABLED:
+            # Track búsqueda
+            for route in routes:
+                self.retention_mgr.track_search(user.id, user.username or "user", route.route_code)
+        
         if prices:
             self.data_mgr.save_prices(prices)
             response = "✅ *Escaneo completado*\n\n"
@@ -542,15 +643,25 @@ class TelegramBotManager:
     async def cmd_route(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = update.effective_message
         if not msg: return
+        user = update.effective_user
+        
         await context.bot.send_chat_action(chat_id=msg.chat_id, action=ChatAction.TYPING)
+        
         if not context.args or len(context.args) < 3:
             await msg.reply_text("⚠️ Uso: /route MAD BCN 2026-02-15")
             return
+        
         origin, dest, date = context.args[0].upper(), context.args[1].upper(), context.args[2]
+        
         try:
             route = FlightRoute(origin=origin, dest=dest, name=f"{origin}-{dest}")
+            
+            if RETENTION_ENABLED:
+                self.retention_mgr.track_search(user.id, user.username or "user", route.route_code)
+            
             await msg.reply_text(f"🔍 Buscando vuelos {origin} → {dest} para {date} (±3 días)...")
             prices = self.scanner.scan_route_flexible(route, date)
+            
             if prices:
                 response = f"✅ *Encontrados {len(prices)} vuelos*\n\n"
                 for i, p in enumerate(prices, 1):
@@ -566,12 +677,25 @@ class TelegramBotManager:
     async def cmd_deals(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = update.effective_message
         if not msg: return
+        user = update.effective_user
+        
         await context.bot.send_chat_action(chat_id=msg.chat_id, action=ChatAction.TYPING)
         await msg.reply_text("🔍 Buscando chollos...")
+        
         routes = [FlightRoute(**f) for f in self.config.flights]
         prices = self.scanner.scan_routes(routes)
         deals = self.deals_mgr.find_deals(prices)
+        
         if deals:
+            if RETENTION_ENABLED:
+                # Track deals encontrados
+                for deal in deals[:3]:
+                    self.retention_mgr.track_deal_found(
+                        user.id, 
+                        user.username or "user",
+                        deal.flight_price.price * deal.savings_pct / 100
+                    )
+            
             for deal in deals[:3]:
                 await msg.reply_text(deal.get_message(), parse_mode='Markdown')
         else:
@@ -580,12 +704,16 @@ class TelegramBotManager:
     async def cmd_trends(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = update.effective_message
         if not msg: return
+        
         await context.bot.send_chat_action(chat_id=msg.chat_id, action=ChatAction.TYPING)
+        
         if not context.args:
             await msg.reply_text("⚠️ Uso: /trends MAD-MIA")
             return
+        
         route_code = context.args[0].upper()
         trend = self.data_mgr.get_price_trend(route_code, days=30)
+        
         if trend:
             emoji = "📉" if trend['trend'] == 'down' else "📈"
             response = (
@@ -609,47 +737,121 @@ class TelegramBotManager:
     async def cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = update.effective_message
         if not msg: return
+        
         cache_size = self.scanner.cache.size
         hit_rate = self.scanner.cache.hit_rate
+        
         msg_text = (
             "📊 *Estado del Sistema*\n\n"
             f"🗃️ Caché: {cache_size} items ({hit_rate:.1%} hit rate)\n"
             f"⚡ Circuit: {self.scanner.circuit.state.value}"
         )
+        
+        if RETENTION_ENABLED:
+            total_users = len(self.retention_mgr.profiles)
+            msg_text += f"\n👥 Usuarios: {total_users}"
+            if self.background_tasks:
+                msg_text += "\n✅ Background tasks: Activas"
+        
         await msg.reply_text(msg_text, parse_mode='Markdown')
     
     async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = update.effective_message
         if not msg: return
+        
         help_text = (
             f"📚 *Ayuda - {APP_NAME}*\n\n"
-            "*Comandos:*\n"
+            "*Comandos Core:*\n"
             "/start - Iniciar bot\n"
             "/scan - Escanear todas las rutas\n"
             "/route MAD BCN 2026-02-15 - Búsqueda personalizada\n"
             "/deals - Ver chollos disponibles\n"
             "/trends MAD-MIA - Tendencias de precio\n"
             "/clearcache - Limpiar caché\n"
-            "/status - Estado del sistema\n\n"
-            f"_Versión: {VERSION}_"
+            "/status - Estado del sistema\n"
         )
+        
+        if RETENTION_ENABLED:
+            help_text += (
+                "\n*Comandos Gamificación:* 🎮\n"
+                "/daily - Reclama reward diario (50-200 coins)\n"
+                "/watchlist add MAD-MIA 450 - Añadir a watchlist\n"
+                "/watchlist view - Ver tu watchlist\n"
+                "/profile - Ver tu perfil y estadísticas\n"
+                "/shop - Tienda de FlightCoins\n"
+            )
+        
+        help_text += f"\n_Versión: {VERSION}_"
+        
         await msg.reply_text(help_text, parse_mode='Markdown')
+    
+    # Comandos de retención
+    async def cmd_daily(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not RETENTION_ENABLED:
+            await update.effective_message.reply_text("⚠️ Sistema de retención no disponible")
+            return
+        await self.retention_cmds.handle_daily(update, context)
+    
+    async def cmd_watchlist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not RETENTION_ENABLED:
+            await update.effective_message.reply_text("⚠️ Sistema de retención no disponible")
+            return
+        await self.retention_cmds.handle_watchlist(update, context)
+    
+    async def cmd_profile(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not RETENTION_ENABLED:
+            await update.effective_message.reply_text("⚠️ Sistema de retención no disponible")
+            return
+        await self.retention_cmds.handle_profile(update, context)
+    
+    async def cmd_shop(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not RETENTION_ENABLED:
+            await update.effective_message.reply_text("⚠️ Sistema de retención no disponible")
+            return
+        await self.retention_cmds.handle_shop(update, context)
     
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         if not query: return
         await query.answer()
+        
+        # Callbacks core
         if query.data == "scan":
             await self.cmd_scan(update, context)
         elif query.data == "deals":
             await self.cmd_deals(update, context)
         elif query.data == "trends":
             await query.message.reply_text("⚠️ Usa: /trends MAD-MIA")
+        
+        # Callbacks de retención
+        elif RETENTION_ENABLED:
+            if query.data == "daily":
+                await self.cmd_daily(update, context)
+            elif query.data == "profile":
+                await self.cmd_profile(update, context)
+            elif query.data.startswith("qa_"):
+                # Quick Actions callbacks
+                await self.quick_actions_mgr.handle_callback(
+                    update, context, self.retention_mgr, self.scanner, self.deals_mgr
+                )
+            elif query.data.startswith("onb_"):
+                # Onboarding callbacks
+                await self.onboarding_mgr.handle_callback(
+                    update, context, self.retention_mgr
+                )
 
 async def main():
     print(f"\n{'='*80}")
     print(f"{f'{APP_NAME} v{VERSION}'.center(80)}")
     print(f"{'='*80}\n")
+    
+    if RETENTION_ENABLED:
+        print("✅ Módulos de retención: ACTIVOS")
+        print("   🎮 Hook Model | 💰 FlightCoins | 🏆 Achievements")
+        print("   🔔 Smart Notifications | ⏰ Background Tasks")
+        print("   🎉 Onboarding | ⚡ Quick Actions\n")
+    else:
+        print("⚠️ Módulos de retención: NO DISPONIBLES\n")
     
     try:
         config = ConfigManager()
