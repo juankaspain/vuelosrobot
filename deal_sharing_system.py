@@ -1,601 +1,556 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-┌────────────────────────────────────────────────────────────────┐
-│  📤 DEAL SHARING SYSTEM - Social Amplification             │
-│  🚀 Cazador Supremo v13.0 Enterprise                          │
-│  🎯 Target: Share Rate >15% | Viral Reach 3x               │
-└────────────────────────────────────────────────────────────────┘
+Deal Sharing System - IT5 Day 2/5
+Sistema de compartir chollos con links únicos y analytics
 
-Sistema para compartir deals socialmente:
-- Share buttons con deep links
-- Multi-platform templates
-- Attribution tracking
-- Share rewards
-- Viral analytics
-
-Autor: @Juanka_Spain
-Version: 13.0.0
-Date: 2026-01-14
+Author: @Juanka_Spain
+Version: 13.1.0
+Date: 2026-01-15
 """
 
 import json
-import logging
 import hashlib
+import secrets
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass, field, asdict
-from enum import Enum
-from urllib.parse import quote
+from dataclasses import dataclass, asdict
+from pathlib import Path
+from urllib.parse import urlencode
 
-logger = logging.getLogger(__name__)
-
-
-# ═══════════════════════════════════════════════════════════════
-#  CONSTANTS & ENUMS
-# ═══════════════════════════════════════════════════════════════
-
-class SharePlatform(Enum):
-    """Plataformas para compartir"""
-    WHATSAPP = "whatsapp"
-    TELEGRAM = "telegram"
-    TWITTER = "twitter"
-    FACEBOOK = "facebook"
-    EMAIL = "email"
-    COPY_LINK = "copy_link"
-
-
-class ShareEventType(Enum):
-    """Tipos de eventos de share"""
-    CREATED = "created"      # Share link creado
-    CLICKED = "clicked"      # Link clickeado
-    CONVERTED = "converted"  # Usuario se registró
-    USED = "used"            # Deal usado
-
-
-# Rewards
-SHARE_REWARDS = {
-    'share_created': 50,     # Coins por compartir
-    'share_clicked': 0,      # No reward por click
-    'share_converted': 100,  # Bonus si se registra
-    'share_used': 200,       # Bonus si usa el deal
-    'viral_multiplier': 500, # Bonus si 5+ clicks
-    'share_10_bonus': 500    # Bonus por 10 shares
-}
-
-# Deep link config
-BOT_USERNAME = "CazadorSupremoBot"  # Cambiar por tu bot
-DEEP_LINK_EXPIRY_DAYS = 7
-
-
-# ═══════════════════════════════════════════════════════════════
-#  DATA CLASSES
-# ═══════════════════════════════════════════════════════════════
 
 @dataclass
-class SharedDeal:
-    """Deal compartido"""
-    share_id: str              # ID único del share
-    deal_id: str               # ID del deal original
-    sharer_id: int             # Usuario que comparte
-    sharer_username: str
-    
-    # Deal info
-    route: str                 # ej: MAD-MIA
+class Deal:
+    """Representa un chollo de vuelo"""
+    deal_id: str
+    route: str
+    origin: str
+    destination: str
     price: float
-    savings: float
-    
-    # Tracking
+    currency: str
+    airline: str
+    departure_date: str
+    return_date: Optional[str]
+    url: str
     created_at: str
     expires_at: str
+    savings_pct: float
     
-    # Stats
-    total_clicks: int = 0
-    unique_clicks: int = 0
-    conversions: int = 0
-    deals_used: int = 0
-    
-    # Rewards
-    coins_earned: int = 0
-    
-    # Metadata
-    platform: Optional[SharePlatform] = None
-    
-    def to_dict(self) -> Dict:
-        data = asdict(self)
-        if self.platform:
-            data['platform'] = self.platform.value
-        return data
-    
-    @classmethod
-    def from_dict(cls, data: Dict) -> 'SharedDeal':
-        if data.get('platform'):
-            data['platform'] = SharePlatform(data['platform'])
-        return cls(**data)
+
+@dataclass
+class ShareLink:
+    """Link único para compartir un deal"""
+    link_id: str
+    deal_id: str
+    sharer_id: int
+    sharer_username: str
+    short_code: str
+    full_url: str
+    created_at: str
+    clicks: int = 0
+    conversions: int = 0  # Usuarios que usaron el bot tras el click
+    rewards_earned: int = 0
 
 
 @dataclass
 class ShareEvent:
-    """Evento de share"""
-    event_type: ShareEventType
-    share_id: str
-    user_id: Optional[int]      # Usuario que interactúa
+    """Evento de compartir un deal"""
+    event_id: str
+    link_id: str
+    deal_id: str
+    sharer_id: int
+    platform: str  # telegram, whatsapp, twitter, facebook, copy
     timestamp: str
-    
-    # Metadata
-    ip_address: Optional[str] = None
-    user_agent: Optional[str] = None
-    
-    def to_dict(self) -> Dict:
-        return {
-            **asdict(self),
-            'event_type': self.event_type.value
-        }
-    
-    @classmethod
-    def from_dict(cls, data: Dict) -> 'ShareEvent':
-        data['event_type'] = ShareEventType(data['event_type'])
-        return cls(**data)
+    clicked_by: Optional[int] = None
+    converted: bool = False
 
 
-@dataclass
-class ShareStats:
-    """Estadísticas de shares por usuario"""
-    user_id: int
-    
-    # Contadores
-    total_shares: int = 0
-    total_clicks: int = 0
-    total_conversions: int = 0
-    total_deals_used: int = 0
-    
-    # Rewards
-    total_coins_earned: int = 0
-    
-    # Achievements
-    share_master_unlocked: bool = False
-    viral_champion_unlocked: bool = False
-    
-    def to_dict(self) -> Dict:
-        return asdict(self)
-    
-    @classmethod
-    def from_dict(cls, data: Dict) -> 'ShareStats':
-        return cls(**data)
-
-
-# ═══════════════════════════════════════════════════════════════
-#  DEAL SHARE MANAGER
-# ═══════════════════════════════════════════════════════════════
-
-class DealShareManager:
+class DealSharingManager:
     """
-    Gestor del sistema de compartir deals.
+    Gestor del sistema de compartir chollos.
     
-    Responsabilidades:
-    - Crear share links
-    - Track eventos
-    - Distribuir rewards
-    - Analytics
+    Features:
+    - Botones de share por deal
+    - Links únicos rastreables
+    - Deep links para Telegram
+    - Analytics de viralidad
+    - Recompensas por compartir
     """
     
-    def __init__(self,
-                 shares_file: str = 'shared_deals.json',
-                 events_file: str = 'share_events.json',
-                 stats_file: str = 'share_stats.json'):
-        self.shares_file = Path(shares_file)
-        self.events_file = Path(events_file)
-        self.stats_file = Path(stats_file)
+    def __init__(self, data_dir: str = ".", bot_username: str = "VuelosRobot"):
+        self.data_dir = Path(data_dir)
+        self.bot_username = bot_username
+        self.deals_file = self.data_dir / "shared_deals.json"
+        self.links_file = self.data_dir / "share_links.json"
+        self.events_file = self.data_dir / "share_events.json"
+        self.analytics_file = self.data_dir / "share_analytics.json"
         
-        # Data structures
-        self.shares: Dict[str, SharedDeal] = {}    # share_id -> SharedDeal
+        self.deals: Dict[str, Deal] = {}
+        self.links: Dict[str, ShareLink] = {}
         self.events: List[ShareEvent] = []
-        self.stats: Dict[int, ShareStats] = {}     # user_id -> ShareStats
+        self.analytics: Dict = self._init_analytics()
         
         self._load_data()
-        
-        logger.info("📤 DealShareManager initialized")
+    
+    def _init_analytics(self) -> Dict:
+        """Inicializa estructura de analytics"""
+        return {
+            "total_deals_shared": 0,
+            "total_shares": 0,
+            "total_clicks": 0,
+            "total_conversions": 0,
+            "click_through_rate": 0.0,
+            "conversion_rate": 0.0,
+            "viral_reach": 0,
+            "top_sharers": [],
+            "platform_breakdown": {},
+            "most_shared_deals": [],
+            "last_updated": datetime.now().isoformat()
+        }
     
     def _load_data(self):
-        """Carga datos desde archivos."""
-        # Load shares
-        if self.shares_file.exists():
-            try:
-                with open(self.shares_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                
-                for share_id, share_data in data.items():
-                    self.shares[share_id] = SharedDeal.from_dict(share_data)
-                
-                logger.info(f"✅ Loaded {len(self.shares)} shared deals")
-            except Exception as e:
-                logger.error(f"❌ Error loading shares: {e}")
+        """Carga datos desde archivos JSON"""
+        if self.deals_file.exists():
+            with open(self.deals_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                self.deals = {k: Deal(**v) for k, v in data.items()}
         
-        # Load events
+        if self.links_file.exists():
+            with open(self.links_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                self.links = {k: ShareLink(**v) for k, v in data.items()}
+        
         if self.events_file.exists():
-            try:
-                with open(self.events_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                
-                self.events = [ShareEvent.from_dict(e) for e in data]
-                
-                logger.info(f"✅ Loaded {len(self.events)} share events")
-            except Exception as e:
-                logger.error(f"❌ Error loading events: {e}")
+            with open(self.events_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                self.events = [ShareEvent(**item) for item in data]
         
-        # Load stats
-        if self.stats_file.exists():
-            try:
-                with open(self.stats_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                
-                for user_id_str, stats_data in data.items():
-                    user_id = int(user_id_str)
-                    self.stats[user_id] = ShareStats.from_dict(stats_data)
-                
-                logger.info(f"✅ Loaded stats for {len(self.stats)} users")
-            except Exception as e:
-                logger.error(f"❌ Error loading stats: {e}")
+        if self.analytics_file.exists():
+            with open(self.analytics_file, 'r', encoding='utf-8') as f:
+                self.analytics = json.load(f)
     
     def _save_data(self):
-        """Guarda datos a archivos."""
-        try:
-            # Save shares
-            with open(self.shares_file, 'w', encoding='utf-8') as f:
-                data = {sid: share.to_dict() for sid, share in self.shares.items()}
-                json.dump(data, f, indent=2, ensure_ascii=False)
-            
-            # Save events
-            with open(self.events_file, 'w', encoding='utf-8') as f:
-                data = [e.to_dict() for e in self.events]
-                json.dump(data, f, indent=2, ensure_ascii=False)
-            
-            # Save stats
-            with open(self.stats_file, 'w', encoding='utf-8') as f:
-                data = {str(uid): stats.to_dict() for uid, stats in self.stats.items()}
-                json.dump(data, f, indent=2, ensure_ascii=False)
-            
-            logger.debug("💾 Share data saved")
-        except Exception as e:
-            logger.error(f"❌ Error saving data: {e}")
-    
-    def _generate_share_id(self, deal_id: str, user_id: int) -> str:
-        """Genera ID único para share."""
-        timestamp = datetime.now().isoformat()
-        raw = f"{deal_id}_{user_id}_{timestamp}"
-        return hashlib.md5(raw.encode()).hexdigest()[:12]
-    
-    def create_share(self,
-                    deal_id: str,
-                    user_id: int,
-                    username: str,
-                    route: str,
-                    price: float,
-                    savings: float,
-                    platform: Optional[SharePlatform] = None) -> SharedDeal:
-        """
-        Crea nuevo share de un deal.
+        """Guarda datos en archivos JSON"""
+        with open(self.deals_file, 'w', encoding='utf-8') as f:
+            data = {k: asdict(v) for k, v in self.deals.items()}
+            json.dump(data, f, indent=2, ensure_ascii=False)
         
-        Returns:
-            SharedDeal con deep link generado
-        """
-        share_id = self._generate_share_id(deal_id, user_id)
+        with open(self.links_file, 'w', encoding='utf-8') as f:
+            data = {k: asdict(v) for k, v in self.links.items()}
+            json.dump(data, f, indent=2, ensure_ascii=False)
         
-        # Create shared deal
-        shared_deal = SharedDeal(
-            share_id=share_id,
+        with open(self.events_file, 'w', encoding='utf-8') as f:
+            data = [asdict(e) for e in self.events]
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        
+        with open(self.analytics_file, 'w', encoding='utf-8') as f:
+            json.dump(self.analytics, f, indent=2, ensure_ascii=False)
+    
+    def create_deal(self, **kwargs) -> Deal:
+        """
+        Crea un nuevo deal para compartir.
+        """
+        deal_id = hashlib.md5(
+            f"{kwargs['route']}{kwargs['price']}{datetime.now()}".encode()
+        ).hexdigest()[:12]
+        
+        deal = Deal(
             deal_id=deal_id,
-            sharer_id=user_id,
-            sharer_username=username,
-            route=route,
-            price=price,
-            savings=savings,
+            route=kwargs['route'],
+            origin=kwargs['origin'],
+            destination=kwargs['destination'],
+            price=kwargs['price'],
+            currency=kwargs.get('currency', 'EUR'),
+            airline=kwargs['airline'],
+            departure_date=kwargs['departure_date'],
+            return_date=kwargs.get('return_date'),
+            url=kwargs['url'],
             created_at=datetime.now().isoformat(),
-            expires_at=(datetime.now() + timedelta(days=DEEP_LINK_EXPIRY_DAYS)).isoformat(),
-            platform=platform
+            expires_at=(datetime.now() + timedelta(days=3)).isoformat(),
+            savings_pct=kwargs.get('savings_pct', 0)
         )
         
-        self.shares[share_id] = shared_deal
-        
-        # Track event
-        self._track_event(
-            ShareEventType.CREATED,
-            share_id,
-            user_id
-        )
-        
-        # Update stats
-        if user_id not in self.stats:
-            self.stats[user_id] = ShareStats(user_id=user_id)
-        self.stats[user_id].total_shares += 1
-        
-        # Award coins
-        coins = SHARE_REWARDS['share_created']
-        self.stats[user_id].total_coins_earned += coins
-        shared_deal.coins_earned += coins
-        
-        # Check bonus
-        if self.stats[user_id].total_shares >= 10:
-            if not self.stats[user_id].share_master_unlocked:
-                bonus = SHARE_REWARDS['share_10_bonus']
-                self.stats[user_id].total_coins_earned += bonus
-                self.stats[user_id].share_master_unlocked = True
-                logger.info(f"🏆 User {user_id} unlocked Share Master: +{bonus} coins")
-        
+        self.deals[deal_id] = deal
         self._save_data()
         
-        logger.info(
-            f"📤 Share created: {share_id} by {username} for {route} @ €{price:.0f}"
+        return deal
+    
+    def generate_share_link(
+        self, 
+        deal_id: str, 
+        sharer_id: int, 
+        sharer_username: str
+    ) -> ShareLink:
+        """
+        Genera un link único para compartir un deal.
+        
+        Formato del deep link:
+        https://t.me/{bot_username}?start=deal_{short_code}
+        """
+        if deal_id not in self.deals:
+            raise ValueError(f"Deal {deal_id} no existe")
+        
+        # Generar short code único
+        short_code = secrets.token_urlsafe(8)
+        link_id = f"{deal_id}_{sharer_id}_{short_code}"
+        
+        # Crear deep link de Telegram
+        full_url = f"https://t.me/{self.bot_username}?start=deal_{short_code}"
+        
+        share_link = ShareLink(
+            link_id=link_id,
+            deal_id=deal_id,
+            sharer_id=sharer_id,
+            sharer_username=sharer_username,
+            short_code=short_code,
+            full_url=full_url,
+            created_at=datetime.now().isoformat()
         )
         
-        return shared_deal
-    
-    def get_deep_link(self, share_id: str) -> str:
-        """Genera deep link para share."""
-        return f"https://t.me/{BOT_USERNAME}?start=deal_{share_id}"
-    
-    def get_share_message(self,
-                         shared_deal: SharedDeal,
-                         platform: SharePlatform) -> str:
-        """
-        Genera mensaje optimizado por plataforma.
+        self.links[link_id] = share_link
+        self._save_data()
         
-        Args:
-            shared_deal: Deal compartido
-            platform: Plataforma destino
+        return share_link
+    
+    def create_share_buttons(self, deal_id: str, user_id: int) -> List[Dict]:
+        """
+        Crea botones de compartir para un deal.
         
         Returns:
-            Mensaje formateado
+            Lista de botones en formato Telegram InlineKeyboard
         """
-        link = self.get_deep_link(shared_deal.share_id)
+        if deal_id not in self.deals:
+            return []
         
-        if platform == SharePlatform.WHATSAPP:
-            return (
-                f"✈️ *¡CHOLLO DE VUELO!* ✈️\n\n"
-                f"📍 {shared_deal.route}\n"
-                f"💰 Precio: €{shared_deal.price:.0f}\n"
-                f"💸 Ahorro: €{shared_deal.savings:.0f}\n\n"
-                f"👉 Ver deal: {link}\n\n"
-                f"_Compartido por @{shared_deal.sharer_username}_"
-            )
+        deal = self.deals[deal_id]
         
-        elif platform == SharePlatform.TELEGRAM:
-            return (
-                f"🚨 *¡DEAL ENCONTRADO!* 🚨\n\n"
-                f"✈️ Ruta: *{shared_deal.route}*\n"
-                f"💰 Precio: *€{shared_deal.price:.0f}*\n"
-                f"💸 Ahorro: *€{shared_deal.savings:.0f}* ({(shared_deal.savings/shared_deal.price*100):.0f}%)\n\n"
-                f"👉 [Ver y reservar]({link})\n\n"
-                f"👤 Compartido por @{shared_deal.sharer_username}\n"
-                f"_Encuentra más chollos con @{BOT_USERNAME}_"
-            )
+        # Generar link único para este usuario
+        share_link = self.generate_share_link(
+            deal_id=deal_id,
+            sharer_id=user_id,
+            sharer_username=f"user_{user_id}"
+        )
         
-        elif platform == SharePlatform.TWITTER:
-            hashtags = "#Vuelos #Chollos #Viajes"
-            savings_pct = (shared_deal.savings / shared_deal.price * 100)
-            return (
-                f"✈️ ¡{shared_deal.route} por solo €{shared_deal.price:.0f}! "
-                f"Ahorra {savings_pct:.0f}% (€{shared_deal.savings:.0f}) \n\n"
-                f"{link}\n\n"
-                f"{hashtags}"
-            )
+        # Texto para compartir
+        share_text = (
+            f"🔥 ¡CHOLLO! {deal.route}\n"
+            f"✈️ {deal.airline}\n"
+            f"💰 {deal.price}{deal.currency} (-{deal.savings_pct:.0f}%)\n"
+            f"📅 {deal.departure_date}\n\n"
+            f"¡Mira este chollo que encontré! 🚀"
+        )
         
-        elif platform == SharePlatform.EMAIL:
-            return (
-                f"Hola,\n\n"
-                f"He encontrado un chollo de vuelo que te puede interesar:\n\n"
-                f"Ruta: {shared_deal.route}\n"
-                f"Precio: €{shared_deal.price:.0f}\n"
-                f"Ahorro: €{shared_deal.savings:.0f}\n\n"
-                f"Ver deal completo: {link}\n\n"
-                f"Saludos,\n"
-                f"@{shared_deal.sharer_username}"
-            )
+        buttons = [
+            [
+                {
+                    "text": "📱 Compartir en Telegram",
+                    "url": f"https://t.me/share/url?url={share_link.full_url}&text={share_text}"
+                }
+            ],
+            [
+                {
+                    "text": "💚 WhatsApp",
+                    "url": f"https://wa.me/?text={share_text}%0A{share_link.full_url}"
+                },
+                {
+                    "text": "🐦 Twitter",
+                    "url": f"https://twitter.com/intent/tweet?text={share_text}&url={share_link.full_url}"
+                }
+            ],
+            [
+                {
+                    "text": "🔗 Copiar Link",
+                    "callback_data": f"copy_link:{share_link.link_id}"
+                }
+            ]
+        ]
         
-        else:  # COPY_LINK / DEFAULT
-            return link
+        return buttons
     
-    def get_whatsapp_share_url(self, share_id: str) -> str:
-        """Genera URL de WhatsApp para compartir."""
-        shared_deal = self.shares.get(share_id)
-        if not shared_deal:
-            return ""
+    def track_share_event(
+        self,
+        link_id: str,
+        platform: str,
+        clicked_by: Optional[int] = None
+    ) -> ShareEvent:
+        """
+        Registra un evento de compartir.
         
-        message = self.get_share_message(shared_deal, SharePlatform.WHATSAPP)
-        encoded = quote(message)
-        return f"https://wa.me/?text={encoded}"
-    
-    def _track_event(self,
-                    event_type: ShareEventType,
-                    share_id: str,
-                    user_id: Optional[int] = None,
-                    ip_address: Optional[str] = None,
-                    user_agent: Optional[str] = None):
-        """Registra evento de share."""
+        Platforms: telegram, whatsapp, twitter, facebook, copy
+        """
+        if link_id not in self.links:
+            raise ValueError(f"Link {link_id} no existe")
+        
+        share_link = self.links[link_id]
+        
+        event_id = hashlib.md5(
+            f"{link_id}{platform}{datetime.now()}".encode()
+        ).hexdigest()[:12]
+        
         event = ShareEvent(
-            event_type=event_type,
-            share_id=share_id,
-            user_id=user_id,
+            event_id=event_id,
+            link_id=link_id,
+            deal_id=share_link.deal_id,
+            sharer_id=share_link.sharer_id,
+            platform=platform,
             timestamp=datetime.now().isoformat(),
-            ip_address=ip_address,
-            user_agent=user_agent
+            clicked_by=clicked_by
         )
         
         self.events.append(event)
-    
-    def track_click(self,
-                   share_id: str,
-                   user_id: Optional[int] = None,
-                   ip_address: Optional[str] = None) -> bool:
-        """
-        Registra click en share link.
+        self.analytics["total_shares"] += 1
         
-        Returns:
-            True si es válido, False si expirado
-        """
-        if share_id not in self.shares:
-            return False
-        
-        shared_deal = self.shares[share_id]
-        
-        # Check expiry
-        if datetime.now() > datetime.fromisoformat(shared_deal.expires_at):
-            return False
-        
-        # Update stats
-        shared_deal.total_clicks += 1
-        
-        # Track unique
-        # (simplificado - en producción usar set de user_ids)
-        if user_id:
-            shared_deal.unique_clicks += 1
-        
-        # Track event
-        self._track_event(
-            ShareEventType.CLICKED,
-            share_id,
-            user_id,
-            ip_address=ip_address
-        )
-        
-        # Update sharer stats
-        sharer_id = shared_deal.sharer_id
-        if sharer_id in self.stats:
-            self.stats[sharer_id].total_clicks += 1
-        
-        # Check viral multiplier (5+ clicks)
-        if shared_deal.total_clicks >= 5:
-            if shared_deal.coins_earned < SHARE_REWARDS['viral_multiplier'] + SHARE_REWARDS['share_created']:
-                bonus = SHARE_REWARDS['viral_multiplier']
-                shared_deal.coins_earned += bonus
-                self.stats[sharer_id].total_coins_earned += bonus
-                logger.info(f"🚀 Viral multiplier for share {share_id}: +{bonus} coins")
+        # Update platform breakdown
+        if platform not in self.analytics["platform_breakdown"]:
+            self.analytics["platform_breakdown"][platform] = 0
+        self.analytics["platform_breakdown"][platform] += 1
         
         self._save_data()
+        self._update_analytics()
+        
+        return event
+    
+    def track_click(self, short_code: str, clicked_by: int) -> Tuple[bool, Optional[Deal]]:
+        """
+        Registra un click en un link compartido.
+        
+        Returns:
+            (success, deal)
+        """
+        # Buscar link por short_code
+        link = None
+        for l in self.links.values():
+            if l.short_code == short_code:
+                link = l
+                break
+        
+        if not link:
+            return False, None
+        
+        # Incrementar clicks
+        link.clicks += 1
+        self.analytics["total_clicks"] += 1
+        
+        # Obtener deal
+        deal = self.deals.get(link.deal_id)
+        
+        self._save_data()
+        self._update_analytics()
+        
+        return True, deal
+    
+    def track_conversion(self, short_code: str, converted_user_id: int) -> bool:
+        """
+        Registra una conversión (usuario empezó a usar el bot).
+        """
+        # Buscar link
+        link = None
+        for l in self.links.values():
+            if l.short_code == short_code:
+                link = l
+                break
+        
+        if not link:
+            return False
+        
+        # Incrementar conversions
+        link.conversions += 1
+        self.analytics["total_conversions"] += 1
+        
+        # Recompensar al sharer
+        reward_coins = 50  # 50 coins por conversion
+        link.rewards_earned += reward_coins
+        
+        self._save_data()
+        self._update_analytics()
         
         return True
     
-    def track_conversion(self,
-                        share_id: str,
-                        user_id: int,
-                        retention_manager) -> int:
+    def get_user_share_stats(self, user_id: int) -> Dict:
         """
-        Registra conversión (usuario se registra vía share).
-        
-        Returns:
-            Coins otorgados al sharer
+        Obtiene estadísticas de shares de un usuario.
         """
-        if share_id not in self.shares:
-            return 0
+        user_links = [
+            link for link in self.links.values() 
+            if link.sharer_id == user_id
+        ]
         
-        shared_deal = self.shares[share_id]
-        shared_deal.conversions += 1
+        total_clicks = sum(link.clicks for link in user_links)
+        total_conversions = sum(link.conversions for link in user_links)
+        total_rewards = sum(link.rewards_earned for link in user_links)
         
-        # Track event
-        self._track_event(
-            ShareEventType.CONVERTED,
-            share_id,
-            user_id
-        )
+        # Calcular CTR
+        total_shares = len([
+            e for e in self.events 
+            if e.sharer_id == user_id
+        ])
         
-        # Award coins
-        sharer_id = shared_deal.sharer_id
-        coins = SHARE_REWARDS['share_converted']
-        
-        retention_manager.add_coins(
-            sharer_id,
-            coins,
-            reason=f"Conversión de share: @{user_id}"
-        )
-        
-        shared_deal.coins_earned += coins
-        
-        # Update stats
-        if sharer_id in self.stats:
-            self.stats[sharer_id].total_conversions += 1
-            self.stats[sharer_id].total_coins_earned += coins
-        
-        self._save_data()
-        
-        logger.info(f"🎉 Conversion tracked for share {share_id}: +{coins} coins")
-        
-        return coins
-    
-    def get_user_stats(self, user_id: int) -> Optional[ShareStats]:
-        """Obtiene stats de shares del usuario."""
-        return self.stats.get(user_id)
-    
-    def get_viral_metrics(self) -> Dict:
-        """Obtiene métricas virales globales."""
-        total_shares = len(self.shares)
-        total_clicks = sum(s.total_clicks for s in self.shares.values())
-        total_conversions = sum(s.conversions for s in self.shares.values())
-        
-        share_rate = 0
-        ctr = 0
-        conversion_rate = 0
-        
-        if total_shares > 0:
-            # Simplificado - en producción calcular vs total users
-            share_rate = total_shares / 100  # placeholder
-            
-            if total_shares > 0:
-                ctr = total_clicks / total_shares
-            
-            if total_clicks > 0:
-                conversion_rate = total_conversions / total_clicks
+        ctr = (total_clicks / total_shares * 100) if total_shares > 0 else 0
+        conv_rate = (total_conversions / total_clicks * 100) if total_clicks > 0 else 0
         
         return {
-            'total_shares': total_shares,
-            'total_clicks': total_clicks,
-            'total_conversions': total_conversions,
-            'share_rate': share_rate * 100,  # percentage
-            'ctr': ctr * 100,                # percentage
-            'conversion_rate': conversion_rate * 100,  # percentage
-            'viral_reach': total_clicks / max(total_shares, 1)  # avg reach per share
+            "total_deals_shared": len(user_links),
+            "total_shares": total_shares,
+            "total_clicks": total_clicks,
+            "total_conversions": total_conversions,
+            "total_rewards_earned": total_rewards,
+            "click_through_rate": ctr,
+            "conversion_rate": conv_rate,
+            "viral_reach": total_clicks + total_conversions
         }
+    
+    def _update_analytics(self):
+        """Actualiza métricas globales"""
+        total_shares = len(self.events)
+        total_clicks = self.analytics["total_clicks"]
+        total_conversions = self.analytics["total_conversions"]
+        
+        # CTR y Conversion Rate
+        if total_shares > 0:
+            self.analytics["click_through_rate"] = (
+                total_clicks / total_shares * 100
+            )
+        
+        if total_clicks > 0:
+            self.analytics["conversion_rate"] = (
+                total_conversions / total_clicks * 100
+            )
+        
+        # Viral reach
+        self.analytics["viral_reach"] = total_clicks + total_conversions
+        
+        # Top sharers
+        sharer_stats = {}
+        for link in self.links.values():
+            username = link.sharer_username
+            if username not in sharer_stats:
+                sharer_stats[username] = {
+                    "shares": 0,
+                    "clicks": 0,
+                    "conversions": 0
+                }
+            sharer_stats[username]["shares"] += 1
+            sharer_stats[username]["clicks"] += link.clicks
+            sharer_stats[username]["conversions"] += link.conversions
+        
+        self.analytics["top_sharers"] = sorted(
+            [
+                {"username": k, **v}
+                for k, v in sharer_stats.items()
+            ],
+            key=lambda x: x["conversions"],
+            reverse=True
+        )[:10]
+        
+        # Most shared deals
+        deal_shares = {}
+        for event in self.events:
+            deal_id = event.deal_id
+            if deal_id not in deal_shares:
+                deal_shares[deal_id] = 0
+            deal_shares[deal_id] += 1
+        
+        self.analytics["most_shared_deals"] = sorted(
+            [
+                {
+                    "deal_id": k,
+                    "route": self.deals[k].route if k in self.deals else "Unknown",
+                    "shares": v
+                }
+                for k, v in deal_shares.items()
+            ],
+            key=lambda x: x["shares"],
+            reverse=True
+        )[:10]
+        
+        self.analytics["last_updated"] = datetime.now().isoformat()
+    
+    def get_global_analytics(self) -> Dict:
+        """Retorna analytics globales"""
+        return self.analytics
+    
+    def cleanup_expired_deals(self) -> int:
+        """
+        Limpia deals expirados.
+        
+        Returns:
+            Número de deals eliminados
+        """
+        now = datetime.now()
+        expired_count = 0
+        
+        for deal_id in list(self.deals.keys()):
+            deal = self.deals[deal_id]
+            expires_at = datetime.fromisoformat(deal.expires_at)
+            
+            if now > expires_at:
+                del self.deals[deal_id]
+                expired_count += 1
+        
+        if expired_count > 0:
+            self._save_data()
+        
+        return expired_count
 
 
-if __name__ == '__main__':
-    # 🧪 Tests rápidos
-    print("🧪 Testing DealShareManager...\n")
+if __name__ == "__main__":
+    # Testing
+    print("🚀 Testing Deal Sharing System...")
     
-    mgr = DealShareManager('test_shares.json', 'test_events.json', 'test_share_stats.json')
+    manager = DealSharingManager(bot_username="VuelosRobot")
     
-    # Test 1: Create share
-    print("1. Creating share...")
-    share = mgr.create_share(
-        deal_id="deal_123",
-        user_id=12345,
-        username="juan",
+    # Crear deal
+    deal = manager.create_deal(
         route="MAD-MIA",
-        price=420,
-        savings=180,
-        platform=SharePlatform.TELEGRAM
+        origin="MAD",
+        destination="MIA",
+        price=450.0,
+        currency="EUR",
+        airline="Iberia",
+        departure_date="2026-03-15",
+        return_date="2026-03-22",
+        url="https://example.com/book",
+        savings_pct=25
     )
-    print(f"   Share ID: {share.share_id}\n")
     
-    # Test 2: Generate deep link
-    print("2. Generating deep link...")
-    link = mgr.get_deep_link(share.share_id)
-    print(f"   Link: {link}\n")
+    print(f"\n✅ Deal creado: {deal.deal_id}")
+    print(f"   Ruta: {deal.route}")
+    print(f"   Precio: {deal.price}{deal.currency}")
     
-    # Test 3: Generate message
-    print("3. Generating share message...")
-    message = mgr.get_share_message(share, SharePlatform.TELEGRAM)
-    print(f"   Message:\n{message}\n")
+    # Generar share link
+    share_link = manager.generate_share_link(
+        deal_id=deal.deal_id,
+        sharer_id=12345,
+        sharer_username="john_doe"
+    )
     
-    # Test 4: Track click
-    print("4. Tracking click...")
-    success = mgr.track_click(share.share_id, user_id=67890)
-    print(f"   Success: {success}")
-    print(f"   Total clicks: {mgr.shares[share.share_id].total_clicks}\n")
+    print(f"\n🔗 Share link generado:")
+    print(f"   Short code: {share_link.short_code}")
+    print(f"   URL: {share_link.full_url}")
     
-    # Test 5: Viral metrics
-    print("5. Getting viral metrics...")
-    metrics = mgr.get_viral_metrics()
-    print(f"   Total shares: {metrics['total_shares']}")
-    print(f"   Viral reach: {metrics['viral_reach']:.1f}x\n")
+    # Crear botones
+    buttons = manager.create_share_buttons(deal.deal_id, 12345)
+    print(f"\n🔘 Botones creados: {len(buttons)} filas")
     
-    print("✅ All tests completed!")
+    # Simular share
+    event = manager.track_share_event(
+        link_id=share_link.link_id,
+        platform="telegram"
+    )
+    print(f"\n✅ Share event tracked: {event.event_id}")
+    
+    # Simular click
+    success, clicked_deal = manager.track_click(
+        short_code=share_link.short_code,
+        clicked_by=67890
+    )
+    print(f"\n👆 Click tracked: {success}")
+    
+    # Stats
+    stats = manager.get_user_share_stats(12345)
+    print(f"\n📊 Stats de john_doe:")
+    print(f"   Deals compartidos: {stats['total_deals_shared']}")
+    print(f"   Total clicks: {stats['total_clicks']}")
+    print(f"   CTR: {stats['click_through_rate']:.1f}%")
+    
+    print("\n✅ Tests completados!")
