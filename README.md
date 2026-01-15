@@ -7,6 +7,8 @@
 
 **Sistema profesional de monitorización de vuelos con IA, gamificación y retención de usuarios**
 
+*Última verificación de permisos: 15 de enero de 2026*
+
 ---
 
 ## 🌟 Features Enterprise
