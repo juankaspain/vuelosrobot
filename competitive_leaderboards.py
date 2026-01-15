@@ -1,395 +1,590 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-┌────────────────────────────────────────────────────────────────┐
-│  🏆 COMPETITIVE LEADERBOARDS + VIRAL ANALYTICS           │
-│  🚀 Cazador Supremo v13.1 Enterprise                          │
-│  🎯 Complete Viral Growth System                           │
-└────────────────────────────────────────────────────────────────┘
+Competitive Leaderboards System - IT5 Day 4/5
+Sistema de rankings competitivos con premios y temporadas
 
-Leaderboards competitivos y analytics virales avanzados.
-
-Autor: @Juanka_Spain
+Author: @Juanka_Spain
 Version: 13.1.0
-Date: 2026-01-14
+Date: 2026-01-15
 """
 
 import json
-import logging
 from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass, asdict, field
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
-from dataclasses import dataclass, asdict
 from enum import Enum
-
-logger = logging.getLogger(__name__)
-
-
-class LeaderboardType(Enum):
-    REFERRALS = "referrals"
-    DEALS = "deals"
-    SAVINGS = "savings"
-    COINS = "coins"
+import hashlib
 
 
-class TimeFrame(Enum):
+class LeaderboardCategory(Enum):
+    """Categorías de leaderboards"""
+    DEALS_FOUND = "deals_found"  # Más chollos encontrados
+    SAVINGS_TOTAL = "savings_total"  # Más ahorro generado
+    REFERRALS = "referrals"  # Más referidos
+    SHARES = "shares"  # Más compartidas
+    GROUP_CONTRIBUTION = "group_contribution"  # Más activo en grupos
+    STREAK = "streak"  # Mayor racha diaria
+    COINS_EARNED = "coins_earned"  # Más coins ganados
+
+
+class SeasonType(Enum):
+    """Tipos de temporadas"""
     WEEKLY = "weekly"
     MONTHLY = "monthly"
-    ALL_TIME = "all_time"
-
-
-# Premios por posición
-WEEKLY_PRIZES = {
-    1: 5000, 2: 3000, 3: 2000, 4: 1000, 5: 750,
-    6: 600, 7: 550, 8: 525, 9: 510, 10: 500
-}
-
-MONTHLY_PRIZES = {
-    1: 20000, 2: 10000, 3: 5000
-}
+    QUARTERLY = "quarterly"
+    YEARLY = "yearly"
 
 
 @dataclass
 class LeaderboardEntry:
+    """Entrada en un leaderboard"""
     user_id: int
     username: str
     score: float
     rank: int
-    badge: Optional[str] = None
-    country: Optional[str] = None
+    tier: str
+    last_updated: str
+    metadata: Dict = field(default_factory=dict)
 
 
 @dataclass
-class ViralMetrics:
-    """Métricas virales agregadas"""
-    period_start: str
-    period_end: str
-    
-    # Core metrics
-    total_users: int = 0
-    new_users: int = 0
-    active_users: int = 0
-    
-    # Viral metrics
-    total_invites: int = 0
-    conversions: int = 0
-    viral_coefficient: float = 0.0
-    
-    # Channels
-    signups_by_channel: Dict[str, int] = None
-    
-    # Engagement
-    share_rate: float = 0.0
-    referral_rate: float = 0.0
-    
-    def __post_init__(self):
-        if self.signups_by_channel is None:
-            self.signups_by_channel = {}
-    
-    def calculate_k_coefficient(self, avg_invites_per_user: float):
-        """Calcula coeficiente viral K."""
-        if self.total_invites > 0:
-            conversion_rate = self.conversions / self.total_invites
-            self.viral_coefficient = avg_invites_per_user * conversion_rate
-        else:
-            self.viral_coefficient = 0.0
+class Prize:
+    """Premio para el leaderboard"""
+    rank_start: int
+    rank_end: int
+    coins: int
+    badge: Optional[str] = None
+    description: str = ""
+    special_perks: List[str] = field(default_factory=list)
+
+
+@dataclass
+class Season:
+    """Temporada competitiva"""
+    season_id: str
+    name: str
+    season_type: str
+    start_date: str
+    end_date: str
+    categories: List[str]
+    prizes: List[Prize] = field(default_factory=list)
+    is_active: bool = True
+    winners: Dict[str, List[int]] = field(default_factory=dict)  # category -> [user_ids]
+
+
+@dataclass
+class PrizeDistribution:
+    """Distribución de premios realizada"""
+    distribution_id: str
+    season_id: str
+    category: str
+    user_id: int
+    username: str
+    rank: int
+    prize: Prize
+    distributed_at: str
+    claimed: bool = False
 
 
 class CompetitiveLeaderboardManager:
     """
-    Gestor de leaderboards y analytics virales.
+    Gestor de leaderboards competitivos.
+    
+    Features:
+    - Múltiples categorías de competición
+    - Temporadas (semanal, mensual, trimestral, anual)
+    - Premios automáticos
+    - Anti-cheating
+    - Badges especiales
     """
     
-    def __init__(self,
-                 leaderboards_file: str = 'leaderboards.json',
-                 metrics_file: str = 'viral_metrics.json'):
-        self.leaderboards_file = Path(leaderboards_file)
-        self.metrics_file = Path(metrics_file)
+    def __init__(self, data_dir: str = "."):
+        self.data_dir = Path(data_dir)
+        self.leaderboards_file = self.data_dir / "leaderboards.json"
+        self.seasons_file = self.data_dir / "seasons.json"
+        self.distributions_file = self.data_dir / "prize_distributions.json"
+        self.analytics_file = self.data_dir / "leaderboard_analytics.json"
         
         self.leaderboards: Dict[str, List[LeaderboardEntry]] = {}
-        self.metrics_history: List[ViralMetrics] = []
+        self.seasons: Dict[str, Season] = {}
+        self.distributions: List[PrizeDistribution] = []
+        self.analytics: Dict = self._init_analytics()
         
         self._load_data()
-        
-        logger.info("🏆 CompetitiveLeaderboardManager initialized")
+        self._init_default_categories()
+    
+    def _init_analytics(self) -> Dict:
+        """Inicializa analytics"""
+        return {
+            "total_seasons": 0,
+            "total_prizes_distributed": 0,
+            "total_coins_awarded": 0,
+            "most_competitive_category": None,
+            "top_all_time_winners": [],
+            "last_updated": datetime.now().isoformat()
+        }
+    
+    def _init_default_categories(self):
+        """Inicializa categorías por defecto si no existen"""
+        for category in LeaderboardCategory:
+            if category.value not in self.leaderboards:
+                self.leaderboards[category.value] = []
     
     def _load_data(self):
-        """Carga datos."""
+        """Carga datos"""
         if self.leaderboards_file.exists():
-            try:
-                with open(self.leaderboards_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                for key, entries in data.items():
-                    self.leaderboards[key] = [
-                        LeaderboardEntry(**e) for e in entries
-                    ]
-                logger.info(f"✅ Loaded {len(self.leaderboards)} leaderboards")
-            except Exception as e:
-                logger.error(f"❌ Error loading leaderboards: {e}")
+            with open(self.leaderboards_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                self.leaderboards = {
+                    k: [LeaderboardEntry(**e) for e in v]
+                    for k, v in data.items()
+                }
         
-        if self.metrics_file.exists():
-            try:
-                with open(self.metrics_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                self.metrics_history = [ViralMetrics(**m) for m in data]
-                logger.info(f"✅ Loaded {len(self.metrics_history)} metrics periods")
-            except Exception as e:
-                logger.error(f"❌ Error loading metrics: {e}")
+        if self.seasons_file.exists():
+            with open(self.seasons_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                self.seasons = {
+                    k: Season(**{**v, 'prizes': [Prize(**p) for p in v.get('prizes', [])]})
+                    for k, v in data.items()
+                }
+        
+        if self.distributions_file.exists():
+            with open(self.distributions_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                self.distributions = [
+                    PrizeDistribution(**{**d, 'prize': Prize(**d['prize'])})
+                    for d in data
+                ]
+        
+        if self.analytics_file.exists():
+            with open(self.analytics_file, 'r', encoding='utf-8') as f:
+                self.analytics = json.load(f)
     
     def _save_data(self):
-        """Guarda datos."""
-        try:
-            # Leaderboards
+        """Guarda datos"""
+        with open(self.leaderboards_file, 'w', encoding='utf-8') as f:
             data = {
-                key: [asdict(e) for e in entries]
-                for key, entries in self.leaderboards.items()
+                k: [asdict(e) for e in v]
+                for k, v in self.leaderboards.items()
             }
-            with open(self.leaderboards_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-            
-            # Metrics
-            metrics_data = [asdict(m) for m in self.metrics_history]
-            with open(self.metrics_file, 'w', encoding='utf-8') as f:
-                json.dump(metrics_data, f, indent=2, ensure_ascii=False)
-            
-            logger.debug("💾 Leaderboard data saved")
-        except Exception as e:
-            logger.error(f"❌ Error saving data: {e}")
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        
+        with open(self.seasons_file, 'w', encoding='utf-8') as f:
+            data = {
+                k: {**asdict(v), 'prizes': [asdict(p) for p in v.prizes]}
+                for k, v in self.seasons.items()
+            }
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        
+        with open(self.distributions_file, 'w', encoding='utf-8') as f:
+            data = [
+                {**asdict(d), 'prize': asdict(d.prize)}
+                for d in self.distributions
+            ]
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        
+        with open(self.analytics_file, 'w', encoding='utf-8') as f:
+            json.dump(self.analytics, f, indent=2, ensure_ascii=False)
     
-    def update_leaderboard(self,
-                          lb_type: LeaderboardType,
-                          timeframe: TimeFrame,
-                          entries: List[Tuple[int, str, float]]):
+    def create_season(
+        self,
+        name: str,
+        season_type: SeasonType,
+        start_date: Optional[datetime] = None,
+        categories: Optional[List[str]] = None
+    ) -> Season:
         """
-        Actualiza leaderboard.
-        
-        Args:
-            lb_type: Tipo de leaderboard
-            timeframe: Período
-            entries: Lista de (user_id, username, score)
+        Crea una nueva temporada competitiva.
         """
-        key = f"{lb_type.value}_{timeframe.value}"
+        if start_date is None:
+            start_date = datetime.now()
         
-        # Ordenar por score
-        sorted_entries = sorted(entries, key=lambda x: x[2], reverse=True)
+        # Calcular end_date basado en el tipo
+        duration_map = {
+            SeasonType.WEEKLY: timedelta(days=7),
+            SeasonType.MONTHLY: timedelta(days=30),
+            SeasonType.QUARTERLY: timedelta(days=90),
+            SeasonType.YEARLY: timedelta(days=365)
+        }
         
-        # Crear entries con ranking
-        leaderboard = []
-        for rank, (user_id, username, score) in enumerate(sorted_entries[:100], 1):
+        end_date = start_date + duration_map[season_type]
+        
+        season_id = hashlib.md5(
+            f"{name}{start_date.isoformat()}".encode()
+        ).hexdigest()[:12]
+        
+        # Premios por defecto
+        default_prizes = [
+            Prize(
+                rank_start=1, rank_end=1,
+                coins=5000,
+                badge="🥇 Champion",
+                description="Campeón de la temporada",
+                special_perks=["VIP Status 30d", "Custom Badge"]
+            ),
+            Prize(
+                rank_start=2, rank_end=2,
+                coins=3000,
+                badge="🥈 Runner-up",
+                description="Subcampeón",
+                special_perks=["VIP Status 15d"]
+            ),
+            Prize(
+                rank_start=3, rank_end=3,
+                coins=2000,
+                badge="🥉 Third Place",
+                description="Tercer lugar",
+                special_perks=["VIP Status 7d"]
+            ),
+            Prize(
+                rank_start=4, rank_end=10,
+                coins=1000,
+                badge="🏆 Top 10",
+                description="Top 10",
+                special_perks=[]
+            ),
+            Prize(
+                rank_start=11, rank_end=50,
+                coins=500,
+                badge="⭐ Top 50",
+                description="Top 50",
+                special_perks=[]
+            )
+        ]
+        
+        season = Season(
+            season_id=season_id,
+            name=name,
+            season_type=season_type.value,
+            start_date=start_date.isoformat(),
+            end_date=end_date.isoformat(),
+            categories=categories or [c.value for c in LeaderboardCategory],
+            prizes=default_prizes
+        )
+        
+        self.seasons[season_id] = season
+        self.analytics["total_seasons"] += 1
+        
+        self._save_data()
+        
+        return season
+    
+    def update_score(
+        self,
+        category: str,
+        user_id: int,
+        username: str,
+        score_delta: float,
+        tier: str = "BRONZE",
+        metadata: Optional[Dict] = None
+    ):
+        """
+        Actualiza el puntaje de un usuario en una categoría.
+        """
+        if category not in self.leaderboards:
+            self.leaderboards[category] = []
+        
+        # Buscar entrada existente
+        entry = next(
+            (e for e in self.leaderboards[category] if e.user_id == user_id),
+            None
+        )
+        
+        if entry:
+            entry.score += score_delta
+            entry.tier = tier
+            entry.last_updated = datetime.now().isoformat()
+            if metadata:
+                entry.metadata.update(metadata)
+        else:
             entry = LeaderboardEntry(
                 user_id=user_id,
                 username=username,
-                score=score,
-                rank=rank
+                score=score_delta,
+                rank=0,  # Se calculará al ordenar
+                tier=tier,
+                last_updated=datetime.now().isoformat(),
+                metadata=metadata or {}
             )
-            leaderboard.append(entry)
+            self.leaderboards[category].append(entry)
         
-        self.leaderboards[key] = leaderboard
+        # Reordenar y actualizar ranks
+        self._update_ranks(category)
         self._save_data()
-        
-        logger.info(f"🏆 Updated leaderboard: {key} ({len(leaderboard)} entries)")
     
-    def get_leaderboard(self,
-                       lb_type: LeaderboardType,
-                       timeframe: TimeFrame,
-                       limit: int = 10) -> List[LeaderboardEntry]:
-        """Obtiene top N del leaderboard."""
-        key = f"{lb_type.value}_{timeframe.value}"
-        leaderboard = self.leaderboards.get(key, [])
-        return leaderboard[:limit]
-    
-    def get_user_rank(self,
-                     user_id: int,
-                     lb_type: LeaderboardType,
-                     timeframe: TimeFrame) -> Optional[int]:
-        """Obtiene ranking del usuario."""
-        key = f"{lb_type.value}_{timeframe.value}"
-        leaderboard = self.leaderboards.get(key, [])
+    def _update_ranks(self, category: str):
+        """Actualiza los ranks de un leaderboard"""
+        if category not in self.leaderboards:
+            return
         
-        for entry in leaderboard:
-            if entry.user_id == user_id:
-                return entry.rank
-        
-        return None
-    
-    def calculate_viral_metrics(self,
-                               start_date: datetime,
-                               end_date: datetime,
-                               user_data: Dict) -> ViralMetrics:
-        """
-        Calcula métricas virales para período.
-        
-        Args:
-            start_date: Fecha inicio
-            end_date: Fecha fin
-            user_data: Dict con datos de usuarios
-        
-        Returns:
-            ViralMetrics calculadas
-        """
-        metrics = ViralMetrics(
-            period_start=start_date.isoformat(),
-            period_end=end_date.isoformat()
+        # Ordenar por score descendente
+        sorted_entries = sorted(
+            self.leaderboards[category],
+            key=lambda x: x.score,
+            reverse=True
         )
         
-        # Calcular métricas (simplificado)
-        metrics.total_users = user_data.get('total_users', 0)
-        metrics.new_users = user_data.get('new_users', 0)
-        metrics.active_users = user_data.get('active_users', 0)
+        # Actualizar ranks
+        for i, entry in enumerate(sorted_entries, 1):
+            entry.rank = i
         
-        metrics.total_invites = user_data.get('total_invites', 0)
-        metrics.conversions = user_data.get('conversions', 0)
-        
-        # K coefficient
-        avg_invites = user_data.get('avg_invites_per_user', 2.5)
-        metrics.calculate_k_coefficient(avg_invites)
-        
-        # Rates
-        if metrics.active_users > 0:
-            total_shares = user_data.get('total_shares', 0)
-            metrics.share_rate = total_shares / metrics.active_users
-            
-            total_referrals = user_data.get('total_referrals', 0)
-            metrics.referral_rate = total_referrals / metrics.active_users
-        
-        self.metrics_history.append(metrics)
-        self._save_data()
-        
-        logger.info(
-            f"📊 Viral metrics calculated: K={metrics.viral_coefficient:.2f}, "
-            f"Share rate={metrics.share_rate:.1%}"
-        )
-        
-        return metrics
+        self.leaderboards[category] = sorted_entries
     
-    def get_latest_metrics(self) -> Optional[ViralMetrics]:
-        """Obtiene últimas métricas."""
-        return self.metrics_history[-1] if self.metrics_history else None
-    
-    def get_growth_trend(self, periods: int = 4) -> List[float]:
-        """Obtiene tendencia de crecimiento (K coefficient)."""
-        if len(self.metrics_history) < periods:
-            periods = len(self.metrics_history)
-        
-        recent = self.metrics_history[-periods:]
-        return [m.viral_coefficient for m in recent]
-    
-    def generate_leaderboard_message(self,
-                                    lb_type: LeaderboardType,
-                                    timeframe: TimeFrame,
-                                    user_id: Optional[int] = None) -> str:
+    def get_leaderboard(
+        self,
+        category: str,
+        limit: int = 100,
+        tier_filter: Optional[str] = None
+    ) -> List[LeaderboardEntry]:
         """
-        Genera mensaje formateado de leaderboard.
+        Obtiene un leaderboard.
+        """
+        if category not in self.leaderboards:
+            return []
         
-        Args:
-            lb_type: Tipo de leaderboard
-            timeframe: Período
-            user_id: ID usuario (para destacar su posición)
+        entries = self.leaderboards[category]
+        
+        # Filtrar por tier si se especifica
+        if tier_filter:
+            entries = [e for e in entries if e.tier == tier_filter]
+        
+        return entries[:limit]
+    
+    def get_user_position(
+        self,
+        category: str,
+        user_id: int
+    ) -> Optional[LeaderboardEntry]:
+        """
+        Obtiene la posición de un usuario en un leaderboard.
+        """
+        if category not in self.leaderboards:
+            return None
+        
+        return next(
+            (e for e in self.leaderboards[category] if e.user_id == user_id),
+            None
+        )
+    
+    def get_user_all_positions(self, user_id: int) -> Dict[str, LeaderboardEntry]:
+        """
+        Obtiene las posiciones de un usuario en todos los leaderboards.
+        """
+        positions = {}
+        
+        for category in self.leaderboards:
+            entry = self.get_user_position(category, user_id)
+            if entry:
+                positions[category] = entry
+        
+        return positions
+    
+    def end_season(self, season_id: str) -> List[PrizeDistribution]:
+        """
+        Finaliza una temporada y distribuye premios.
         
         Returns:
-            Mensaje Markdown formateado
+            Lista de distribuciones de premios
         """
-        top10 = self.get_leaderboard(lb_type, timeframe, 10)
+        if season_id not in self.seasons:
+            return []
         
-        if not top10:
-            return "⚠️ No hay datos de leaderboard aún"
+        season = self.seasons[season_id]
+        season.is_active = False
         
-        # Header
-        timeframe_str = {
-            TimeFrame.WEEKLY: "SEMANAL",
-            TimeFrame.MONTHLY: "MENSUAL",
-            TimeFrame.ALL_TIME: "TODO EL TIEMPO"
-        }[timeframe]
+        distributions = []
         
-        type_str = {
-            LeaderboardType.REFERRALS: "👥 REFERIDOS",
-            LeaderboardType.DEALS: "💰 DEALS",
-            LeaderboardType.SAVINGS: "💸 AHORROS",
-            LeaderboardType.COINS: "🪙 COINS"
-        }[lb_type]
-        
-        msg = f"🏆 *LEADERBOARD {type_str}*\n"
-        msg += f"📅 {timeframe_str}\n"
-        msg += "="*30 + "\n\n"
-        
-        # Top 10
-        medals = ["🥇", "🥈", "🥉"]
-        for entry in top10:
-            medal = medals[entry.rank-1] if entry.rank <= 3 else f"{entry.rank}."
+        # Distribuir premios por categoría
+        for category in season.categories:
+            if category not in self.leaderboards:
+                continue
             
-            highlight = "" if entry.user_id != user_id else " ⭐"
+            leaderboard = self.leaderboards[category]
             
-            msg += f"{medal} @{entry.username}: {entry.score:.0f}{highlight}\n"
+            # Para cada premio
+            for prize in season.prizes:
+                # Obtener ganadores en el rango
+                winners = [
+                    e for e in leaderboard
+                    if prize.rank_start <= e.rank <= prize.rank_end
+                ]
+                
+                # Crear distribuciones
+                for winner in winners:
+                    distribution_id = hashlib.md5(
+                        f"{season_id}{category}{winner.user_id}{datetime.now()}".encode()
+                    ).hexdigest()[:12]
+                    
+                    distribution = PrizeDistribution(
+                        distribution_id=distribution_id,
+                        season_id=season_id,
+                        category=category,
+                        user_id=winner.user_id,
+                        username=winner.username,
+                        rank=winner.rank,
+                        prize=prize,
+                        distributed_at=datetime.now().isoformat()
+                    )
+                    
+                    distributions.append(distribution)
+                    self.distributions.append(distribution)
+                    
+                    # Actualizar analytics
+                    self.analytics["total_prizes_distributed"] += 1
+                    self.analytics["total_coins_awarded"] += prize.coins
+                    
+                    # Registrar ganadores
+                    if category not in season.winners:
+                        season.winners[category] = []
+                    season.winners[category].append(winner.user_id)
         
-        # User position si no está en top 10
-        if user_id:
-            user_rank = self.get_user_rank(user_id, lb_type, timeframe)
-            if user_rank and user_rank > 10:
-                msg += f"\n..\n"
-                msg += f"{user_rank}. Tú ⭐\n"
+        self._save_data()
+        self._update_analytics()
         
-        # Premios
-        if timeframe == TimeFrame.WEEKLY:
-            msg += f"\n🎁 *Premios Top 10:* 5K-500 coins\n"
-        elif timeframe == TimeFrame.MONTHLY:
-            msg += f"\n🎁 *Premios Top 3:* 20K-5K coins\n"
+        return distributions
+    
+    def claim_prize(self, distribution_id: str) -> Tuple[bool, str, Optional[Prize]]:
+        """
+        Un usuario reclama su premio.
         
-        return msg
+        Returns:
+            (success, message, prize)
+        """
+        distribution = next(
+            (d for d in self.distributions if d.distribution_id == distribution_id),
+            None
+        )
+        
+        if not distribution:
+            return False, "❌ Premio no encontrado", None
+        
+        if distribution.claimed:
+            return False, "❌ Premio ya reclamado", None
+        
+        distribution.claimed = True
+        self._save_data()
+        
+        msg = (
+            f"✅ ¡Premio reclamado!\n"
+            f"🏆 Rank: #{distribution.rank}\n"
+            f"💰 {distribution.prize.coins} FlightCoins\n"
+            f"🎯 Badge: {distribution.prize.badge}"
+        )
+        
+        return True, msg, distribution.prize
+    
+    def get_user_prizes(self, user_id: int) -> List[PrizeDistribution]:
+        """
+        Obtiene todos los premios de un usuario.
+        """
+        return [
+            d for d in self.distributions
+            if d.user_id == user_id
+        ]
+    
+    def reset_leaderboard(self, category: str):
+        """
+        Resetea un leaderboard (para nueva temporada).
+        """
+        if category in self.leaderboards:
+            self.leaderboards[category] = []
+            self._save_data()
+    
+    def _update_analytics(self):
+        """Actualiza analytics globales"""
+        # Categoría más competitiva (más participantes)
+        if self.leaderboards:
+            most_competitive = max(
+                self.leaderboards.items(),
+                key=lambda x: len(x[1])
+            )
+            self.analytics["most_competitive_category"] = {
+                "category": most_competitive[0],
+                "participants": len(most_competitive[1])
+            }
+        
+        # Top ganadores all-time
+        user_wins = {}
+        for dist in self.distributions:
+            if dist.claimed:
+                if dist.user_id not in user_wins:
+                    user_wins[dist.user_id] = {
+                        "username": dist.username,
+                        "prizes": 0,
+                        "total_coins": 0
+                    }
+                user_wins[dist.user_id]["prizes"] += 1
+                user_wins[dist.user_id]["total_coins"] += dist.prize.coins
+        
+        self.analytics["top_all_time_winners"] = sorted(
+            [{"user_id": k, **v} for k, v in user_wins.items()],
+            key=lambda x: x["total_coins"],
+            reverse=True
+        )[:10]
+        
+        self.analytics["last_updated"] = datetime.now().isoformat()
+    
+    def get_global_analytics(self) -> Dict:
+        """Retorna analytics globales"""
+        return self.analytics
 
 
-if __name__ == '__main__':
-    # 🧪 Tests
-    print("🧪 Testing CompetitiveLeaderboardManager...\n")
+if __name__ == "__main__":
+    # Testing
+    print("🚀 Testing Competitive Leaderboards...")
     
-    mgr = CompetitiveLeaderboardManager(
-        'test_leaderboards.json',
-        'test_metrics.json'
+    manager = CompetitiveLeaderboardManager()
+    
+    # Crear temporada
+    season = manager.create_season(
+        name="Winter 2026 Challenge",
+        season_type=SeasonType.MONTHLY
     )
     
-    # Test 1: Update leaderboard
-    print("1. Updating leaderboard...")
-    entries = [
-        (12345, "alice", 150),
-        (67890, "bob", 120),
-        (11111, "charlie", 100)
-    ]
-    mgr.update_leaderboard(LeaderboardType.REFERRALS, TimeFrame.WEEKLY, entries)
-    print("   ✅ Leaderboard updated\n")
+    print(f"\n✅ Temporada creada: {season.name}")
+    print(f"   Inicio: {season.start_date[:10]}")
+    print(f"   Fin: {season.end_date[:10]}")
+    print(f"   Categorías: {len(season.categories)}")
     
-    # Test 2: Get top 3
-    print("2. Getting top 3...")
-    top3 = mgr.get_leaderboard(LeaderboardType.REFERRALS, TimeFrame.WEEKLY, 3)
-    for entry in top3:
-        print(f"   {entry.rank}. @{entry.username}: {entry.score}")
-    print()
-    
-    # Test 3: Generate message
-    print("3. Generating leaderboard message...")
-    msg = mgr.generate_leaderboard_message(
-        LeaderboardType.REFERRALS,
-        TimeFrame.WEEKLY,
-        user_id=12345
+    # Actualizar scores
+    manager.update_score(
+        category=LeaderboardCategory.DEALS_FOUND.value,
+        user_id=12345,
+        username="john_doe",
+        score_delta=10,
+        tier="GOLD"
     )
-    print(msg)
-    print()
     
-    # Test 4: Viral metrics
-    print("4. Calculating viral metrics...")
-    user_data = {
-        'total_users': 1000,
-        'new_users': 125,
-        'active_users': 700,
-        'total_invites': 250,
-        'conversions': 112,
-        'avg_invites_per_user': 2.5
-    }
-    metrics = mgr.calculate_viral_metrics(
-        datetime.now() - timedelta(days=7),
-        datetime.now(),
-        user_data
+    manager.update_score(
+        category=LeaderboardCategory.DEALS_FOUND.value,
+        user_id=67890,
+        username="jane_smith",
+        score_delta=15,
+        tier="DIAMOND"
     )
-    print(f"   K coefficient: {metrics.viral_coefficient:.2f}")
-    print(f"   Conversions: {metrics.conversions}")
-    print()
     
-    print("✅ All tests completed!")
+    # Ver leaderboard
+    leaderboard = manager.get_leaderboard(
+        category=LeaderboardCategory.DEALS_FOUND.value,
+        limit=10
+    )
+    
+    print(f"\n🏆 Leaderboard - Deals Found:")
+    for entry in leaderboard:
+        print(f"   #{entry.rank} - {entry.username}: {entry.score} deals ({entry.tier})")
+    
+    # Finalizar temporada
+    distributions = manager.end_season(season.season_id)
+    print(f"\n✅ Temporada finalizada")
+    print(f"   Premios distribuidos: {len(distributions)}")
+    
+    # Analytics
+    analytics = manager.get_global_analytics()
+    print(f"\n📊 Analytics Globales:")
+    print(f"   Total temporadas: {analytics['total_seasons']}")
+    print(f"   Premios distribuidos: {analytics['total_prizes_distributed']}")
+    print(f"   Coins otorgados: {analytics['total_coins_awarded']}")
+    
+    print("\n✅ Tests completados!")
