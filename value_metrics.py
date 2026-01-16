@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Value Metrics Dashboard for Premium Conversion
+Value Metrics Dashboard for Upgrade Conversion
 IT6 - DAY 3/5
 
 Features:
 - Personal value tracking (savings, time, deals)
-- Comparative metrics (Free vs Premium)
-- ROI calculator for premium
+- Comparative metrics (Free vs Premium users)
+- ROI calculator for premium subscription
 - Social proof integration
-- Missed opportunity tracking
 - Value-based upgrade triggers
 
 Author: @Juanka_Spain
@@ -22,30 +21,72 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
 from pathlib import Path
+import statistics
 
 
 # ============================================================================
 # CONSTANTS
 # ============================================================================
 
-# Average values for calculations
-AVG_DEAL_SAVINGS = 150  # € per deal
-AVG_SEARCH_TIME = 15  # minutes per manual search
-AVG_PREMIUM_DEALS_MULTIPLIER = 2.75  # Premium users find 2.75x more deals
-AVG_NOTIFICATION_SPEED_MULTIPLIER = 24  # 24x faster notifications
+# Average savings per deal by route type
+AVG_SAVINGS = {
+    "domestic": 45,      # €45 avg on domestic flights
+    "europe": 120,       # €120 avg on European flights
+    "international": 280 # €280 avg on long-haul
+}
 
-# Premium pricing (for ROI calculations)
-PREMIUM_MONTHLY_PRICE = 9.99
-PREMIUM_ANNUAL_PRICE = 99.99
+# Time saved per action (minutes)
+TIME_SAVED = {
+    "search": 5,         # 5 min saved per search vs manual
+    "deal_found": 15,    # 15 min saved finding a deal
+    "notification": 30   # 30 min saved by instant notification
+}
 
-# Social proof data (updated periodically)
+# Premium benchmarks (from top users)
+PREMIUM_BENCHMARKS = {
+    "deals_per_month": 45,
+    "savings_per_month": 1680,
+    "response_time_minutes": 5,
+    "deals_missed": 0,
+    "avg_session_duration": 8  # minutes
+}
+
+# Free user benchmarks
+FREE_BENCHMARKS = {
+    "deals_per_month": 12,
+    "savings_per_month": 450,
+    "response_time_minutes": 120,  # 2 hours
+    "deals_missed": 8,
+    "avg_session_duration": 12  # minutes (more time = less efficient)
+}
+
+# Social proof data (would be real in production)
 SOCIAL_PROOF = {
     "premium_users": 892,
-    "total_savings_generated": 156000,  # €
     "avg_rating": 4.8,
+    "total_savings_generated": 156000,
     "top_hunters_premium_percent": 85,
-    "avg_deals_per_premium_user": 45,  # per month
-    "avg_savings_per_premium_user": 1680  # € per month
+    "avg_monthly_savings_premium": 1680,
+    "testimonials": [
+        {
+            "user": "@travel_enthusiast",
+            "text": "Ahorré €2,450 en 3 meses. Premium se paga solo.",
+            "savings": 2450,
+            "months": 3
+        },
+        {
+            "user": "@budget_traveler",
+            "text": "Las notificaciones instantáneas valen oro. Ya no pierdo chollos.",
+            "savings": 1820,
+            "months": 2
+        },
+        {
+            "user": "@family_trips",
+            "text": "Con 4 personas viajando, el ahorro es brutal. Mejor inversión.",
+            "savings": 3200,
+            "months": 4
+        }
+    ]
 }
 
 
@@ -55,89 +96,120 @@ SOCIAL_PROOF = {
 
 @dataclass
 class UserValue:
-    """Track value generated for a user"""
+    """Track user's generated value"""
     user_id: int
-    registration_date: datetime
+    total_savings: float  # Total € saved
+    time_saved_minutes: float  # Total minutes saved
+    deals_found: int
+    deals_missed: int  # Due to free limits
+    searches_made: int
+    notifications_received: int
+    created_at: datetime
+    last_updated: datetime
     is_premium: bool = False
     
-    # Deals
-    total_deals_found: int = 0
-    deals_claimed: int = 0
-    deals_missed: int = 0  # Due to free limits
+    @property
+    def time_saved_hours(self) -> float:
+        """Time saved in hours"""
+        return self.time_saved_minutes / 60
     
-    # Savings
-    total_savings_generated: float = 0.0  # €
-    potential_savings_missed: float = 0.0  # € (from missed deals)
+    @property
+    def avg_savings_per_deal(self) -> float:
+        """Average savings per deal found"""
+        if self.deals_found == 0:
+            return 0
+        return self.total_savings / self.deals_found
     
-    # Time
-    total_searches: int = 0
-    time_saved_minutes: float = 0.0  # vs manual searching
-    
-    # Engagement
-    watchlist_routes: int = 0
-    notifications_received: int = 0
-    groups_joined: int = 0
-    referrals_made: int = 0
-    
-    # Premium value (if premium)
-    premium_since: Optional[datetime] = None
-    premium_spent: float = 0.0  # €
+    @property
+    def missed_value(self) -> float:
+        """Estimated value of missed deals"""
+        return self.deals_missed * self.avg_savings_per_deal if self.avg_savings_per_deal > 0 else self.deals_missed * 150
     
     def to_dict(self) -> Dict:
         data = asdict(self)
-        data['registration_date'] = self.registration_date.isoformat()
-        if self.premium_since:
-            data['premium_since'] = self.premium_since.isoformat()
+        data['created_at'] = self.created_at.isoformat()
+        data['last_updated'] = self.last_updated.isoformat()
         return data
     
     @classmethod
     def from_dict(cls, data: Dict) -> 'UserValue':
-        data['registration_date'] = datetime.fromisoformat(data['registration_date'])
-        if data.get('premium_since'):
-            data['premium_since'] = datetime.fromisoformat(data['premium_since'])
+        data['created_at'] = datetime.fromisoformat(data['created_at'])
+        data['last_updated'] = datetime.fromisoformat(data['last_updated'])
         return cls(**data)
 
 
 @dataclass
-class ValueSnapshot:
-    """Snapshot of value at a point in time (for trend analysis)"""
-    timestamp: datetime
-    total_savings: float
-    deals_found: int
-    time_saved: float
+class ComparativeMetrics:
+    """Comparison between user and benchmarks"""
+    user_deals_month: int
+    benchmark_deals_month: int
+    user_savings_month: float
+    benchmark_savings_month: float
+    user_response_time: float
+    benchmark_response_time: float
+    deals_missed: int
     
-    def to_dict(self) -> Dict:
-        return {
-            'timestamp': self.timestamp.isoformat(),
-            'total_savings': self.total_savings,
-            'deals_found': self.deals_found,
-            'time_saved': self.time_saved
-        }
+    @property
+    def deals_delta_percent(self) -> float:
+        """% difference in deals found"""
+        if self.user_deals_month == 0:
+            return 0
+        return ((self.benchmark_deals_month - self.user_deals_month) / self.user_deals_month) * 100
     
-    @classmethod
-    def from_dict(cls, data: Dict) -> 'ValueSnapshot':
-        data['timestamp'] = datetime.fromisoformat(data['timestamp'])
-        return cls(**data)
+    @property
+    def savings_delta_percent(self) -> float:
+        """% difference in savings"""
+        if self.user_savings_month == 0:
+            return 0
+        return ((self.benchmark_savings_month - self.user_savings_month) / self.user_savings_month) * 100
+    
+    @property
+    def response_time_multiplier(self) -> float:
+        """How many times faster is premium"""
+        if self.benchmark_response_time == 0:
+            return 0
+        return self.user_response_time / self.benchmark_response_time
 
 
 @dataclass
-class MissedOpportunity:
-    """Record of a deal missed due to free limits"""
-    user_id: int
-    timestamp: datetime
-    reason: str  # "search_limit", "watchlist_full", "notification_delay"
-    deal_value: float  # Estimated savings missed
-    route: str
+class ROICalculation:
+    """ROI calculation for premium subscription"""
+    monthly_cost: float  # €9.99
+    current_monthly_savings: float
+    premium_monthly_savings: float  # Estimated with premium
+    months_analyzed: int
     
-    def to_dict(self) -> Dict:
-        data = asdict(self)
-        data['timestamp'] = self.timestamp.isoformat()
-        return data
+    @property
+    def additional_savings(self) -> float:
+        """Additional savings with premium per month"""
+        return self.premium_monthly_savings - self.current_monthly_savings
     
-    @classmethod
-    def from_dict(cls, data: Dict) -> 'MissedOpportunity':
-        data['timestamp'] = datetime.fromisoformat(data['timestamp'])
-        return cls(**data)
+    @property
+    def net_benefit_monthly(self) -> float:
+        """Net benefit per month after premium cost"""
+        return self.additional_savings - self.monthly_cost
+    
+    @property
+    def roi_percent(self) -> float:
+        """ROI percentage"""
+        if self.monthly_cost == 0:
+            return 0
+        return (self.net_benefit_monthly / self.monthly_cost) * 100
+    
+    @property
+    def roi_multiplier(self) -> float:
+        """ROI as multiplier (e.g., 68x)"""
+        if self.monthly_cost == 0:
+            return 0
+        return self.additional_savings / self.monthly_cost
+    
+    @property
+    def payback_days(self) -> int:
+        """Days to recover premium cost"""
+        if self.additional_savings == 0:
+            return 999
+        daily_benefit = self.additional_savings / 30
+        return int(self.monthly_cost / daily_benefit)
 
 
 # ============================================================================
@@ -146,20 +218,22 @@ class MissedOpportunity:
 
 class ValueTracker:
     """
-    Tracks and calculates value generated for users.
-    Used to demonstrate ROI and trigger premium upgrades.
+    Tracks and displays user value to drive premium upgrades.
+    
+    Features:
+    - Personal value tracking (savings, time, deals)
+    - Comparative metrics vs benchmarks
+    - ROI calculator
+    - Social proof display
+    - Value-based triggers
     """
     
     def __init__(self, data_dir: str = "."):
         self.data_dir = Path(data_dir)
         self.value_file = self.data_dir / "user_value_metrics.json"
-        self.snapshots_file = self.data_dir / "value_snapshots.json"
-        self.missed_file = self.data_dir / "missed_opportunities.json"
         
         # Load data
         self.user_values: Dict[int, UserValue] = self._load_values()
-        self.snapshots: Dict[int, List[ValueSnapshot]] = self._load_snapshots()
-        self.missed: Dict[int, List[MissedOpportunity]] = self._load_missed()
         
         print("✅ ValueTracker initialized")
     
@@ -168,7 +242,7 @@ class ValueTracker:
     # ========================================================================
     
     def _load_values(self) -> Dict[int, UserValue]:
-        """Load user value data"""
+        """Load user value data from file"""
         if not self.value_file.exists():
             return {}
         
@@ -184,7 +258,7 @@ class ValueTracker:
             return {}
     
     def _save_values(self):
-        """Save user value data"""
+        """Save user value data to file"""
         try:
             data = {
                 str(user_id): value.to_dict()
@@ -195,64 +269,8 @@ class ValueTracker:
         except Exception as e:
             print(f"⚠️ Error saving values: {e}")
     
-    def _load_snapshots(self) -> Dict[int, List[ValueSnapshot]]:
-        """Load value snapshots"""
-        if not self.snapshots_file.exists():
-            return {}
-        
-        try:
-            with open(self.snapshots_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                return {
-                    int(user_id): [ValueSnapshot.from_dict(s) for s in snapshots]
-                    for user_id, snapshots in data.items()
-                }
-        except Exception as e:
-            print(f"⚠️ Error loading snapshots: {e}")
-            return {}
-    
-    def _save_snapshots(self):
-        """Save value snapshots"""
-        try:
-            data = {
-                str(user_id): [s.to_dict() for s in snapshots]
-                for user_id, snapshots in self.snapshots.items()
-            }
-            with open(self.snapshots_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            print(f"⚠️ Error saving snapshots: {e}")
-    
-    def _load_missed(self) -> Dict[int, List[MissedOpportunity]]:
-        """Load missed opportunities"""
-        if not self.missed_file.exists():
-            return {}
-        
-        try:
-            with open(self.missed_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                return {
-                    int(user_id): [MissedOpportunity.from_dict(m) for m in missed]
-                    for user_id, missed in data.items()
-                }
-        except Exception as e:
-            print(f"⚠️ Error loading missed: {e}")
-            return {}
-    
-    def _save_missed(self):
-        """Save missed opportunities"""
-        try:
-            data = {
-                str(user_id): [m.to_dict() for m in missed]
-                for user_id, missed in self.missed.items()
-            }
-            with open(self.missed_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            print(f"⚠️ Error saving missed: {e}")
-    
     # ========================================================================
-    # USER VALUE TRACKING
+    # VALUE TRACKING
     # ========================================================================
     
     def _get_or_create_value(self, user_id: int) -> UserValue:
@@ -260,283 +278,172 @@ class ValueTracker:
         if user_id not in self.user_values:
             self.user_values[user_id] = UserValue(
                 user_id=user_id,
-                registration_date=datetime.now()
+                total_savings=0,
+                time_saved_minutes=0,
+                deals_found=0,
+                deals_missed=0,
+                searches_made=0,
+                notifications_received=0,
+                created_at=datetime.now(),
+                last_updated=datetime.now()
             )
         return self.user_values[user_id]
     
-    def track_deal_found(self, user_id: int, savings: float, claimed: bool = False):
-        """Track a deal found by user"""
+    def track_search(self, user_id: int):
+        """Track a search performed"""
         value = self._get_or_create_value(user_id)
-        value.total_deals_found += 1
-        
-        if claimed:
-            value.deals_claimed += 1
-            value.total_savings_generated += savings
-        
+        value.searches_made += 1
+        value.time_saved_minutes += TIME_SAVED['search']
+        value.last_updated = datetime.now()
         self._save_values()
     
-    def track_deal_missed(self, user_id: int, reason: str, deal_value: float, route: str = ""):
+    def track_deal_found(self, user_id: int, savings: float, route_type: str = "europe"):
+        """Track a deal found"""
+        value = self._get_or_create_value(user_id)
+        value.deals_found += 1
+        value.total_savings += savings
+        value.time_saved_minutes += TIME_SAVED['deal_found']
+        value.last_updated = datetime.now()
+        self._save_values()
+    
+    def track_deal_missed(self, user_id: int, reason: str = "limit"):
         """Track a deal missed due to free limits"""
         value = self._get_or_create_value(user_id)
         value.deals_missed += 1
-        value.potential_savings_missed += deal_value
-        
-        # Record missed opportunity
-        if user_id not in self.missed:
-            self.missed[user_id] = []
-        
-        self.missed[user_id].append(MissedOpportunity(
-            user_id=user_id,
-            timestamp=datetime.now(),
-            reason=reason,
-            deal_value=deal_value,
-            route=route
-        ))
-        
+        value.last_updated = datetime.now()
         self._save_values()
-        self._save_missed()
     
-    def track_search(self, user_id: int):
-        """Track a search performed by user"""
+    def track_notification(self, user_id: int):
+        """Track a notification received"""
         value = self._get_or_create_value(user_id)
-        value.total_searches += 1
-        value.time_saved_minutes += AVG_SEARCH_TIME
+        value.notifications_received += 1
+        value.time_saved_minutes += TIME_SAVED['notification']
+        value.last_updated = datetime.now()
         self._save_values()
     
-    def track_activity(self, user_id: int, activity_type: str, count: int = 1):
-        """
-        Track user activity (watchlist, notifications, groups, referrals).
-        """
-        value = self._get_or_create_value(user_id)
-        
-        if activity_type == "watchlist":
-            value.watchlist_routes = count
-        elif activity_type == "notifications":
-            value.notifications_received += count
-        elif activity_type == "groups":
-            value.groups_joined = count
-        elif activity_type == "referrals":
-            value.referrals_made = count
-        
-        self._save_values()
-    
-    def set_premium(self, user_id: int, is_premium: bool):
-        """Set user premium status"""
+    def set_premium_status(self, user_id: int, is_premium: bool):
+        """Update user's premium status"""
         value = self._get_or_create_value(user_id)
         value.is_premium = is_premium
-        
-        if is_premium and not value.premium_since:
-            value.premium_since = datetime.now()
-        
-        self._save_values()
-    
-    def track_premium_payment(self, user_id: int, amount: float):
-        """Track premium payment made"""
-        value = self._get_or_create_value(user_id)
-        value.premium_spent += amount
+        value.last_updated = datetime.now()
         self._save_values()
     
     # ========================================================================
-    # VALUE SNAPSHOTS
+    # COMPARATIVE METRICS
     # ========================================================================
     
-    def create_snapshot(self, user_id: int):
-        """Create a value snapshot for trend analysis"""
+    def get_comparative_metrics(self, user_id: int) -> ComparativeMetrics:
+        """
+        Get user metrics compared to benchmark.
+        
+        Returns:
+            ComparativeMetrics comparing user to premium users
+        """
         value = self._get_or_create_value(user_id)
         
-        snapshot = ValueSnapshot(
-            timestamp=datetime.now(),
-            total_savings=value.total_savings_generated,
-            deals_found=value.total_deals_found,
-            time_saved=value.time_saved_minutes
+        # Calculate monthly averages
+        days_active = (datetime.now() - value.created_at).days or 1
+        months_active = days_active / 30
+        
+        user_deals_month = int(value.deals_found / months_active) if months_active > 0 else value.deals_found
+        user_savings_month = value.total_savings / months_active if months_active > 0 else value.total_savings
+        
+        # Estimate user response time based on notification usage
+        if value.is_premium:
+            user_response_time = PREMIUM_BENCHMARKS['response_time_minutes']
+        else:
+            user_response_time = FREE_BENCHMARKS['response_time_minutes']
+        
+        return ComparativeMetrics(
+            user_deals_month=user_deals_month,
+            benchmark_deals_month=PREMIUM_BENCHMARKS['deals_per_month'],
+            user_savings_month=user_savings_month,
+            benchmark_savings_month=PREMIUM_BENCHMARKS['savings_per_month'],
+            user_response_time=user_response_time,
+            benchmark_response_time=PREMIUM_BENCHMARKS['response_time_minutes'],
+            deals_missed=value.deals_missed
         )
-        
-        if user_id not in self.snapshots:
-            self.snapshots[user_id] = []
-        
-        self.snapshots[user_id].append(snapshot)
-        self._save_snapshots()
     
     # ========================================================================
-    # VALUE DASHBOARD
+    # ROI CALCULATOR
+    # ========================================================================
+    
+    def calculate_roi(self, user_id: int, monthly_cost: float = 9.99) -> ROICalculation:
+        """
+        Calculate ROI of premium subscription for user.
+        
+        Args:
+            user_id: User ID
+            monthly_cost: Cost of premium (default €9.99)
+        
+        Returns:
+            ROICalculation with detailed ROI metrics
+        """
+        value = self._get_or_create_value(user_id)
+        
+        # Calculate current monthly savings
+        days_active = (datetime.now() - value.created_at).days or 1
+        months_active = days_active / 30
+        current_monthly_savings = value.total_savings / months_active if months_active > 0 else 0
+        
+        # Estimate premium savings (based on benchmarks)
+        # Premium users find more deals + don't miss any
+        deals_ratio = PREMIUM_BENCHMARKS['deals_per_month'] / max(1, FREE_BENCHMARKS['deals_per_month'])
+        missed_value_monthly = (value.deals_missed / months_active) * (value.avg_savings_per_deal or 150) if months_active > 0 else 0
+        
+        premium_monthly_savings = (current_monthly_savings * deals_ratio) + missed_value_monthly
+        
+        return ROICalculation(
+            monthly_cost=monthly_cost,
+            current_monthly_savings=current_monthly_savings,
+            premium_monthly_savings=premium_monthly_savings,
+            months_analyzed=int(months_active)
+        )
+    
+    # ========================================================================
+    # DASHBOARD GENERATION
     # ========================================================================
     
     def get_personal_dashboard(self, user_id: int) -> Dict:
         """
-        Get personal value dashboard for user.
+        Generate personal value dashboard.
         
         Returns:
-            Dict with all value metrics
+            Dict with all dashboard data
         """
         value = self._get_or_create_value(user_id)
-        
-        # Calculate time since registration
-        days_active = (datetime.now() - value.registration_date).days
-        months_active = max(1, days_active / 30)
-        
-        # Calculate averages
-        avg_savings_per_month = value.total_savings_generated / months_active
-        avg_deals_per_month = value.total_deals_found / months_active
-        
-        # Calculate what premium would have saved
-        if not value.is_premium:
-            potential_additional_deals = value.deals_missed
-            potential_additional_savings = value.potential_savings_missed
-        else:
-            potential_additional_deals = 0
-            potential_additional_savings = 0
+        comparative = self.get_comparative_metrics(user_id)
+        roi = self.calculate_roi(user_id)
         
         return {
-            'user_id': user_id,
-            'is_premium': value.is_premium,
-            'days_active': days_active,
-            
-            # Current value
-            'total_savings': value.total_savings_generated,
-            'total_deals': value.total_deals_found,
-            'deals_claimed': value.deals_claimed,
-            'time_saved_hours': value.time_saved_minutes / 60,
-            
-            # Missed opportunities
-            'deals_missed': value.deals_missed,
-            'savings_missed': value.potential_savings_missed,
-            
-            # Averages
-            'avg_savings_per_month': avg_savings_per_month,
-            'avg_deals_per_month': avg_deals_per_month,
-            
-            # Potential with premium
-            'potential_additional_deals': potential_additional_deals,
-            'potential_additional_savings': potential_additional_savings,
-            
-            # Engagement
-            'watchlist_routes': value.watchlist_routes,
-            'notifications_received': value.notifications_received,
-            'groups_joined': value.groups_joined,
-            'referrals_made': value.referrals_made,
-            
-            # Premium specific
-            'premium_since': value.premium_since.isoformat() if value.premium_since else None,
-            'premium_spent': value.premium_spent
+            'personal': {
+                'total_savings': value.total_savings,
+                'time_saved_hours': value.time_saved_hours,
+                'deals_found': value.deals_found,
+                'deals_missed': value.deals_missed,
+                'searches_made': value.searches_made,
+                'avg_savings_per_deal': value.avg_savings_per_deal,
+                'missed_value': value.missed_value
+            },
+            'comparative': {
+                'your_deals_month': comparative.user_deals_month,
+                'premium_deals_month': comparative.benchmark_deals_month,
+                'deals_delta_percent': comparative.deals_delta_percent,
+                'your_savings_month': comparative.user_savings_month,
+                'premium_savings_month': comparative.benchmark_savings_month,
+                'savings_delta_percent': comparative.savings_delta_percent,
+                'response_time_multiplier': comparative.response_time_multiplier
+            },
+            'roi': {
+                'monthly_cost': roi.monthly_cost,
+                'additional_savings': roi.additional_savings,
+                'net_benefit_monthly': roi.net_benefit_monthly,
+                'roi_percent': roi.roi_percent,
+                'roi_multiplier': roi.roi_multiplier,
+                'payback_days': roi.payback_days
+            },
+            'social_proof': SOCIAL_PROOF
         }
-    
-    def get_comparative_metrics(self, user_id: int) -> Dict:
-        """
-        Get Free vs Premium comparative metrics.
-        
-        Returns:
-            Dict comparing user to premium averages
-        """
-        value = self._get_or_create_value(user_id)
-        days_active = max(1, (datetime.now() - value.registration_date).days)
-        months_active = max(1, days_active / 30)
-        
-        # User metrics (per month)
-        user_deals_per_month = value.total_deals_found / months_active
-        user_savings_per_month = value.total_savings_generated / months_active
-        
-        # Premium averages
-        premium_deals_per_month = SOCIAL_PROOF['avg_deals_per_premium_user']
-        premium_savings_per_month = SOCIAL_PROOF['avg_savings_per_premium_user']
-        
-        # Calculate differences
-        if user_deals_per_month > 0:
-            deals_multiplier = premium_deals_per_month / user_deals_per_month
-            savings_multiplier = premium_savings_per_month / user_savings_per_month
-        else:
-            deals_multiplier = AVG_PREMIUM_DEALS_MULTIPLIER
-            savings_multiplier = AVG_PREMIUM_DEALS_MULTIPLIER
-        
-        return {
-            'your_tier': 'Premium' if value.is_premium else 'Free',
-            
-            # Deals comparison
-            'your_deals_per_month': round(user_deals_per_month, 1),
-            'premium_deals_per_month': premium_deals_per_month,
-            'deals_difference': premium_deals_per_month - user_deals_per_month,
-            'deals_multiplier': round(deals_multiplier, 1),
-            
-            # Savings comparison
-            'your_savings_per_month': round(user_savings_per_month, 2),
-            'premium_savings_per_month': premium_savings_per_month,
-            'savings_difference': premium_savings_per_month - user_savings_per_month,
-            'savings_multiplier': round(savings_multiplier, 1),
-            
-            # Response time
-            'your_response_time': '2 hours' if not value.is_premium else '5 minutes',
-            'premium_response_time': '5 minutes',
-            'response_multiplier': AVG_NOTIFICATION_SPEED_MULTIPLIER if not value.is_premium else 1,
-            
-            # Missed deals
-            'deals_missed_last_month': value.deals_missed  # Simplified
-        }
-    
-    def calculate_premium_roi(self, user_id: int, plan: str = "monthly") -> Dict:
-        """
-        Calculate ROI of premium subscription.
-        
-        Args:
-            plan: "monthly" or "annual"
-        
-        Returns:
-            Dict with ROI calculations
-        """
-        value = self._get_or_create_value(user_id)
-        dashboard = self.get_personal_dashboard(user_id)
-        
-        # Plan cost
-        if plan == "monthly":
-            cost = PREMIUM_MONTHLY_PRICE
-            period_months = 1
-        else:  # annual
-            cost = PREMIUM_ANNUAL_PRICE
-            period_months = 12
-        
-        # Expected additional value with premium
-        additional_savings = dashboard['potential_additional_savings']
-        
-        if additional_savings == 0:
-            # Use average multiplier
-            current_monthly_savings = dashboard['avg_savings_per_month']
-            additional_savings = current_monthly_savings * (AVG_PREMIUM_DEALS_MULTIPLIER - 1) * period_months
-        
-        # Calculate ROI
-        net_value = additional_savings - cost
-        roi_percentage = (net_value / cost) * 100 if cost > 0 else 0
-        roi_multiplier = additional_savings / cost if cost > 0 else 0
-        
-        # Break-even (how many deals needed to pay for itself)
-        deals_to_breakeven = cost / AVG_DEAL_SAVINGS if AVG_DEAL_SAVINGS > 0 else 0
-        
-        return {
-            'plan': plan,
-            'cost': cost,
-            'period_months': period_months,
-            
-            # Expected value
-            'expected_additional_savings': round(additional_savings, 2),
-            'expected_additional_deals': round(additional_savings / AVG_DEAL_SAVINGS),
-            
-            # ROI
-            'net_value': round(net_value, 2),
-            'roi_percentage': round(roi_percentage, 1),
-            'roi_multiplier': round(roi_multiplier, 1),
-            
-            # Break-even
-            'deals_to_breakeven': round(deals_to_breakeven, 1),
-            'estimated_days_to_breakeven': round(deals_to_breakeven * 7, 0),  # ~1 deal/week
-            
-            # Verdict
-            'is_worth_it': roi_percentage > 100
-        }
-    
-    # ========================================================================
-    # SOCIAL PROOF
-    # ========================================================================
-    
-    def get_social_proof(self) -> Dict:
-        """Get social proof data for premium"""
-        return SOCIAL_PROOF.copy()
     
     # ========================================================================
     # UPGRADE TRIGGERS
@@ -544,79 +451,124 @@ class ValueTracker:
     
     def should_show_value_dashboard(self, user_id: int) -> Tuple[bool, str]:
         """
-        Determine if value dashboard should be shown to trigger upgrade.
+        Determine if value dashboard should be shown.
         
         Returns:
             (should_show, reason)
         """
         value = self._get_or_create_value(user_id)
         
+        # Don't show to premium users
         if value.is_premium:
-            return False, "Already premium"
+            return False, "User is premium"
         
         # Show after finding 3+ deals
-        if value.total_deals_found >= 3:
-            return True, "Found 3+ deals"
+        if value.deals_found >= 3:
+            return True, "3+ deals found - show value"
         
-        # Show if missed deals
+        # Show after missing 2+ deals
         if value.deals_missed >= 2:
-            return True, "Missed 2+ deals"
+            return True, "2+ deals missed - show opportunity cost"
         
-        # Show if high value generated
-        if value.total_savings_generated >= 500:
-            return True, "Generated €500+ value"
+        # Show after €500 in savings shown
+        if value.total_savings >= 500:
+            return True, "High value demonstrated"
         
-        # Show after 7 days active
-        days_active = (datetime.now() - value.registration_date).days
-        if days_active >= 7:
-            return True, "Active for 7+ days"
+        # Show after 30+ searches (power user)
+        if value.searches_made >= 30:
+            return True, "Power user - show efficiency gains"
         
-        return False, "Criteria not met"
+        return False, "Not enough engagement yet"
+    
+    # ========================================================================
+    # ANALYTICS
+    # ========================================================================
+    
+    def get_aggregate_stats(self) -> Dict:
+        """Get aggregate statistics across all users"""
+        if not self.user_values:
+            return {}
+        
+        all_savings = [v.total_savings for v in self.user_values.values()]
+        all_deals = [v.deals_found for v in self.user_values.values()]
+        premium_users = [v for v in self.user_values.values() if v.is_premium]
+        free_users = [v for v in self.user_values.values() if not v.is_premium]
+        
+        return {
+            'total_users': len(self.user_values),
+            'premium_users': len(premium_users),
+            'free_users': len(free_users),
+            'total_savings_generated': sum(all_savings),
+            'avg_savings_per_user': statistics.mean(all_savings) if all_savings else 0,
+            'median_savings': statistics.median(all_savings) if all_savings else 0,
+            'total_deals_found': sum(all_deals),
+            'avg_deals_per_user': statistics.mean(all_deals) if all_deals else 0,
+            'premium_avg_savings': statistics.mean([v.total_savings for v in premium_users]) if premium_users else 0,
+            'free_avg_savings': statistics.mean([v.total_savings for v in free_users]) if free_users else 0
+        }
 
 
 # ============================================================================
-# HELPER FUNCTIONS
+# FORMATTING HELPERS
 # ============================================================================
 
-def format_value_dashboard(dashboard: Dict, comparative: Dict, roi: Dict) -> str:
+def format_value_dashboard(dashboard: Dict) -> str:
     """
-    Format value dashboard for display.
+    Format value dashboard for Telegram display.
     
     Args:
-        dashboard: From get_personal_dashboard()
-        comparative: From get_comparative_metrics()
-        roi: From calculate_premium_roi()
+        dashboard: Dict from get_personal_dashboard()
     
     Returns:
-        Formatted string
+        Formatted message string
     """
-    return f"""📊 Tu Dashboard de Valor
+    personal = dashboard['personal']
+    comparative = dashboard['comparative']
+    roi = dashboard['roi']
+    social = dashboard['social_proof']
+    
+    message = f"""📊 Tu Valor Generado
 
-💰 Valor Generado:
-• Ahorro total: €{dashboard['total_savings']:.2f}
-• Chollos encontrados: {dashboard['total_deals']}
-• Tiempo ahorrado: {dashboard['time_saved_hours']:.1f}h
+💰 Ahorro Total: €{personal['total_savings']:.0f}
+⏱️ Tiempo Ahorrado: {personal['time_saved_hours']:.1f} horas
+🔥 Chollos Encontrados: {personal['deals_found']}
+❌ Chollos Perdidos: {personal['deals_missed']} (por límites free)
 
-❌ Oportunidades Perdidas:
-• Chollos perdidos: {dashboard['deals_missed']}
-• Ahorro perdido: €{dashboard['savings_missed']:.2f}
+📉 Valor Perdido: €{personal['missed_value']:.0f}
 
-📈 Free vs Premium:
+────────────────────
 
-Tú (Free): {comparative['your_deals_per_month']:.0f} chollos/mes
-Premium: {comparative['premium_deals_per_month']} chollos/mes
-Diferencia: +{comparative['deals_difference']:.0f} chollos ({comparative['deals_multiplier']:.0f}x)
+🎯 Comparativa Free vs Premium
 
-💸 ROI de Premium:
-• Costo: €{roi['cost']}/mes
-• Ahorro adicional: €{roi['expected_additional_savings']:.0f}
-• Valor neto: €{roi['net_value']:.0f}
-• ROI: {roi['roi_multiplier']:.0f}x ({roi['roi_percentage']:.0f}%)
+| Métrica | Tú (Free) | Premium | Diferencia |
+|---------|-----------|---------|------------|
+| Chollos/mes | {comparative['your_deals_month']} | {comparative['premium_deals_month']} | +{comparative['deals_delta_percent']:.0f}% |
+| Ahorro/mes | €{comparative['your_savings_month']:.0f} | €{comparative['premium_savings_month']:.0f} | +{comparative['savings_delta_percent']:.0f}% |
+| Tiempo respuesta | {comparative['response_time_multiplier']:.0f}x más lento | Instantáneo | {comparative['response_time_multiplier']:.0f}x faster |
 
-🎯 Con Premium te pagas en {roi['deals_to_breakeven']:.0f} chollos (~{roi['estimated_days_to_breakeven']:.0f} días)
+────────────────────
 
-{'[✅ Premium Vale la Pena]' if roi['is_worth_it'] else '[⚠️ Considera Premium]'}
+💡 Con Premium:
+• +{comparative['premium_deals_month'] - comparative['your_deals_month']} chollos más al mes
+• +€{comparative['premium_savings_month'] - comparative['your_savings_month']:.0f} ahorro adicional
+• 0 chollos perdidos
+• Notificaciones instantáneas
+
+💸 ROI Premium: {roi['roi_multiplier']:.0f}x en tu primer mes
+• Costo: €{roi['monthly_cost']:.2f}/mes
+• Ahorro adicional: +€{roi['additional_savings']:.0f}
+• Beneficio neto: +€{roi['net_benefit_monthly']:.0f}/mes
+• Recuperas inversión en: {roi['payback_days']} días
+
+────────────────────
+
+👥 {social['premium_users']}+ usuarios premium
+⭐ Rating {social['avg_rating']}/5
+💰 €{social['total_savings_generated']:,} ahorrados en total
+🏆 {social['top_hunters_premium_percent']}% de top hunters son premium
 """
+    
+    return message
 
 
 # ============================================================================
@@ -633,56 +585,47 @@ if __name__ == "__main__":
     
     test_user = 11111
     
-    print("1️⃣ Tracking Value")
+    print("1️⃣ Tracking User Activity")
     print("-" * 40)
     
     # Simulate user activity
-    tracker.track_search(test_user)
-    tracker.track_deal_found(test_user, 180, claimed=True)
-    tracker.track_deal_found(test_user, 220, claimed=True)
-    tracker.track_deal_found(test_user, 150, claimed=False)
-    tracker.track_deal_missed(test_user, "search_limit", 200, "MAD-MIA")
-    tracker.track_deal_missed(test_user, "watchlist_full", 180, "MAD-NYC")
-    tracker.track_activity(test_user, "watchlist", 3)
-    tracker.track_activity(test_user, "notifications", 5)
+    for i in range(15):
+        tracker.track_search(test_user)
     
-    print("✅ Tracked activity for test user")
+    tracker.track_deal_found(test_user, 120, "europe")
+    tracker.track_deal_found(test_user, 280, "international")
+    tracker.track_deal_found(test_user, 45, "domestic")
+    tracker.track_deal_found(test_user, 150, "europe")
+    
+    tracker.track_deal_missed(test_user)
+    tracker.track_deal_missed(test_user)
+    
+    for i in range(8):
+        tracker.track_notification(test_user)
+    
+    print("✅ Activity tracked")
     
     print("\n2️⃣ Personal Dashboard")
     print("-" * 40)
     
     dashboard = tracker.get_personal_dashboard(test_user)
-    print(f"Total savings: €{dashboard['total_savings']:.2f}")
-    print(f"Deals found: {dashboard['total_deals']}")
-    print(f"Deals missed: {dashboard['deals_missed']}")
-    print(f"Savings missed: €{dashboard['savings_missed']:.2f}")
+    print(format_value_dashboard(dashboard))
     
-    print("\n3️⃣ Comparative Metrics")
-    print("-" * 40)
-    
-    comparative = tracker.get_comparative_metrics(test_user)
-    print(f"Your deals/month: {comparative['your_deals_per_month']:.1f}")
-    print(f"Premium avg: {comparative['premium_deals_per_month']}")
-    print(f"Multiplier: {comparative['deals_multiplier']:.1f}x")
-    
-    print("\n4️⃣ ROI Calculator")
-    print("-" * 40)
-    
-    roi = tracker.calculate_premium_roi(test_user, "monthly")
-    print(f"Cost: €{roi['cost']}")
-    print(f"Expected additional savings: €{roi['expected_additional_savings']:.2f}")
-    print(f"ROI: {roi['roi_multiplier']:.1f}x ({roi['roi_percentage']:.0f}%)")
-    print(f"Worth it: {roi['is_worth_it']}")
-    
-    print("\n5️⃣ Formatted Dashboard")
-    print("-" * 40)
-    print(format_value_dashboard(dashboard, comparative, roi))
-    
-    print("\n6️⃣ Upgrade Trigger")
+    print("\n3️⃣ Upgrade Trigger Check")
     print("-" * 40)
     
     should_show, reason = tracker.should_show_value_dashboard(test_user)
-    print(f"Show dashboard: {should_show} ({reason})")
+    print(f"Show dashboard: {should_show}")
+    print(f"Reason: {reason}")
+    
+    print("\n4️⃣ Aggregate Stats")
+    print("-" * 40)
+    
+    stats = tracker.get_aggregate_stats()
+    print(f"Total users: {stats['total_users']}")
+    print(f"Total savings: €{stats['total_savings_generated']:.0f}")
+    print(f"Avg savings/user: €{stats['avg_savings_per_user']:.0f}")
+    print(f"Total deals: {stats['total_deals_found']}")
     
     print("\n" + "="*60)
     print("✅ Testing Complete!")
