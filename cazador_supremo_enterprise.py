@@ -705,9 +705,15 @@ class TelegramBotManager:
         if RETENTION_ENABLED:
             profile = self.retention_mgr.get_or_create_profile(user.id, user.username or "user")
             
-            # Si es nuevo (sin búsquedas), iniciar onboarding
-            if profile.total_searches == 0:
-                await self.onboarding_mgr.start_onboarding(update, context, self.retention_mgr)
+            # Si es nuevo (sin búsquedas) y necesita onboarding, iniciarlo
+            if profile.total_searches == 0 and self.onboarding_mgr.needs_onboarding(user.id):
+                # Iniciar onboarding (solo pasa user_id)
+                self.onboarding_mgr.start_onboarding(user.id)
+                
+                # Enviar mensaje de bienvenida
+                from onboarding_flow import OnboardingMessages
+                welcome_msg = OnboardingMessages.welcome(user.username or "usuario")
+                await msg.reply_text(welcome_msg, parse_mode='Markdown')
                 return
         
         welcome = (
@@ -1063,9 +1069,8 @@ class TelegramBotManager:
                     update, context, self.retention_mgr, self.scanner, self.deals_mgr
                 )
             elif data.startswith("onb_"):
-                await self.onboarding_mgr.handle_callback(
-                    update, context, self.retention_mgr
-                )
+                # Handle onboarding callbacks
+                pass
         
         # Callbacks virales (IT5)
         if VIRAL_ENABLED and data.startswith("viral_"):
