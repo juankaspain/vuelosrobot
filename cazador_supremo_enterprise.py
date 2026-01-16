@@ -541,9 +541,8 @@ class TelegramBotManager:
             self.app.add_handler(CommandHandler('profile', self.cmd_profile))
             self.app.add_handler(CommandHandler('shop', self.cmd_shop))
             
-            # Inicializar background tasks
+            # Inicializar background tasks (3 params: retention_mgr, scanner, notifier)
             self.background_tasks = BackgroundTaskManager(
-                self.app.bot,
                 self.retention_mgr,
                 self.scanner,
                 self.smart_notifier
@@ -580,7 +579,8 @@ class TelegramBotManager:
         if self.app:
             if self.app.updater and self.app.updater.running:
                 await self.app.updater.stop()
-            await self.app.stop()
+            if self.app.running:
+                await self.app.stop()
             await self.app.shutdown()
     
     async def auto_scan_loop(self):
