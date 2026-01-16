@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Pricing Engine with Smart Discounts and Upgrade Prompts
+Pricing Engine with Dynamic Discounts
 IT6 - DAY 4/5
 
 Features:
 - Multiple pricing tiers (Basic/Pro, Monthly/Annual)
-- Smart dynamic discounts (up to 40%)
-- Regional pricing support
-- Contextual upgrade prompts
+- Dynamic discount calculation (up to 40%)
+- Regional pricing
+- Smart upgrade prompts based on context
 - Limited-time offers
-- Discount stacking rules
+- Coupon code system
 
 Author: @Juanka_Spain
 Version: 14.0.0-alpha.4
@@ -39,24 +39,27 @@ class PricingTier(Enum):
 
 class DiscountType(Enum):
     """Types of discounts"""
-    POWER_USER = "power_user"          # Heavy usage
-    REFERRAL_KING = "referral_king"    # Many referrals
-    TRIAL_ENDING = "trial_ending"      # Trial expiring
-    SEASONAL = "seasonal"              # Limited time promo
-    LOYALTY = "loyalty"                # Long-time user
-    FIRST_TIME = "first_time"          # First subscription
-    ANNUAL_UPGRADE = "annual_upgrade"  # Monthly to annual
+    POWER_USER = "power_user"
+    REFERRAL_KING = "referral_king"
+    TRIAL_ENDING = "trial_ending"
+    SEASONAL = "seasonal"
+    LOYALTY = "loyalty"
+    COUPON = "coupon"
 
 
 class UpgradeContext(Enum):
-    """Context for showing upgrade prompts"""
+    """Context for showing upgrade prompt"""
     SEARCH_LIMIT = "search_limit"
     WATCHLIST_FULL = "watchlist_full"
     DEAL_MISSED = "deal_missed"
     HIGH_VALUE_SHOWN = "high_value"
-    TRIAL_ENDING = "trial_ending"
-    POWER_USER = "power_user"
-    REFERRAL_SUCCESS = "referral_success"
+    TRIAL_EXPIRING = "trial_expiring"
+    GENERAL = "general"
+
+
+# Maximum discount allowed
+MAX_DISCOUNT_PERCENT = 40
+MAX_DISCOUNT_STACK = 3  # Max number of discounts to stack
 
 
 # ============================================================================
@@ -64,76 +67,83 @@ class UpgradeContext(Enum):
 # ============================================================================
 
 @dataclass
-class PricingPlan:
-    """Pricing plan details"""
-    tier: str  # PricingTier value
+class PricePlan:
+    """A pricing plan"""
+    tier_id: str
     name: str
-    base_price: float
+    price: float
     currency: str
     billing_period: str  # "monthly" or "annual"
     features: List[str]
-    trial_days: int
+    trial_days: int = 7
     discount_percent: int = 0
+    savings_vs_monthly: float = 0.0
     popular: bool = False
     recommended_for: Optional[str] = None
     
     @property
-    def monthly_equivalent(self) -> float:
-        """Get monthly equivalent price"""
-        if self.billing_period == "monthly":
-            return self.base_price
-        else:
-            return self.base_price / 12
+    def discounted_price(self) -> float:
+        """Calculate discounted price"""
+        if self.discount_percent == 0:
+            return self.price
+        return self.price * (1 - self.discount_percent / 100)
     
     @property
-    def annual_savings(self) -> float:
-        """Savings vs monthly if annual"""
-        if self.billing_period != "annual":
-            return 0
-        monthly_total = self.monthly_equivalent * 12
-        return (monthly_total * 12) - self.base_price
-
-
-@dataclass
-class Discount:
-    """Applied discount"""
-    type: str  # DiscountType value
-    percent: int
-    description: str
-    condition_met: bool = True
-    expires: Optional[datetime] = None
-
-
-@dataclass
-class PriceCalculation:
-    """Final price calculation with discounts"""
-    tier: str
-    base_price: float
-    discounts_applied: List[Discount]
-    total_discount_percent: int
-    final_price: float
-    currency: str
-    savings: float
+    def monthly_equivalent(self) -> float:
+        """Calculate monthly equivalent price"""
+        if self.billing_period == "monthly":
+            return self.discounted_price
+        return self.discounted_price / 12
     
     def to_dict(self) -> Dict:
         data = asdict(self)
-        data['discounts_applied'] = [asdict(d) for d in self.discounts_applied]
+        data['discounted_price'] = self.discounted_price
+        data['monthly_equivalent'] = self.monthly_equivalent
         return data
 
 
 @dataclass
-class UpgradePrompt:
-    """Contextual upgrade prompt"""
-    context: str  # UpgradeContext value
-    headline: str
-    message: str
-    primary_cta: str
-    secondary_cta: Optional[str] = None
-    urgency_level: int = 1  # 1-5
-    recommended_tier: str = "basic_monthly"
+class AppliedDiscount:
+    """A discount applied to a purchase"""
+    discount_type: str
+    percent: int
+    reason: str
+    applied_at: datetime
     
     def to_dict(self) -> Dict:
-        return asdict(self)
+        data = asdict(self)
+        data['applied_at'] = self.applied_at.isoformat()
+        return data
+
+
+@dataclass
+class PriceQuote:
+    """A price quote for a user"""
+    user_id: int
+    tier_id: str
+    base_price: float
+    currency: str
+    discounts_applied: List[AppliedDiscount]
+    final_price: float
+    savings: float
+    valid_until: datetime
+    
+    @property
+    def total_discount_percent(self) -> int:
+        """Total discount percentage"""
+        return sum(d.percent for d in self.discounts_applied)
+    
+    @property
+    def is_valid(self) -> bool:
+        """Check if quote is still valid"""
+        return datetime.now() < self.valid_until
+    
+    def to_dict(self) -> Dict:
+        data = asdict(self)
+        data['discounts_applied'] = [d.to_dict() for d in self.discounts_applied]
+        data['valid_until'] = self.valid_until.isoformat()
+        data['total_discount_percent'] = self.total_discount_percent
+        return data
 
 
 # ============================================================================
@@ -145,24 +155,24 @@ class PricingEngine:
     Manages pricing, discounts, and upgrade prompts.
     
     Features:
-    - Multiple tiers with regional pricing
-    - Smart dynamic discounts (max 40%)
-    - Contextual upgrade prompts
-    - Discount stacking rules
-    - Limited-time offers
+    - Multiple pricing tiers
+    - Dynamic discount calculation
+    - Regional pricing
+    - Smart upgrade prompts
+    - Quote generation with expiration
     """
     
-    def __init__(self, data_dir: str = ".", config_file: str = "pricing_config.json"):
+    def __init__(self, config_file: str = "pricing_config.json", data_dir: str = "."):
+        self.config_file = Path(config_file)
         self.data_dir = Path(data_dir)
-        self.config_file = self.data_dir / config_file
+        self.quotes_file = self.data_dir / "price_quotes.json"
         
-        # Load pricing configuration
+        # Load configuration
         self.config = self._load_config()
-        self.tiers = self._load_tiers()
+        self.plans = self._load_plans()
         
-        # Discount limits
-        self.max_discount = self.config.get('limits', {}).get('max_discount_percent', 40)
-        self.max_stack = self.config.get('limits', {}).get('max_discount_stack', 3)
+        # Load quotes
+        self.quotes: Dict[int, List[PriceQuote]] = self._load_quotes()
         
         print("✅ PricingEngine initialized")
     
@@ -174,466 +184,413 @@ class PricingEngine:
         """Load pricing configuration"""
         if not self.config_file.exists():
             print("⚠️ Pricing config not found, using defaults")
-            return self._get_default_config()
+            return {}
         
         try:
             with open(self.config_file, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
             print(f"⚠️ Error loading config: {e}")
-            return self._get_default_config()
+            return {}
     
-    def _get_default_config(self) -> Dict:
-        """Get default pricing configuration"""
-        return {
-            "tiers": {
-                "basic_monthly": {
-                    "name": "Premium Monthly",
-                    "price": 9.99,
-                    "currency": "EUR",
-                    "billing_period": "monthly",
-                    "features": ["unlimited_searches", "unlimited_watchlist", "priority_notifications"],
-                    "trial_days": 7
-                },
-                "basic_annual": {
-                    "name": "Premium Annual",
-                    "price": 99.99,
-                    "currency": "EUR",
-                    "billing_period": "annual",
-                    "discount_percent": 17,
-                    "features": ["unlimited_searches", "unlimited_watchlist", "priority_notifications"],
-                    "trial_days": 7,
-                    "popular": True
-                }
-            },
-            "regional_pricing": {
-                "ES": {"basic_monthly": 9.99, "basic_annual": 99.99, "currency": "EUR"}
-            },
-            "discount_rules": {},
-            "limits": {"max_discount_percent": 40, "max_discount_stack": 3}
-        }
-    
-    def _load_tiers(self) -> Dict[str, PricingPlan]:
-        """Load pricing tiers from config"""
-        tiers = {}
+    def _load_plans(self) -> Dict[str, PricePlan]:
+        """Load pricing plans from config"""
+        plans = {}
         
-        for tier_id, tier_data in self.config.get('tiers', {}).items():
-            tiers[tier_id] = PricingPlan(
-                tier=tier_id,
-                name=tier_data.get('name', ''),
-                base_price=tier_data.get('price', 0),
-                currency=tier_data.get('currency', 'EUR'),
-                billing_period=tier_data.get('billing_period', 'monthly'),
-                features=tier_data.get('features', []),
+        if 'tiers' not in self.config:
+            return plans
+        
+        for tier_id, tier_data in self.config['tiers'].items():
+            plans[tier_id] = PricePlan(
+                tier_id=tier_id,
+                name=tier_data['name'],
+                price=tier_data['price'],
+                currency=tier_data['currency'],
+                billing_period=tier_data['billing_period'],
+                features=tier_data['features'],
                 trial_days=tier_data.get('trial_days', 7),
                 discount_percent=tier_data.get('discount_percent', 0),
+                savings_vs_monthly=tier_data.get('savings_vs_monthly', 0),
                 popular=tier_data.get('popular', False),
                 recommended_for=tier_data.get('recommended_for')
             )
         
-        return tiers
+        return plans
     
-    # ========================================================================
-    # PRICING
-    # ========================================================================
-    
-    def get_tier(self, tier_id: str) -> Optional[PricingPlan]:
-        """Get pricing tier by ID"""
-        return self.tiers.get(tier_id)
-    
-    def get_all_tiers(self) -> List[PricingPlan]:
-        """Get all available pricing tiers"""
-        return list(self.tiers.values())
-    
-    def get_regional_price(self, tier_id: str, region: str = "ES") -> Optional[float]:
-        """Get regional pricing for tier"""
-        regional = self.config.get('regional_pricing', {}).get(region, {})
+    def _load_quotes(self) -> Dict[int, List[PriceQuote]]:
+        """Load price quotes from file"""
+        if not self.quotes_file.exists():
+            return {}
         
-        if tier_id in regional:
-            return regional[tier_id]
-        
-        # Fallback to base price
-        tier = self.get_tier(tier_id)
-        return tier.base_price if tier else None
+        try:
+            with open(self.quotes_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                quotes = {}
+                for user_id, quote_list in data.items():
+                    quotes[int(user_id)] = [
+                        PriceQuote(
+                            user_id=q['user_id'],
+                            tier_id=q['tier_id'],
+                            base_price=q['base_price'],
+                            currency=q['currency'],
+                            discounts_applied=[
+                                AppliedDiscount(
+                                    discount_type=d['discount_type'],
+                                    percent=d['percent'],
+                                    reason=d['reason'],
+                                    applied_at=datetime.fromisoformat(d['applied_at'])
+                                )
+                                for d in q['discounts_applied']
+                            ],
+                            final_price=q['final_price'],
+                            savings=q['savings'],
+                            valid_until=datetime.fromisoformat(q['valid_until'])
+                        )
+                        for q in quote_list
+                    ]
+                return quotes
+        except Exception as e:
+            print(f"⚠️ Error loading quotes: {e}")
+            return {}
+    
+    def _save_quotes(self):
+        """Save price quotes to file"""
+        try:
+            data = {
+                str(user_id): [q.to_dict() for q in quotes]
+                for user_id, quotes in self.quotes.items()
+            }
+            with open(self.quotes_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"⚠️ Error saving quotes: {e}")
     
     # ========================================================================
-    # DISCOUNTS
+    # PRICING PLANS
     # ========================================================================
     
-    def calculate_available_discounts(self, user_profile: Dict) -> List[Discount]:
+    def get_plan(self, tier_id: str) -> Optional[PricePlan]:
+        """Get a pricing plan by ID"""
+        return self.plans.get(tier_id)
+    
+    def get_all_plans(self, currency: str = "EUR") -> List[PricePlan]:
+        """Get all pricing plans"""
+        return [plan for plan in self.plans.values() if plan.currency == currency]
+    
+    def get_regional_pricing(self, country_code: str) -> Dict:
+        """Get pricing for a specific region"""
+        if 'regional_pricing' not in self.config:
+            return {}
+        return self.config['regional_pricing'].get(country_code, {})
+    
+    # ========================================================================
+    # DISCOUNT CALCULATION
+    # ========================================================================
+    
+    def calculate_discounts(self, user_id: int, user_profile: Dict) -> List[AppliedDiscount]:
         """
-        Calculate all applicable discounts for user.
+        Calculate applicable discounts for a user.
         
-        user_profile should contain:
-        - total_searches: int
-        - referrals: int
-        - trial_days_left: int (if in trial)
-        - user_age_days: int
-        - is_first_subscription: bool
+        Args:
+            user_id: User ID
+            user_profile: Dict with user data (searches, referrals, trial_days_left, etc.)
+        
+        Returns:
+            List of AppliedDiscount objects
         """
         discounts = []
-        discount_rules = self.config.get('discount_rules', {})
+        
+        if 'discount_rules' not in self.config:
+            return discounts
+        
+        rules = self.config['discount_rules']
         
         # Power user discount
-        if user_profile.get('total_searches', 0) > 100:
-            rule = discount_rules.get('power_user', {})
-            discounts.append(Discount(
-                type=DiscountType.POWER_USER.value,
-                percent=rule.get('discount_percent', 10),
-                description=rule.get('description', 'Descuento usuario activo')
-            ))
+        if 'power_user' in rules:
+            total_searches = user_profile.get('total_searches', 0)
+            if total_searches > 100:
+                discounts.append(AppliedDiscount(
+                    discount_type=DiscountType.POWER_USER.value,
+                    percent=rules['power_user']['discount_percent'],
+                    reason=rules['power_user']['description'],
+                    applied_at=datetime.now()
+                ))
         
         # Referral king discount
-        if user_profile.get('referrals', 0) >= 10:
-            rule = discount_rules.get('referral_king', {})
-            discounts.append(Discount(
-                type=DiscountType.REFERRAL_KING.value,
-                percent=rule.get('discount_percent', 10),
-                description=rule.get('description', 'Descuento por referidos')
-            ))
+        if 'referral_king' in rules:
+            referrals = user_profile.get('referrals', 0)
+            if referrals > 10:
+                discounts.append(AppliedDiscount(
+                    discount_type=DiscountType.REFERRAL_KING.value,
+                    percent=rules['referral_king']['discount_percent'],
+                    reason=rules['referral_king']['description'],
+                    applied_at=datetime.now()
+                ))
         
         # Trial ending discount
-        if user_profile.get('trial_days_left', 99) <= 1:
-            rule = discount_rules.get('trial_ending', {})
-            expires = datetime.now() + timedelta(days=1)
-            discounts.append(Discount(
-                type=DiscountType.TRIAL_ENDING.value,
-                percent=rule.get('discount_percent', 20),
-                description=rule.get('description', 'Oferta especial fin de trial'),
-                expires=expires
-            ))
+        if 'trial_ending' in rules:
+            trial_days_left = user_profile.get('trial_days_left', 999)
+            if trial_days_left <= 1:
+                discounts.append(AppliedDiscount(
+                    discount_type=DiscountType.TRIAL_ENDING.value,
+                    percent=rules['trial_ending']['discount_percent'],
+                    reason=rules['trial_ending']['description'],
+                    applied_at=datetime.now()
+                ))
+        
+        # Seasonal promotion
+        if 'seasonal' in rules:
+            if user_profile.get('special_promo_active', False):
+                discounts.append(AppliedDiscount(
+                    discount_type=DiscountType.SEASONAL.value,
+                    percent=rules['seasonal']['discount_percent'],
+                    reason=rules['seasonal']['description'],
+                    applied_at=datetime.now()
+                ))
         
         # Loyalty discount
-        if user_profile.get('user_age_days', 0) > 90:
-            rule = discount_rules.get('loyalty', {})
-            discounts.append(Discount(
-                type=DiscountType.LOYALTY.value,
-                percent=rule.get('discount_percent', 5),
-                description=rule.get('description', 'Descuento por antigüedad')
-            ))
+        if 'loyalty' in rules:
+            account_age_days = user_profile.get('account_age_days', 0)
+            if account_age_days > 90:
+                discounts.append(AppliedDiscount(
+                    discount_type=DiscountType.LOYALTY.value,
+                    percent=rules['loyalty']['discount_percent'],
+                    reason=rules['loyalty']['description'],
+                    applied_at=datetime.now()
+                ))
         
-        # First time discount
-        if user_profile.get('is_first_subscription', False):
-            discounts.append(Discount(
-                type=DiscountType.FIRST_TIME.value,
-                percent=15,
-                description='Oferta primera suscripción'
-            ))
+        # Sort by percent (highest first) and limit
+        discounts.sort(key=lambda d: d.percent, reverse=True)
+        discounts = discounts[:MAX_DISCOUNT_STACK]
         
-        # Seasonal promo (if active)
-        if self._is_seasonal_promo_active():
-            rule = discount_rules.get('seasonal', {})
-            expires = datetime.now() + timedelta(days=7)
-            discounts.append(Discount(
-                type=DiscountType.SEASONAL.value,
-                percent=rule.get('discount_percent', 15),
-                description=rule.get('description', 'Promoción por tiempo limitado'),
-                expires=expires
-            ))
+        # Ensure total doesn't exceed max
+        total_discount = sum(d.percent for d in discounts)
+        if total_discount > MAX_DISCOUNT_PERCENT:
+            # Scale down proportionally
+            scale_factor = MAX_DISCOUNT_PERCENT / total_discount
+            for discount in discounts:
+                discount.percent = int(discount.percent * scale_factor)
         
         return discounts
     
-    def _is_seasonal_promo_active(self) -> bool:
+    def apply_coupon(self, coupon_code: str) -> Optional[AppliedDiscount]:
         """
-        Check if seasonal promotion is active.
-        Can be based on dates, events, etc.
-        """
-        # Example: Active during first week of each month
-        now = datetime.now()
-        return now.day <= 7
-    
-    def apply_discounts(self, tier_id: str, user_profile: Dict) -> PriceCalculation:
-        """
-        Calculate final price with discounts applied.
+        Apply a coupon code.
+        
+        Args:
+            coupon_code: Coupon code to apply
         
         Returns:
-            PriceCalculation with final price
+            AppliedDiscount if valid, None otherwise
         """
-        tier = self.get_tier(tier_id)
-        if not tier:
-            raise ValueError(f"Invalid tier: {tier_id}")
+        # Mock coupon validation
+        # In real implementation, check against database
+        valid_coupons = {
+            "WELCOME20": 20,
+            "SAVE30": 30,
+            "VIP50": 50
+        }
         
-        # Get available discounts
-        available_discounts = self.calculate_available_discounts(user_profile)
+        if coupon_code.upper() in valid_coupons:
+            return AppliedDiscount(
+                discount_type=DiscountType.COUPON.value,
+                percent=valid_coupons[coupon_code.upper()],
+                reason=f"Coupon: {coupon_code.upper()}",
+                applied_at=datetime.now()
+            )
         
-        # Sort by percent (highest first)
-        available_discounts.sort(key=lambda d: d.percent, reverse=True)
+        return None
+    
+    # ========================================================================
+    # QUOTE GENERATION
+    # ========================================================================
+    
+    def generate_quote(
+        self,
+        user_id: int,
+        tier_id: str,
+        user_profile: Dict,
+        validity_hours: int = 24
+    ) -> Optional[PriceQuote]:
+        """
+        Generate a price quote for a user.
         
-        # Apply discount stacking rules
-        applied_discounts = available_discounts[:self.max_stack]
+        Args:
+            user_id: User ID
+            tier_id: Pricing tier ID
+            user_profile: User data for discount calculation
+            validity_hours: Hours until quote expires
         
-        # Calculate total discount
-        total_discount = sum(d.percent for d in applied_discounts)
-        total_discount = min(total_discount, self.max_discount)
+        Returns:
+            PriceQuote object
+        """
+        plan = self.get_plan(tier_id)
+        if not plan:
+            return None
+        
+        # Calculate discounts
+        discounts = self.calculate_discounts(user_id, user_profile)
         
         # Calculate final price
-        discount_multiplier = (100 - total_discount) / 100
-        final_price = tier.base_price * discount_multiplier
-        savings = tier.base_price - final_price
+        base_price = plan.price
+        total_discount_percent = sum(d.percent for d in discounts)
+        final_price = base_price * (1 - total_discount_percent / 100)
+        savings = base_price - final_price
         
-        return PriceCalculation(
-            tier=tier_id,
-            base_price=tier.base_price,
-            discounts_applied=applied_discounts,
-            total_discount_percent=total_discount,
-            final_price=round(final_price, 2),
-            currency=tier.currency,
-            savings=round(savings, 2)
+        # Create quote
+        quote = PriceQuote(
+            user_id=user_id,
+            tier_id=tier_id,
+            base_price=base_price,
+            currency=plan.currency,
+            discounts_applied=discounts,
+            final_price=final_price,
+            savings=savings,
+            valid_until=datetime.now() + timedelta(hours=validity_hours)
         )
+        
+        # Save quote
+        if user_id not in self.quotes:
+            self.quotes[user_id] = []
+        self.quotes[user_id].append(quote)
+        self._save_quotes()
+        
+        return quote
+    
+    def get_latest_quote(self, user_id: int, tier_id: str = None) -> Optional[PriceQuote]:
+        """Get latest quote for user"""
+        if user_id not in self.quotes:
+            return None
+        
+        quotes = self.quotes[user_id]
+        if tier_id:
+            quotes = [q for q in quotes if q.tier_id == tier_id]
+        
+        if not quotes:
+            return None
+        
+        # Return latest valid quote
+        valid_quotes = [q for q in quotes if q.is_valid]
+        if valid_quotes:
+            return valid_quotes[-1]
+        
+        return quotes[-1]
     
     # ========================================================================
     # UPGRADE PROMPTS
     # ========================================================================
     
-    def get_upgrade_prompt(self, context: UpgradeContext, user_data: Dict = None) -> UpgradePrompt:
+    def get_upgrade_prompt(self, context: UpgradeContext, user_data: Dict = None) -> Dict:
         """
-        Get contextual upgrade prompt.
+        Get contextual upgrade prompt message.
         
         Args:
-            context: UpgradeContext enum
-            user_data: Optional dict with user-specific data
+            context: Context for the upgrade prompt
+            user_data: Optional user data for personalization
         
         Returns:
-            UpgradePrompt tailored to context
+            Dict with headline, message, cta
         """
-        user_data = user_data or {}
+        prompts = {
+            UpgradeContext.SEARCH_LIMIT: {
+                "headline": "🚫 Límite de Búsquedas Alcanzado",
+                "message": "Has usado tus 10 búsquedas diarias. Upgrade a Premium para búsquedas ilimitadas.",
+                "cta": "Desbloquear Búsquedas Ilimitadas",
+                "icon": "🔍"
+            },
+            UpgradeContext.WATCHLIST_FULL: {
+                "headline": "⭐ Watchlist Lleno",
+                "message": "Has usado tus 3 slots. Premium = watchlist ilimitado para no perderte ningún chollo.",
+                "cta": "Expandir Watchlist",
+                "icon": "⭐"
+            },
+            UpgradeContext.DEAL_MISSED: {
+                "headline": "😔 Perdiste Este Chollo",
+                "message": f"Lo perdiste por 2 minutos. Premium = notificaciones instantáneas, 24x más rápidas.",
+                "cta": "Nunca Más Perder Chollos",
+                "icon": "🔥"
+            },
+            UpgradeContext.HIGH_VALUE_SHOWN: {
+                "headline": "💰 Has Visto Gran Valor",
+                "message": f"Te hemos mostrado €{user_data.get('total_savings', 0):,.0f} en chollos. Desblóquealos todos por €9.99/mes.",
+                "cta": "Maximizar Mi Ahorro",
+                "icon": "💎"
+            },
+            UpgradeContext.TRIAL_EXPIRING: {
+                "headline": "⏰ Tu Trial Expira Pronto",
+                "message": f"Quedan {user_data.get('days_left', 0)} días. No pierdas acceso a features premium. 🎁 20% OFF si actualizas ahora.",
+                "cta": "Mantener Premium con Descuento",
+                "icon": "🎁"
+            },
+            UpgradeContext.GENERAL: {
+                "headline": "✨ Desbloquea Premium",
+                "message": "Búsquedas ilimitadas, watchlist sin límites, notificaciones priority y más.",
+                "cta": "Ver Planes Premium",
+                "icon": "🚀"
+            }
+        }
         
-        if context == UpgradeContext.SEARCH_LIMIT:
-            return UpgradePrompt(
-                context=context.value,
-                headline="🚫 Límite de Búsquedas Alcanzado",
-                message=(
-                    f"Has usado tus {user_data.get('limit', 10)} búsquedas diarias. "
-                    "Actualiza a Premium para búsquedas ilimitadas."
-                ),
-                primary_cta="Activar Búsquedas Ilimitadas",
-                secondary_cta="Ver Planes",
-                urgency_level=4,
-                recommended_tier="basic_monthly"
-            )
-        
-        elif context == UpgradeContext.WATCHLIST_FULL:
-            return UpgradePrompt(
-                context=context.value,
-                headline="⭐ Watchlist Lleno",
-                message=(
-                    f"Has usado {user_data.get('slots', 3)}/3 slots. "
-                    "Premium te da watchlist ilimitado para no perder ningún chollo."
-                ),
-                primary_cta="Desbloquear Watchlist Ilimitado",
-                secondary_cta="Gestionar Rutas",
-                urgency_level=2,
-                recommended_tier="basic_monthly"
-            )
-        
-        elif context == UpgradeContext.DEAL_MISSED:
-            return UpgradePrompt(
-                context=context.value,
-                headline="😔 Acabas de Perder un Chollo",
-                message=(
-                    f"Perdiste un chollo de €{user_data.get('deal_value', 150)} por notificación tardía. "
-                    "Premium = notificaciones instantáneas."
-                ),
-                primary_cta="No Perder Más Chollos",
-                secondary_cta="Ver Cómo Funciona",
-                urgency_level=5,
-                recommended_tier="basic_monthly"
-            )
-        
-        elif context == UpgradeContext.HIGH_VALUE_SHOWN:
-            total_value = user_data.get('total_savings', 2450)
-            return UpgradePrompt(
-                context=context.value,
-                headline=f"💰 Has Visto €{total_value} en Chollos",
-                message=(
-                    f"Imagina cuánto más podrías ahorrar con búsquedas ilimitadas y "
-                    "notificaciones priority. Solo €9.99/mes."
-                ),
-                primary_cta="Desbloquear Todo por €9.99",
-                secondary_cta="Ver ROI",
-                urgency_level=3,
-                recommended_tier="basic_annual"
-            )
-        
-        elif context == UpgradeContext.TRIAL_ENDING:
-            days_left = user_data.get('days_left', 2)
-            return UpgradePrompt(
-                context=context.value,
-                headline=f"⏰ Trial Expira en {days_left} Días",
-                message=(
-                    "No pierdas acceso a búsquedas ilimitadas, watchlist sin límites y "
-                    f"notificaciones priority. 🎁 25% OFF si actualizas ahora."
-                ),
-                primary_cta="Activar Premium con Descuento",
-                secondary_cta="Ver Mi Progreso",
-                urgency_level=5,
-                recommended_tier="basic_annual"
-            )
-        
-        elif context == UpgradeContext.POWER_USER:
-            searches = user_data.get('total_searches', 150)
-            return UpgradePrompt(
-                context=context.value,
-                headline="🔥 Eres un Power User",
-                message=(
-                    f"Con {searches} búsquedas, estás en el top 10% de usuarios. "
-                    "Premium te dará herramientas avanzadas para maximizar tu ahorro."
-                ),
-                primary_cta="Ver Features Premium",
-                secondary_cta="Aplicar Descuento 10%",
-                urgency_level=2,
-                recommended_tier="pro_monthly"
-            )
-        
-        elif context == UpgradeContext.REFERRAL_SUCCESS:
-            referrals = user_data.get('referrals', 12)
-            return UpgradePrompt(
-                context=context.value,
-                headline="🏆 Referral King",
-                message=(
-                    f"Con {referrals} referidos, mereces Premium. "
-                    "🎁 10% OFF especial para top referrers."
-                ),
-                primary_cta="Reclamar Descuento",
-                secondary_cta="Ver Planes",
-                urgency_level=3,
-                recommended_tier="basic_annual"
-            )
-        
-        # Default prompt
-        return UpgradePrompt(
-            context="default",
-            headline="🚀 Desbloquea Premium",
-            message="Búsquedas ilimitadas, watchlist sin límites, notificaciones priority y más.",
-            primary_cta="Ver Planes Premium",
-            urgency_level=1,
-            recommended_tier="basic_monthly"
-        )
+        return prompts.get(context, prompts[UpgradeContext.GENERAL])
     
     # ========================================================================
-    # COMPARISON
+    # HELPERS
     # ========================================================================
     
-    def compare_tiers(self, tier_ids: List[str]) -> List[Dict]:
-        """
-        Compare multiple pricing tiers.
-        
-        Returns:
-            List of tier comparisons
-        """
-        comparisons = []
-        
-        for tier_id in tier_ids:
-            tier = self.get_tier(tier_id)
-            if not tier:
-                continue
-            
-            comparisons.append({
-                'tier': tier_id,
-                'name': tier.name,
-                'price': tier.base_price,
-                'monthly_equivalent': tier.monthly_equivalent,
-                'currency': tier.currency,
-                'billing': tier.billing_period,
-                'features': tier.features,
-                'trial_days': tier.trial_days,
-                'popular': tier.popular,
-                'savings': tier.annual_savings if tier.billing_period == 'annual' else 0
-            })
-        
-        return comparisons
+    def get_feature_descriptions(self) -> Dict[str, str]:
+        """Get feature descriptions from config"""
+        return self.config.get('feature_descriptions', {})
+    
+    def get_social_proof(self) -> Dict:
+        """Get social proof data for marketing"""
+        return self.config.get('marketing', {}).get('social_proof', {})
+    
+    def get_value_props(self) -> List[str]:
+        """Get value propositions for marketing"""
+        return self.config.get('marketing', {}).get('value_props', [])
 
 
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
 
-def format_pricing_table(tiers: List[PricingPlan], user_profile: Dict = None) -> str:
+def format_pricing_table(plans: List[PricePlan], user_quote: Optional[PriceQuote] = None) -> str:
     """
-    Format pricing tiers as a comparison table.
+    Format pricing plans as a table.
     
     Args:
-        tiers: List of PricingPlan objects
-        user_profile: Optional user profile for personalized pricing
+        plans: List of PricePlan objects
+        user_quote: Optional quote with discounts
     
     Returns:
         Formatted pricing table string
     """
-    engine = PricingEngine()
+    output = "💰 Planes Premium\n\n"
     
-    message = "💳 Planes Premium\n\n"
+    for plan in plans:
+        popular_tag = " 🔥 POPULAR" if plan.popular else ""
+        
+        output += f"""{plan.name}{popular_tag}
+• Precio: €{plan.price}/{plan.billing_period[:3]}
+"""
+        
+        if plan.savings_vs_monthly > 0:
+            output += f"• Ahorro: €{plan.savings_vs_monthly:.0f}/año ({plan.discount_percent}% OFF)\n"
+        
+        output += f"• Trial: {plan.trial_days} días gratis\n"
+        output += f"• Features: {len(plan.features)}\n"
+        
+        # Show discount if applicable
+        if user_quote and user_quote.tier_id == plan.tier_id:
+            if user_quote.discounts_applied:
+                output += f"\n🎁 TU DESCUENTO: {user_quote.total_discount_percent}% OFF\n"
+                output += f"• Precio final: €{user_quote.final_price:.2f}\n"
+                output += f"• Ahorras: €{user_quote.savings:.2f}\n"
+                for discount in user_quote.discounts_applied:
+                    output += f"  • {discount.reason} (-{discount.percent}%)\n"
+        
+        output += "\n"
     
-    for tier in tiers:
-        # Calculate personalized price if profile provided
-        if user_profile:
-            calc = engine.apply_discounts(tier.tier, user_profile)
-            price_str = f"€{calc.final_price}"
-            if calc.total_discount_percent > 0:
-                price_str += f" (era €{tier.base_price}, -{calc.total_discount_percent}%)"
-        else:
-            price_str = f"€{tier.base_price}"
-        
-        popular_badge = " 🔥 POPULAR" if tier.popular else ""
-        
-        message += f"{'='*40}\n"
-        message += f"{tier.name}{popular_badge}\n"
-        message += f"{price_str}/{tier.billing_period}\n\n"
-        
-        # Features
-        feature_names = {
-            'unlimited_searches': '✅ Búsquedas ilimitadas',
-            'unlimited_watchlist': '✅ Watchlist sin límites',
-            'priority_notifications': '✅ Notificaciones priority',
-            '1year_history': '✅ Historial 1 año',
-            'unlimited_groups': '✅ Grupos ilimitados',
-            'export_data': '✅ Exportar datos',
-            'priority_support': '✅ Soporte 24/7',
-            'api_access': '✅ Acceso API',
-            'advanced_filters': '✅ Filtros avanzados'
-        }
-        
-        for feature in tier.features[:5]:  # Show top 5
-            message += f"{feature_names.get(feature, feature)}\n"
-        
-        if len(tier.features) > 5:
-            message += f"... y {len(tier.features) - 5} más\n"
-        
-        message += f"\n🎁 {tier.trial_days} días de prueba gratis\n"
-        
-        if tier.billing_period == "annual":
-            message += f"💰 Ahorra €{tier.annual_savings:.2f} vs mensual\n"
-        
-        message += "\n"
-    
-    return message
-
-
-def format_discount_summary(calculation: PriceCalculation) -> str:
-    """
-    Format discount summary.
-    
-    Args:
-        calculation: PriceCalculation object
-    
-    Returns:
-        Formatted summary string
-    """
-    message = f"🎉 Descuentos Aplicados\n\n"
-    message += f"Precio base: €{calculation.base_price}\n\n"
-    
-    if calculation.discounts_applied:
-        message += "Descuentos:\n"
-        for discount in calculation.discounts_applied:
-            message += f"• {discount.description}: -{discount.percent}%\n"
-            if discount.expires:
-                message += f"  ⏰ Expira: {discount.expires.strftime('%Y-%m-%d')}\n"
-        
-        message += f"\n🎯 Total descuento: {calculation.total_discount_percent}%\n"
-        message += f"💰 Ahorras: €{calculation.savings}\n\n"
-    
-    message += f"💎 PRECIO FINAL: €{calculation.final_price}\n"
-    
-    return message
+    return output
 
 
 # ============================================================================
@@ -648,62 +605,58 @@ if __name__ == "__main__":
     # Initialize engine
     engine = PricingEngine()
     
-    print("1️⃣ Available Tiers")
+    test_user = 22222
+    
+    print("1️⃣ Available Plans")
     print("-" * 40)
     
-    tiers = engine.get_all_tiers()
-    for tier in tiers:
-        print(f"\n{tier.name}")
-        print(f"  Price: €{tier.base_price}/{tier.billing_period}")
-        print(f"  Features: {len(tier.features)}")
-        print(f"  Trial: {tier.trial_days} days")
+    plans = engine.get_all_plans()
+    for plan in plans:
+        print(f"{plan.name}: €{plan.price}/{plan.billing_period}")
     
-    print("\n2️⃣ Smart Discounts")
+    print("\n2️⃣ Discount Calculation")
     print("-" * 40)
     
-    # Test user profile
     user_profile = {
         'total_searches': 150,
         'referrals': 12,
         'trial_days_left': 1,
-        'user_age_days': 45,
-        'is_first_subscription': True
+        'account_age_days': 45,
+        'special_promo_active': True
     }
     
-    available = engine.calculate_available_discounts(user_profile)
-    print(f"\nAvailable discounts: {len(available)}")
-    for disc in available:
-        print(f"• {disc.description}: {disc.percent}%")
+    discounts = engine.calculate_discounts(test_user, user_profile)
+    print(f"Applicable discounts: {len(discounts)}")
+    for discount in discounts:
+        print(f"  • {discount.reason}: {discount.percent}%")
     
-    # Apply to tier
-    calc = engine.apply_discounts('basic_monthly', user_profile)
-    print(f"\n{format_discount_summary(calc)}")
+    total_discount = sum(d.percent for d in discounts)
+    print(f"\nTotal discount: {total_discount}%")
     
-    print("\n3️⃣ Contextual Upgrade Prompts")
+    print("\n3️⃣ Price Quote")
     print("-" * 40)
     
-    contexts = [
-        (UpgradeContext.SEARCH_LIMIT, {'limit': 10}),
-        (UpgradeContext.DEAL_MISSED, {'deal_value': 185}),
-        (UpgradeContext.HIGH_VALUE_SHOWN, {'total_savings': 2450})
-    ]
+    quote = engine.generate_quote(test_user, "basic_monthly", user_profile)
+    if quote:
+        print(f"Plan: {quote.tier_id}")
+        print(f"Base price: €{quote.base_price}")
+        print(f"Final price: €{quote.final_price:.2f}")
+        print(f"Savings: €{quote.savings:.2f} ({quote.total_discount_percent}% OFF)")
+        print(f"Valid until: {quote.valid_until.strftime('%Y-%m-%d %H:%M')}")
     
-    for context, data in contexts:
-        prompt = engine.get_upgrade_prompt(context, data)
-        print(f"\n{prompt.headline}")
-        print(f"{prompt.message}")
-        print(f"CTA: [{prompt.primary_cta}]")
-        print(f"Urgency: {prompt.urgency_level}/5")
-    
-    print("\n4️⃣ Tier Comparison")
+    print("\n4️⃣ Upgrade Prompts")
     print("-" * 40)
     
-    comparison = engine.compare_tiers(['basic_monthly', 'basic_annual'])
-    for tier_data in comparison:
-        print(f"\n{tier_data['name']}")
-        print(f"  €{tier_data['price']}/{tier_data['billing']}")
-        if tier_data['savings'] > 0:
-            print(f"  Ahorro anual: €{tier_data['savings']:.2f}")
+    for context in UpgradeContext:
+        prompt = engine.get_upgrade_prompt(context, {'days_left': 2, 'total_savings': 2450})
+        print(f"\n{context.value}:")
+        print(f"{prompt['icon']} {prompt['headline']}")
+        print(f"{prompt['message']}")
+        print(f"[{prompt['cta']}]")
+    
+    print("\n5️⃣ Pricing Table")
+    print("-" * 40)
+    print(format_pricing_table(plans[:2], quote))
     
     print("\n" + "="*60)
     print("✅ Testing Complete!")
