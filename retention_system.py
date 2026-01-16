@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 # Cache configuration
 MAX_CACHE_SIZE = 1000
-CAC HE_TTL_SECONDS = 300
+CACHE_TTL_SECONDS = 300
 
 # Limits
 MAX_USERNAME_LENGTH = 64
