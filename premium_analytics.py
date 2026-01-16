@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Premium Analytics and Conversion Tracking
+Premium Analytics & Conversion Funnel
 IT6 - DAY 5/5
 
 Features:
-- Conversion funnel tracking (Paywall → Trial → Paid)
+- Complete conversion funnel tracking
 - Revenue metrics (MRR, ARR, ARPU, LTV)
-- Retention analysis and cohorts
+- Retention cohort analysis
 - Churn prediction and prevention
-- A/B test performance tracking
+- A/B test result analysis
+- Premium user behavior tracking
 
 Author: @Juanka_Spain
 Version: 14.0.0-alpha.5
@@ -20,32 +21,29 @@ import json
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
-from enum import Enum
-from pathlib import Path
 from collections import defaultdict
+from pathlib import Path
+import statistics
 
 
 # ============================================================================
-# ENUMS & CONSTANTS
+# CONSTANTS
 # ============================================================================
 
-class FunnelStage(Enum):
-    """Conversion funnel stages"""
-    PAYWALL_VIEW = "paywall_view"
-    PAYWALL_CLICK = "paywall_click"
-    TRIAL_START = "trial_start"
-    TRIAL_ACTIVE = "trial_active"
-    TRIAL_ENGAGED = "trial_engaged"  # Used premium features
-    CONVERTED = "converted"  # Paid subscription
-    CHURNED = "churned"
+# Funnel stages
+FUNNEL_STAGES = [
+    "user_registered",
+    "paywall_viewed",
+    "paywall_clicked",
+    "trial_started",
+    "feature_used",
+    "converted_to_paid"
+]
 
-
-class ChurnRisk(Enum):
-    """Churn risk levels"""
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
+# Churn risk thresholds
+CHURN_RISK_LOW = 0.3
+CHURN_RISK_MEDIUM = 0.6
+CHURN_RISK_HIGH = 0.8
 
 
 # ============================================================================
@@ -54,11 +52,15 @@ class ChurnRisk(Enum):
 
 @dataclass
 class FunnelEvent:
-    """Single event in conversion funnel"""
+    """A single funnel event"""
     user_id: int
-    stage: str  # FunnelStage value
+    stage: str
     timestamp: datetime
     metadata: Dict = None
+    
+    def __post_init__(self):
+        if self.metadata is None:
+            self.metadata = {}
     
     def to_dict(self) -> Dict:
         data = asdict(self)
@@ -72,130 +74,67 @@ class FunnelEvent:
 
 
 @dataclass
-class UserJourney:
-    """Complete user conversion journey"""
-    user_id: int
-    first_paywall_view: Optional[datetime] = None
-    first_paywall_click: Optional[datetime] = None
-    trial_start: Optional[datetime] = None
-    conversion_date: Optional[datetime] = None
-    churn_date: Optional[datetime] = None
-    
-    # Funnel metrics
-    paywall_views: int = 0
-    paywall_clicks: int = 0
-    trial_engagement_score: float = 0
-    days_to_convert: Optional[int] = None
-    
-    @property
-    def current_stage(self) -> str:
-        """Get current funnel stage"""
-        if self.churn_date:
-            return FunnelStage.CHURNED.value
-        if self.conversion_date:
-            return FunnelStage.CONVERTED.value
-        if self.trial_start:
-            if self.trial_engagement_score > 50:
-                return FunnelStage.TRIAL_ENGAGED.value
-            return FunnelStage.TRIAL_ACTIVE.value
-        if self.first_paywall_click:
-            return FunnelStage.PAYWALL_CLICK.value
-        if self.first_paywall_view:
-            return FunnelStage.PAYWALL_VIEW.value
-        return "not_started"
-    
-    @property
-    def is_active(self) -> bool:
-        """Check if user is active (not churned)"""
-        return self.churn_date is None
+class RevenueMetrics:
+    """Revenue metrics for a period"""
+    period_start: datetime
+    period_end: datetime
+    new_customers: int
+    churned_customers: int
+    active_customers: int
+    mrr: float  # Monthly Recurring Revenue
+    arr: float  # Annual Recurring Revenue
+    arpu: float  # Average Revenue Per User
+    ltv: float  # Lifetime Value
+    churn_rate: float
     
     def to_dict(self) -> Dict:
         data = asdict(self)
-        for field in ['first_paywall_view', 'first_paywall_click', 'trial_start', 'conversion_date', 'churn_date']:
-            if data[field]:
-                data[field] = data[field].isoformat()
-        data['current_stage'] = self.current_stage
+        data['period_start'] = self.period_start.isoformat()
+        data['period_end'] = self.period_end.isoformat()
         return data
-    
-    @classmethod
-    def from_dict(cls, data: Dict) -> 'UserJourney':
-        # Remove computed field
-        data.pop('current_stage', None)
-        
-        for field in ['first_paywall_view', 'first_paywall_click', 'trial_start', 'conversion_date', 'churn_date']:
-            if data.get(field):
-                data[field] = datetime.fromisoformat(data[field])
-        return cls(**data)
 
 
 @dataclass
-class RevenueMetrics:
-    """Revenue and business metrics"""
-    # Current metrics
-    mrr: float = 0  # Monthly Recurring Revenue
-    arr: float = 0  # Annual Recurring Revenue
-    total_revenue: float = 0
-    
-    # User metrics
-    total_paying_users: int = 0
-    monthly_users: int = 0
-    annual_users: int = 0
-    
-    # Averages
-    arpu: float = 0  # Average Revenue Per User
-    avg_ltv: float = 0  # Average Lifetime Value
-    
-    # Growth
-    new_mrr_this_month: float = 0
-    churned_mrr_this_month: float = 0
-    net_mrr_growth: float = 0
-    
-    def to_dict(self) -> Dict:
-        return asdict(self)
-
-
-@dataclass
-class ChurnAnalysis:
-    """Churn prediction and analysis"""
+class ChurnPrediction:
+    """Churn prediction for a user"""
     user_id: int
-    risk_level: str  # ChurnRisk value
-    churn_probability: float  # 0-1
-    days_since_activity: int
-    engagement_trend: str  # "increasing", "stable", "declining"
-    warning_signals: List[str]
+    churn_score: float  # 0-1, higher = more likely to churn
+    risk_level: str  # "low", "medium", "high"
+    contributing_factors: List[str]
     recommended_actions: List[str]
+    predicted_at: datetime
     
     def to_dict(self) -> Dict:
-        return asdict(self)
+        data = asdict(self)
+        data['predicted_at'] = self.predicted_at.isoformat()
+        return data
 
 
 # ============================================================================
-# PREMIUM ANALYTICS
+# ANALYTICS ENGINE
 # ============================================================================
 
 class PremiumAnalytics:
     """
-    Analytics and tracking for premium conversions.
+    Analytics engine for premium conversion and retention.
     
-    Features:
-    - Conversion funnel tracking
-    - Revenue metrics (MRR, ARR, ARPU, LTV)
-    - Retention cohort analysis
-    - Churn prediction
-    - A/B test performance
+    Tracks:
+    - Conversion funnel
+    - Revenue metrics
+    - User cohorts
+    - Churn risk
     """
     
     def __init__(self, data_dir: str = "."):
         self.data_dir = Path(data_dir)
-        
-        # Data files
         self.funnel_file = self.data_dir / "conversion_funnel.json"
-        self.journey_file = self.data_dir / "user_journeys.json"
         self.revenue_file = self.data_dir / "revenue_metrics.json"
+        self.churn_file = self.data_dir / "churn_predictions.json"
         
         # Load data
         self.funnel_events: List[FunnelEvent] = self._load_funnel_events()
-        self.journeys: Dict[int, UserJourney] = self._load_journeys()
+        self.revenue_history: List[RevenueMetrics] = self._load_revenue_metrics()
+        self.churn_predictions: Dict[int, ChurnPrediction] = self._load_churn_predictions()
         
         print("✅ PremiumAnalytics initialized")
     
@@ -211,7 +150,7 @@ class PremiumAnalytics:
         try:
             with open(self.funnel_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                return [FunnelEvent.from_dict(event) for event in data]
+                return [FunnelEvent.from_dict(e) for e in data]
         except Exception as e:
             print(f"⚠️ Error loading funnel events: {e}")
             return []
@@ -219,449 +158,458 @@ class PremiumAnalytics:
     def _save_funnel_events(self):
         """Save funnel events to file"""
         try:
-            data = [event.to_dict() for event in self.funnel_events]
+            data = [e.to_dict() for e in self.funnel_events]
             with open(self.funnel_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"⚠️ Error saving funnel events: {e}")
     
-    def _load_journeys(self) -> Dict[int, UserJourney]:
-        """Load user journeys from file"""
-        if not self.journey_file.exists():
+    def _load_revenue_metrics(self) -> List[RevenueMetrics]:
+        """Load revenue metrics from file"""
+        if not self.revenue_file.exists():
+            return []
+        
+        try:
+            with open(self.revenue_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return [
+                    RevenueMetrics(
+                        period_start=datetime.fromisoformat(m['period_start']),
+                        period_end=datetime.fromisoformat(m['period_end']),
+                        **{k: v for k, v in m.items() if k not in ['period_start', 'period_end']}
+                    )
+                    for m in data
+                ]
+        except Exception as e:
+            print(f"⚠️ Error loading revenue metrics: {e}")
+            return []
+    
+    def _save_revenue_metrics(self):
+        """Save revenue metrics to file"""
+        try:
+            data = [m.to_dict() for m in self.revenue_history]
+            with open(self.revenue_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"⚠️ Error saving revenue metrics: {e}")
+    
+    def _load_churn_predictions(self) -> Dict[int, ChurnPrediction]:
+        """Load churn predictions from file"""
+        if not self.churn_file.exists():
             return {}
         
         try:
-            with open(self.journey_file, 'r', encoding='utf-8') as f:
+            with open(self.churn_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 return {
-                    int(user_id): UserJourney.from_dict(journey)
-                    for user_id, journey in data.items()
+                    int(user_id): ChurnPrediction(
+                        user_id=pred['user_id'],
+                        churn_score=pred['churn_score'],
+                        risk_level=pred['risk_level'],
+                        contributing_factors=pred['contributing_factors'],
+                        recommended_actions=pred['recommended_actions'],
+                        predicted_at=datetime.fromisoformat(pred['predicted_at'])
+                    )
+                    for user_id, pred in data.items()
                 }
         except Exception as e:
-            print(f"⚠️ Error loading journeys: {e}")
+            print(f"⚠️ Error loading churn predictions: {e}")
             return {}
     
-    def _save_journeys(self):
-        """Save user journeys to file"""
+    def _save_churn_predictions(self):
+        """Save churn predictions to file"""
         try:
             data = {
-                str(user_id): journey.to_dict()
-                for user_id, journey in self.journeys.items()
+                str(user_id): pred.to_dict()
+                for user_id, pred in self.churn_predictions.items()
             }
-            with open(self.journey_file, 'w', encoding='utf-8') as f:
+            with open(self.churn_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(f"⚠️ Error saving journeys: {e}")
+            print(f"⚠️ Error saving churn predictions: {e}")
     
     # ========================================================================
     # FUNNEL TRACKING
     # ========================================================================
     
-    def track_funnel_event(self, user_id: int, stage: FunnelStage, metadata: Dict = None):
+    def track_funnel_event(self, user_id: int, stage: str, metadata: Dict = None):
         """
-        Track a funnel event.
+        Track a funnel event for a user.
         
         Args:
             user_id: User ID
-            stage: FunnelStage enum
-            metadata: Optional event metadata
+            stage: Funnel stage (from FUNNEL_STAGES)
+            metadata: Optional metadata
         """
-        # Create event
+        if stage not in FUNNEL_STAGES:
+            print(f"⚠️ Invalid funnel stage: {stage}")
+            return
+        
         event = FunnelEvent(
             user_id=user_id,
-            stage=stage.value,
+            stage=stage,
             timestamp=datetime.now(),
             metadata=metadata or {}
         )
         
         self.funnel_events.append(event)
         self._save_funnel_events()
-        
-        # Update user journey
-        self._update_journey(user_id, stage)
     
-    def _update_journey(self, user_id: int, stage: FunnelStage):
-        """Update user journey with new stage"""
-        if user_id not in self.journeys:
-            self.journeys[user_id] = UserJourney(user_id=user_id)
+    def get_user_funnel_progress(self, user_id: int) -> List[str]:
+        """Get funnel stages completed by user"""
+        user_events = [e for e in self.funnel_events if e.user_id == user_id]
+        stages = list(set(e.stage for e in user_events))
         
-        journey = self.journeys[user_id]
-        now = datetime.now()
-        
-        if stage == FunnelStage.PAYWALL_VIEW:
-            journey.paywall_views += 1
-            if not journey.first_paywall_view:
-                journey.first_paywall_view = now
-        
-        elif stage == FunnelStage.PAYWALL_CLICK:
-            journey.paywall_clicks += 1
-            if not journey.first_paywall_click:
-                journey.first_paywall_click = now
-        
-        elif stage == FunnelStage.TRIAL_START:
-            if not journey.trial_start:
-                journey.trial_start = now
-        
-        elif stage == FunnelStage.CONVERTED:
-            if not journey.conversion_date:
-                journey.conversion_date = now
-                
-                # Calculate days to convert
-                if journey.first_paywall_view:
-                    journey.days_to_convert = (now - journey.first_paywall_view).days
-        
-        elif stage == FunnelStage.CHURNED:
-            journey.churn_date = now
-        
-        self._save_journeys()
+        # Sort by funnel stage order
+        return sorted(stages, key=lambda s: FUNNEL_STAGES.index(s) if s in FUNNEL_STAGES else 999)
     
-    def get_journey(self, user_id: int) -> Optional[UserJourney]:
-        """Get user's conversion journey"""
-        return self.journeys.get(user_id)
-    
-    def update_trial_engagement(self, user_id: int, engagement_score: float):
-        """Update trial engagement score"""
-        if user_id in self.journeys:
-            self.journeys[user_id].trial_engagement_score = engagement_score
-            self._save_journeys()
-    
-    # ========================================================================
-    # FUNNEL ANALYSIS
-    # ========================================================================
-    
-    def get_funnel_metrics(self, days: int = 30) -> Dict:
+    def calculate_funnel_conversion(self, days: int = 30) -> Dict:
         """
-        Get conversion funnel metrics.
+        Calculate funnel conversion rates.
         
         Args:
             days: Number of days to analyze
         
         Returns:
-            Funnel metrics with conversion rates
+            Dict with conversion rates between stages
         """
         cutoff = datetime.now() - timedelta(days=days)
+        recent_events = [e for e in self.funnel_events if e.timestamp >= cutoff]
         
         # Count users at each stage
-        stage_counts = defaultdict(set)
-        
-        for journey in self.journeys.values():
-            user_id = journey.user_id
-            
-            if journey.first_paywall_view and journey.first_paywall_view >= cutoff:
-                stage_counts[FunnelStage.PAYWALL_VIEW.value].add(user_id)
-            
-            if journey.first_paywall_click and journey.first_paywall_click >= cutoff:
-                stage_counts[FunnelStage.PAYWALL_CLICK.value].add(user_id)
-            
-            if journey.trial_start and journey.trial_start >= cutoff:
-                stage_counts[FunnelStage.TRIAL_START.value].add(user_id)
-                
-                if journey.trial_engagement_score > 50:
-                    stage_counts[FunnelStage.TRIAL_ENGAGED.value].add(user_id)
-            
-            if journey.conversion_date and journey.conversion_date >= cutoff:
-                stage_counts[FunnelStage.CONVERTED.value].add(user_id)
-        
-        # Calculate counts
-        paywall_views = len(stage_counts[FunnelStage.PAYWALL_VIEW.value])
-        paywall_clicks = len(stage_counts[FunnelStage.PAYWALL_CLICK.value])
-        trial_starts = len(stage_counts[FunnelStage.TRIAL_START.value])
-        trial_engaged = len(stage_counts[FunnelStage.TRIAL_ENGAGED.value])
-        converted = len(stage_counts[FunnelStage.CONVERTED.value])
+        stage_users = defaultdict(set)
+        for event in recent_events:
+            stage_users[event.stage].add(event.user_id)
         
         # Calculate conversion rates
-        click_rate = (paywall_clicks / paywall_views * 100) if paywall_views > 0 else 0
-        trial_rate = (trial_starts / paywall_clicks * 100) if paywall_clicks > 0 else 0
-        engagement_rate = (trial_engaged / trial_starts * 100) if trial_starts > 0 else 0
-        conversion_rate = (converted / trial_starts * 100) if trial_starts > 0 else 0
-        overall_conversion = (converted / paywall_views * 100) if paywall_views > 0 else 0
+        conversions = {}
+        for i in range(len(FUNNEL_STAGES) - 1):
+            current_stage = FUNNEL_STAGES[i]
+            next_stage = FUNNEL_STAGES[i + 1]
+            
+            current_users = len(stage_users[current_stage])
+            next_users = len(stage_users[next_stage])
+            
+            if current_users > 0:
+                rate = (next_users / current_users) * 100
+            else:
+                rate = 0
+            
+            conversions[f"{current_stage}_to_{next_stage}"] = {
+                'current_count': current_users,
+                'next_count': next_users,
+                'conversion_rate': rate
+            }
         
-        return {
-            'period_days': days,
-            'funnel': {
-                'paywall_views': paywall_views,
-                'paywall_clicks': paywall_clicks,
-                'trial_starts': trial_starts,
-                'trial_engaged': trial_engaged,
-                'converted': converted
-            },
-            'conversion_rates': {
-                'view_to_click': round(click_rate, 2),
-                'click_to_trial': round(trial_rate, 2),
-                'trial_to_engaged': round(engagement_rate, 2),
-                'trial_to_paid': round(conversion_rate, 2),
-                'overall': round(overall_conversion, 2)
-            },
-            'avg_days_to_convert': self._calculate_avg_days_to_convert(cutoff)
+        # Overall conversion (first to last stage)
+        first_stage_users = len(stage_users[FUNNEL_STAGES[0]])
+        last_stage_users = len(stage_users[FUNNEL_STAGES[-1]])
+        
+        if first_stage_users > 0:
+            overall_rate = (last_stage_users / first_stage_users) * 100
+        else:
+            overall_rate = 0
+        
+        conversions['overall'] = {
+            'total_users': first_stage_users,
+            'converted_users': last_stage_users,
+            'conversion_rate': overall_rate
         }
-    
-    def _calculate_avg_days_to_convert(self, cutoff: datetime) -> float:
-        """Calculate average days from first view to conversion"""
-        converted_journeys = [
-            j for j in self.journeys.values()
-            if j.conversion_date and j.conversion_date >= cutoff and j.days_to_convert is not None
-        ]
         
-        if not converted_journeys:
-            return 0
-        
-        return sum(j.days_to_convert for j in converted_journeys) / len(converted_journeys)
+        return conversions
     
     # ========================================================================
     # REVENUE METRICS
     # ========================================================================
     
-    def calculate_revenue_metrics(self, subscription_data: Dict[int, Dict]) -> RevenueMetrics:
+    def calculate_revenue_metrics(
+        self,
+        subscriptions: List[Dict],
+        period_start: datetime = None,
+        period_end: datetime = None
+    ) -> RevenueMetrics:
         """
-        Calculate revenue metrics.
+        Calculate revenue metrics for a period.
         
         Args:
-            subscription_data: Dict of {user_id: {'plan': str, 'price': float, 'started': datetime}}
+            subscriptions: List of subscription dicts with:
+                {user_id, status, plan_price, start_date, end_date}
+            period_start: Start of period (default: 30 days ago)
+            period_end: End of period (default: now)
         
         Returns:
             RevenueMetrics object
         """
-        metrics = RevenueMetrics()
+        if not period_start:
+            period_start = datetime.now() - timedelta(days=30)
+        if not period_end:
+            period_end = datetime.now()
         
-        monthly_revenue = 0
-        annual_revenue = 0
-        total_revenue = 0
+        # Filter active subscriptions
+        active_subs = [
+            s for s in subscriptions
+            if s.get('status') == 'active' and
+            s.get('start_date', period_end) <= period_end
+        ]
         
-        monthly_users = 0
-        annual_users = 0
+        # New customers in period
+        new_customers = len([
+            s for s in active_subs
+            if period_start <= s.get('start_date', period_start) <= period_end
+        ])
         
-        for user_id, sub in subscription_data.items():
-            price = sub.get('price', 0)
-            plan = sub.get('plan', 'monthly')
-            
-            total_revenue += price
-            
-            if 'monthly' in plan:
-                monthly_revenue += price
-                monthly_users += 1
-            else:
-                # Convert annual to monthly equivalent
-                annual_revenue += price
-                monthly_revenue += price / 12
-                annual_users += 1
+        # Churned customers
+        churned_customers = len([
+            s for s in subscriptions
+            if s.get('status') == 'cancelled' and
+            s.get('end_date') and
+            period_start <= s.get('end_date') <= period_end
+        ])
         
-        metrics.mrr = round(monthly_revenue, 2)
-        metrics.arr = round(metrics.mrr * 12, 2)
-        metrics.total_revenue = round(total_revenue, 2)
+        # Active customers
+        active_customers = len(active_subs)
         
-        metrics.monthly_users = monthly_users
-        metrics.annual_users = annual_users
-        metrics.total_paying_users = monthly_users + annual_users
+        # MRR (Monthly Recurring Revenue)
+        mrr = sum(s.get('plan_price', 0) for s in active_subs)
         
-        # ARPU
-        if metrics.total_paying_users > 0:
-            metrics.arpu = round(metrics.mrr / metrics.total_paying_users, 2)
+        # ARR (Annual Recurring Revenue)
+        arr = mrr * 12
         
-        # Estimate LTV (simple: ARPU * avg lifetime in months)
-        # Assume avg lifetime = 12 months
-        metrics.avg_ltv = round(metrics.arpu * 12, 2)
+        # ARPU (Average Revenue Per User)
+        arpu = mrr / active_customers if active_customers > 0 else 0
+        
+        # LTV (Lifetime Value) - simplified
+        # LTV = ARPU / Churn Rate
+        churn_rate = churned_customers / active_customers if active_customers > 0 else 0
+        ltv = arpu / churn_rate if churn_rate > 0 else arpu * 12  # Default to 12 months
+        
+        metrics = RevenueMetrics(
+            period_start=period_start,
+            period_end=period_end,
+            new_customers=new_customers,
+            churned_customers=churned_customers,
+            active_customers=active_customers,
+            mrr=mrr,
+            arr=arr,
+            arpu=arpu,
+            ltv=ltv,
+            churn_rate=churn_rate
+        )
+        
+        self.revenue_history.append(metrics)
+        self._save_revenue_metrics()
         
         return metrics
     
+    def get_latest_revenue_metrics(self) -> Optional[RevenueMetrics]:
+        """Get most recent revenue metrics"""
+        if not self.revenue_history:
+            return None
+        return self.revenue_history[-1]
+    
     # ========================================================================
-    # CHURN ANALYSIS
+    # CHURN PREDICTION
     # ========================================================================
     
-    def predict_churn_risk(self, user_id: int, recent_activity: Dict) -> ChurnAnalysis:
+    def predict_churn(self, user_id: int, user_data: Dict) -> ChurnPrediction:
         """
-        Predict churn risk for a user.
+        Predict churn risk for a user using simple ML model.
         
         Args:
             user_id: User ID
-            recent_activity: Dict with activity metrics:
-                - last_active: datetime
-                - searches_last_week: int
-                - deals_found_last_week: int
-                - notifications_opened: int
-                - engagement_score: float
+            user_data: Dict with user metrics:
+                - days_since_last_login
+                - searches_last_30d
+                - deals_claimed_last_30d
+                - support_tickets
+                - engagement_score
+                - payment_failures
         
         Returns:
-            ChurnAnalysis with risk assessment
+            ChurnPrediction object
         """
-        warnings = []
-        actions = []
-        risk_score = 0
+        score = 0.0
+        factors = []
         
-        # Check last activity
-        last_active = recent_activity.get('last_active')
-        if last_active:
-            days_inactive = (datetime.now() - last_active).days
-        else:
-            days_inactive = 999
-        
+        # Days since last login
+        days_inactive = user_data.get('days_since_last_login', 0)
         if days_inactive > 14:
-            warnings.append("⚠️ No activo en 14+ días")
-            actions.append("📧 Enviar email de re-engagement")
-            risk_score += 30
+            score += 0.3
+            factors.append(f"Inactivo por {days_inactive} días")
         elif days_inactive > 7:
-            warnings.append("⚠️ Inactivo más de 1 semana")
-            actions.append("🔔 Notificar chollos personalizados")
-            risk_score += 15
+            score += 0.15
+            factors.append(f"Baja actividad ({days_inactive} días sin login)")
         
-        # Check search activity
-        searches = recent_activity.get('searches_last_week', 0)
-        if searches == 0:
-            warnings.append("❌ 0 búsquedas esta semana")
-            actions.append("🔍 Sugerir rutas populares")
-            risk_score += 20
-        elif searches < 3:
-            warnings.append("📉 Baja actividad de búsqueda")
-            risk_score += 10
+        # Search activity
+        searches = user_data.get('searches_last_30d', 0)
+        if searches < 5:
+            score += 0.25
+            factors.append("Muy pocas búsquedas (< 5/mes)")
+        elif searches < 10:
+            score += 0.1
+            factors.append("Búsquedas por debajo de promedio")
         
-        # Check deal engagement
-        deals = recent_activity.get('deals_found_last_week', 0)
+        # Deals claimed
+        deals = user_data.get('deals_claimed_last_30d', 0)
         if deals == 0:
-            warnings.append("❌ No ha encontrado chollos")
-            actions.append("💰 Mostrar value dashboard")
-            risk_score += 15
+            score += 0.2
+            factors.append("No ha aprovechado chollos")
         
-        # Check notification engagement
-        notif_opened = recent_activity.get('notifications_opened', 0)
-        if notif_opened == 0:
-            warnings.append("🔕 No abre notificaciones")
-            actions.append("⚙️ Optimizar horario de notificaciones")
-            risk_score += 10
+        # Support tickets
+        tickets = user_data.get('support_tickets', 0)
+        if tickets > 2:
+            score += 0.15
+            factors.append(f"Múltiples tickets de soporte ({tickets})")
         
-        # Check engagement score
-        engagement = recent_activity.get('engagement_score', 50)
+        # Engagement score
+        engagement = user_data.get('engagement_score', 50)
         if engagement < 30:
-            warnings.append("📉 Engagement muy bajo")
-            actions.append("🎁 Ofrecer descuento de retención")
-            risk_score += 25
-        elif engagement < 50:
-            risk_score += 10
+            score += 0.2
+            factors.append("Score de engagement bajo")
+        
+        # Payment failures
+        payment_failures = user_data.get('payment_failures', 0)
+        if payment_failures > 0:
+            score += 0.3
+            factors.append(f"Fallos de pago ({payment_failures})")
+        
+        # Cap score at 1.0
+        score = min(1.0, score)
         
         # Determine risk level
-        if risk_score >= 60:
-            risk_level = ChurnRisk.CRITICAL
-        elif risk_score >= 40:
-            risk_level = ChurnRisk.HIGH
-        elif risk_score >= 20:
-            risk_level = ChurnRisk.MEDIUM
+        if score >= CHURN_RISK_HIGH:
+            risk_level = "high"
+        elif score >= CHURN_RISK_MEDIUM:
+            risk_level = "medium"
         else:
-            risk_level = ChurnRisk.LOW
+            risk_level = "low"
         
-        # Determine trend
-        if len(warnings) >= 4:
-            trend = "declining"
-        elif len(warnings) <= 1:
-            trend = "increasing"
-        else:
-            trend = "stable"
+        # Recommended actions based on factors
+        actions = self._get_churn_prevention_actions(factors, risk_level)
         
-        churn_prob = min(1.0, risk_score / 100)
-        
-        return ChurnAnalysis(
+        prediction = ChurnPrediction(
             user_id=user_id,
-            risk_level=risk_level.value,
-            churn_probability=round(churn_prob, 2),
-            days_since_activity=days_inactive,
-            engagement_trend=trend,
-            warning_signals=warnings,
-            recommended_actions=actions
+            churn_score=score,
+            risk_level=risk_level,
+            contributing_factors=factors,
+            recommended_actions=actions,
+            predicted_at=datetime.now()
         )
+        
+        self.churn_predictions[user_id] = prediction
+        self._save_churn_predictions()
+        
+        return prediction
     
-    def get_high_churn_risk_users(self, user_activities: Dict[int, Dict]) -> List[ChurnAnalysis]:
-        """
-        Get list of users at high churn risk.
+    def _get_churn_prevention_actions(self, factors: List[str], risk_level: str) -> List[str]:
+        """Get recommended actions to prevent churn"""
+        actions = []
         
-        Args:
-            user_activities: Dict of {user_id: activity_dict}
+        if risk_level == "high":
+            actions.append("Contactar personalmente al usuario")
+            actions.append("Ofrecer descuento especial (20-30%)")
+            actions.append("Sesión 1-on-1 de value demonstration")
         
-        Returns:
-            List of ChurnAnalysis for high-risk users
-        """
-        high_risk = []
+        if risk_level in ["high", "medium"]:
+            actions.append("Enviar email con value metrics personalizados")
+            actions.append("Ofrecer feature training personalizado")
         
-        for user_id, activity in user_activities.items():
-            analysis = self.predict_churn_risk(user_id, activity)
-            
-            if analysis.risk_level in [ChurnRisk.HIGH.value, ChurnRisk.CRITICAL.value]:
-                high_risk.append(analysis)
+        # Specific actions based on factors
+        for factor in factors:
+            if "Inactivo" in factor or "sin login" in factor:
+                actions.append("Re-engagement campaign con nuevo contenido")
+            if "pocas búsquedas" in factor:
+                actions.append("Tutorial de búsqueda avanzada")
+            if "No ha aprovechado" in factor:
+                actions.append("Notificar chollos ultra-relevantes")
+            if "soporte" in factor:
+                actions.append("Priorizar resolución de issues")
+            if "pago" in factor:
+                actions.append("Actualizar método de pago urgente")
         
-        # Sort by risk (highest first)
-        high_risk.sort(key=lambda x: x.churn_probability, reverse=True)
-        
-        return high_risk
+        return list(set(actions))  # Remove duplicates
+    
+    def get_high_risk_users(self) -> List[ChurnPrediction]:
+        """Get all users at high risk of churning"""
+        return [
+            pred for pred in self.churn_predictions.values()
+            if pred.risk_level == "high"
+        ]
     
     # ========================================================================
-    # RETENTION COHORTS
+    # COHORT ANALYSIS
     # ========================================================================
     
-    def calculate_retention_cohorts(self, months: int = 6) -> Dict:
+    def analyze_cohorts(self, subscriptions: List[Dict], months_back: int = 6) -> Dict:
         """
-        Calculate retention cohorts.
+        Analyze retention by cohort (signup month).
         
         Args:
-            months: Number of months to analyze
+            subscriptions: List of subscription dicts
+            months_back: Number of months to analyze
         
         Returns:
-            Cohort retention data
+            Dict with cohort retention data
         """
-        cohorts = defaultdict(lambda: {'started': 0, 'retained': defaultdict(int)})
-        
-        for journey in self.journeys.values():
-            if not journey.conversion_date:
+        # Group by signup month
+        cohorts = defaultdict(list)
+        for sub in subscriptions:
+            signup_date = sub.get('start_date')
+            if not signup_date:
                 continue
             
-            # Get cohort month
-            cohort = journey.conversion_date.strftime('%Y-%m')
-            cohorts[cohort]['started'] += 1
-            
-            # Check if still active (not churned)
-            if journey.is_active:
-                months_since = (datetime.now().year - journey.conversion_date.year) * 12 + \
-                               (datetime.now().month - journey.conversion_date.month)
-                
-                for month in range(months_since + 1):
-                    cohorts[cohort]['retained'][month] += 1
+            cohort_month = signup_date.strftime('%Y-%m')
+            cohorts[cohort_month].append(sub)
         
-        # Calculate retention rates
-        cohort_analysis = {}
-        for cohort, data in cohorts.items():
-            started = data['started']
-            retained = data['retained']
+        # Calculate retention for each cohort
+        retention_data = {}
+        for cohort_month, cohort_subs in cohorts.items():
+            cohort_size = len(cohort_subs)
             
-            retention_rates = {}
-            for month, count in retained.items():
-                retention_rates[f'month_{month}'] = round((count / started * 100) if started > 0 else 0, 1)
+            # Count still active
+            active = len([s for s in cohort_subs if s.get('status') == 'active'])
+            retention_rate = (active / cohort_size * 100) if cohort_size > 0 else 0
             
-            cohort_analysis[cohort] = {
-                'users_started': started,
-                'retention_rates': retention_rates
+            retention_data[cohort_month] = {
+                'cohort_size': cohort_size,
+                'still_active': active,
+                'retention_rate': retention_rate
             }
         
-        return cohort_analysis
+        return retention_data
     
     # ========================================================================
-    # SUMMARY STATS
+    # REPORTING
     # ========================================================================
     
-    def get_summary_stats(self) -> Dict:
-        """Get overall summary statistics"""
-        total_journeys = len(self.journeys)
+    def generate_dashboard_data(self, subscriptions: List[Dict]) -> Dict:
+        """Generate complete analytics dashboard data"""
+        # Funnel metrics
+        funnel = self.calculate_funnel_conversion(days=30)
         
-        # Current stage distribution
-        stage_dist = defaultdict(int)
-        for journey in self.journeys.values():
-            stage_dist[journey.current_stage] += 1
+        # Revenue metrics
+        revenue = self.calculate_revenue_metrics(subscriptions)
         
-        # Conversion stats
-        converted = sum(1 for j in self.journeys.values() if j.conversion_date)
-        churned = sum(1 for j in self.journeys.values() if j.churn_date)
+        # Churn risk
+        high_risk_count = len(self.get_high_risk_users())
+        
+        # Cohort retention
+        cohorts = self.analyze_cohorts(subscriptions)
+        avg_retention = statistics.mean(
+            [c['retention_rate'] for c in cohorts.values()]
+        ) if cohorts else 0
         
         return {
-            'total_users_tracked': total_journeys,
-            'converted_users': converted,
-            'churned_users': churned,
-            'active_premium_users': converted - churned,
-            'stage_distribution': dict(stage_dist),
-            'overall_conversion_rate': round((converted / total_journeys * 100) if total_journeys > 0 else 0, 2)
+            'funnel': funnel,
+            'revenue': revenue.to_dict(),
+            'churn_risk': {
+                'high_risk_users': high_risk_count,
+                'total_predictions': len(self.churn_predictions)
+            },
+            'retention': {
+                'avg_retention_rate': avg_retention,
+                'cohorts_analyzed': len(cohorts)
+            }
         }
 
 
@@ -669,78 +617,48 @@ class PremiumAnalytics:
 # HELPER FUNCTIONS
 # ============================================================================
 
-def format_funnel_report(metrics: Dict) -> str:
+def format_analytics_report(dashboard_data: Dict) -> str:
     """
-    Format funnel metrics as a report.
+    Format analytics dashboard for display.
     
     Args:
-        metrics: Dict from get_funnel_metrics()
+        dashboard_data: Dict from generate_dashboard_data()
     
     Returns:
         Formatted report string
     """
-    funnel = metrics['funnel']
-    rates = metrics['conversion_rates']
+    funnel = dashboard_data['funnel']
+    revenue = dashboard_data['revenue']
+    churn = dashboard_data['churn_risk']
+    retention = dashboard_data['retention']
     
-    report = f"""📊 Conversion Funnel Report
-⏰ Últimos {metrics['period_days']} días
+    output = f"""📊 Premium Analytics Dashboard
 
-🔽 FUNNEL:
-1️⃣ Paywall Views: {funnel['paywall_views']}
-   ⬇️ {rates['view_to_click']}%
-2️⃣ Paywall Clicks: {funnel['paywall_clicks']}
-   ⬇️ {rates['click_to_trial']}%
-3️⃣ Trial Starts: {funnel['trial_starts']}
-   ⬇️ {rates['trial_to_engaged']}%
-4️⃣ Trial Engaged: {funnel['trial_engaged']}
-   ⬇️ {rates['trial_to_paid']}%
-5️⃣ CONVERTED: {funnel['converted']}
+💰 Revenue Metrics:
+• MRR: €{revenue['mrr']:,.0f}
+• ARR: €{revenue['arr']:,.0f}
+• ARPU: €{revenue['arpu']:.2f}
+• LTV: €{revenue['ltv']:.0f}
+• Active customers: {revenue['active_customers']}
+• New customers: {revenue['new_customers']}
+• Churned: {revenue['churned_customers']}
+• Churn rate: {revenue['churn_rate']*100:.1f}%
 
-🎯 Overall Conversion: {rates['overall']}%
-⏱️ Avg Days to Convert: {metrics['avg_days_to_convert']:.1f}
+🎯 Conversion Funnel (30d):
+• Overall conversion: {funnel['overall']['conversion_rate']:.1f}%
+• Total users: {funnel['overall']['total_users']}
+• Converted: {funnel['overall']['converted_users']}
+
+⚠️ Churn Risk:
+• High risk users: {churn['high_risk_users']}
+• Total monitored: {churn['total_predictions']}
+
+📈 Retention:
+• Avg retention rate: {retention['avg_retention_rate']:.1f}%
+• Cohorts analyzed: {retention['cohorts_analyzed']}
 """
     
-    return report
-
-
-def format_churn_alert(analysis: ChurnAnalysis) -> str:
-    """
-    Format churn analysis as an alert.
-    
-    Args:
-        analysis: ChurnAnalysis object
-    
-    Returns:
-        Formatted alert string
-    """
-    risk_emoji = {
-        'low': '🟢',
-        'medium': '🟡',
-        'high': '🟠',
-        'critical': '🔴'
-    }
-    
-    emoji = risk_emoji.get(analysis.risk_level, '⚪')
-    
-    alert = f"""{emoji} CHURN RISK ALERT
-
-User ID: {analysis.user_id}
-Risk Level: {analysis.risk_level.upper()}
-Churn Probability: {analysis.churn_probability * 100:.0f}%
-Days Inactive: {analysis.days_since_activity}
-Trend: {analysis.engagement_trend}
-
-⚠️ Warning Signals:
-"""
-    
-    for warning in analysis.warning_signals:
-        alert += f"  {warning}\n"
-    
-    alert += "\n🛠️ Recommended Actions:\n"
-    for action in analysis.recommended_actions:
-        alert += f"  {action}\n"
-    
-    return alert
+    return output
 
 
 # ============================================================================
@@ -755,51 +673,70 @@ if __name__ == "__main__":
     # Initialize analytics
     analytics = PremiumAnalytics()
     
-    # Simulate user journey
-    test_user = 77777
+    test_user = 33333
     
-    print("1️⃣ Tracking Funnel Events")
+    print("1️⃣ Funnel Tracking")
     print("-" * 40)
     
-    analytics.track_funnel_event(test_user, FunnelStage.PAYWALL_VIEW)
-    analytics.track_funnel_event(test_user, FunnelStage.PAYWALL_CLICK)
-    analytics.track_funnel_event(test_user, FunnelStage.TRIAL_START)
-    analytics.update_trial_engagement(test_user, 75)
-    analytics.track_funnel_event(test_user, FunnelStage.CONVERTED)
+    # Simulate funnel
+    analytics.track_funnel_event(test_user, "user_registered")
+    analytics.track_funnel_event(test_user, "paywall_viewed")
+    analytics.track_funnel_event(test_user, "paywall_clicked")
+    analytics.track_funnel_event(test_user, "trial_started")
+    analytics.track_funnel_event(test_user, "feature_used")
     
-    journey = analytics.get_journey(test_user)
-    print(f"User journey: {journey.current_stage}")
-    print(f"Days to convert: {journey.days_to_convert}")
+    progress = analytics.get_user_funnel_progress(test_user)
+    print(f"User funnel progress: {len(progress)}/{len(FUNNEL_STAGES)} stages")
+    print(f"Stages: {', '.join(progress)}")
     
-    print("\n2️⃣ Funnel Metrics")
+    print("\n2️⃣ Revenue Metrics")
     print("-" * 40)
     
-    funnel_metrics = analytics.get_funnel_metrics(30)
-    print(format_funnel_report(funnel_metrics))
+    # Mock subscriptions
+    mock_subs = [
+        {'user_id': i, 'status': 'active', 'plan_price': 9.99, 'start_date': datetime.now() - timedelta(days=30)}
+        for i in range(50)
+    ]
+    mock_subs.extend([
+        {'user_id': i, 'status': 'cancelled', 'plan_price': 9.99,
+         'start_date': datetime.now() - timedelta(days=60),
+         'end_date': datetime.now() - timedelta(days=10)}
+        for i in range(50, 55)
+    ])
+    
+    revenue = analytics.calculate_revenue_metrics(mock_subs)
+    print(f"MRR: €{revenue.mrr:,.0f}")
+    print(f"ARR: €{revenue.arr:,.0f}")
+    print(f"Active: {revenue.active_customers}")
+    print(f"Churn rate: {revenue.churn_rate*100:.1f}%")
     
     print("\n3️⃣ Churn Prediction")
     print("-" * 40)
     
-    # Simulate at-risk user
-    at_risk_activity = {
-        'last_active': datetime.now() - timedelta(days=15),
-        'searches_last_week': 0,
-        'deals_found_last_week': 0,
-        'notifications_opened': 0,
-        'engagement_score': 25
+    user_data = {
+        'days_since_last_login': 15,
+        'searches_last_30d': 3,
+        'deals_claimed_last_30d': 0,
+        'support_tickets': 1,
+        'engagement_score': 25,
+        'payment_failures': 0
     }
     
-    churn_analysis = analytics.predict_churn_risk(88888, at_risk_activity)
-    print(format_churn_alert(churn_analysis))
+    prediction = analytics.predict_churn(test_user, user_data)
+    print(f"Churn score: {prediction.churn_score:.2f}")
+    print(f"Risk level: {prediction.risk_level.upper()}")
+    print(f"Factors: {len(prediction.contributing_factors)}")
+    for factor in prediction.contributing_factors:
+        print(f"  • {factor}")
+    print(f"\nRecommended actions: {len(prediction.recommended_actions)}")
+    for action in prediction.recommended_actions:
+        print(f"  • {action}")
     
-    print("\n4️⃣ Summary Stats")
+    print("\n4️⃣ Complete Dashboard")
     print("-" * 40)
     
-    stats = analytics.get_summary_stats()
-    print(f"Total users tracked: {stats['total_users_tracked']}")
-    print(f"Converted: {stats['converted_users']}")
-    print(f"Active premium: {stats['active_premium_users']}")
-    print(f"Conversion rate: {stats['overall_conversion_rate']}%")
+    dashboard = analytics.generate_dashboard_data(mock_subs)
+    print(format_analytics_report(dashboard))
     
     print("\n" + "="*60)
     print("✅ Testing Complete!")
