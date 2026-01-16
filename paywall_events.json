@@ -1,0 +1,32 @@
+{
+  "_comment": "Paywall events tracking - populated by PaywallManager",
+  "_schema": {
+    "user_id": {
+      "type": "array",
+      "items": {
+        "user_id": "int",
+        "trigger": "PaywallTrigger enum value",
+        "variant": "PaywallVariant enum value",
+        "timestamp": "ISO datetime string",
+        "converted": "boolean",
+        "dismissed": "boolean",
+        "context": "dict with additional data"
+      }
+    }
+  },
+  "example_data": {
+    "12345": [
+      {
+        "user_id": 12345,
+        "trigger": "search_limit",
+        "variant": "benefit_focused",
+        "timestamp": "2026-01-16T01:00:00",
+        "converted": false,
+        "dismissed": true,
+        "context": {
+          "searches_today": 10
+        }
+      }
+    ]
+  }
+}

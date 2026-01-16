@@ -1,0 +1,42 @@
+{
+  "_comment": "User feature usage tracking - populated by PaywallManager",
+  "_schema": {
+    "user_id": {
+      "user_id": "int",
+      "feature_usage": {
+        "daily_searches": "int - current count",
+        "watchlist_slots": "int - current count",
+        "groups": "int - current count"
+      },
+      "last_reset": {
+        "daily_searches": "ISO datetime string",
+        "watchlist_slots": "ISO datetime string"
+      },
+      "is_premium": "boolean",
+      "premium_since": "ISO datetime string or null"
+    }
+  },
+  "example_data": {
+    "12345": {
+      "user_id": 12345,
+      "feature_usage": {
+        "daily_searches": 8,
+        "watchlist_slots": 3,
+        "groups": 2
+      },
+      "last_reset": {
+        "daily_searches": "2026-01-16T00:00:00",
+        "watchlist_slots": "2026-01-10T10:30:00"
+      },
+      "is_premium": false,
+      "premium_since": null
+    },
+    "67890": {
+      "user_id": 67890,
+      "feature_usage": {},
+      "last_reset": {},
+      "is_premium": true,
+      "premium_since": "2026-01-01T12:00:00"
+    }
+  }
+}

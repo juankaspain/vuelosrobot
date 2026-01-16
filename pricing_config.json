@@ -1,0 +1,167 @@
+{
+  "tiers": {
+    "basic_monthly": {
+      "name": "Premium Monthly",
+      "price": 9.99,
+      "currency": "EUR",
+      "billing_period": "monthly",
+      "discount_percent": 0,
+      "features": [
+        "unlimited_searches",
+        "unlimited_watchlist",
+        "priority_notifications",
+        "1year_history",
+        "unlimited_groups",
+        "export_data",
+        "priority_support"
+      ],
+      "trial_days": 7
+    },
+    "basic_annual": {
+      "name": "Premium Annual",
+      "price": 99.99,
+      "currency": "EUR",
+      "billing_period": "annual",
+      "discount_percent": 17,
+      "savings_vs_monthly": 20.0,
+      "features": [
+        "unlimited_searches",
+        "unlimited_watchlist",
+        "priority_notifications",
+        "1year_history",
+        "unlimited_groups",
+        "export_data",
+        "priority_support",
+        "annual_bonus_coins"
+      ],
+      "trial_days": 7,
+      "popular": true
+    },
+    "pro_monthly": {
+      "name": "Pro Monthly",
+      "price": 14.99,
+      "currency": "EUR",
+      "billing_period": "monthly",
+      "discount_percent": 0,
+      "features": [
+        "unlimited_searches",
+        "unlimited_watchlist",
+        "priority_notifications",
+        "lifetime_history",
+        "unlimited_groups",
+        "export_data",
+        "priority_support",
+        "api_access",
+        "team_groups",
+        "advanced_filters",
+        "price_alerts",
+        "white_label"
+      ],
+      "trial_days": 14,
+      "recommended_for": "power_users"
+    }
+  },
+  "regional_pricing": {
+    "ES": {
+      "basic_monthly": 9.99,
+      "basic_annual": 99.99,
+      "pro_monthly": 14.99,
+      "currency": "EUR"
+    },
+    "MX": {
+      "basic_monthly": 199,
+      "basic_annual": 1999,
+      "pro_monthly": 299,
+      "currency": "MXN"
+    },
+    "US": {
+      "basic_monthly": 10.99,
+      "basic_annual": 109.99,
+      "pro_monthly": 15.99,
+      "currency": "USD"
+    },
+    "LATAM": {
+      "basic_monthly": 7.99,
+      "basic_annual": 79.99,
+      "pro_monthly": 11.99,
+      "currency": "USD"
+    },
+    "UK": {
+      "basic_monthly": 8.99,
+      "basic_annual": 89.99,
+      "pro_monthly": 12.99,
+      "currency": "GBP"
+    }
+  },
+  "feature_descriptions": {
+    "unlimited_searches": "Búsquedas ilimitadas sin restricciones diarias",
+    "unlimited_watchlist": "Watchlist sin límite de rutas monitorizadas",
+    "priority_notifications": "Notificaciones instantáneas con prioridad",
+    "1year_history": "Acceso a histórico de precios de 1 año",
+    "lifetime_history": "Acceso a histórico completo sin límite",
+    "unlimited_groups": "Únete a grupos ilimitados de caza",
+    "export_data": "Exporta tus datos en CSV/PDF",
+    "priority_support": "Soporte prioritario 24/7",
+    "api_access": "Acceso a API para integración",
+    "team_groups": "Crea y gestiona grupos de equipo",
+    "advanced_filters": "Filtros avanzados de búsqueda",
+    "price_alerts": "Alertas de precio personalizadas",
+    "white_label": "Personalización white-label",
+    "annual_bonus_coins": "10,000 FlightCoins de bonus anual"
+  },
+  "discount_rules": {
+    "power_user": {
+      "condition": "total_searches > 100",
+      "discount_percent": 10,
+      "description": "Descuento para usuarios activos"
+    },
+    "referral_king": {
+      "condition": "referrals > 10",
+      "discount_percent": 10,
+      "description": "Descuento por referidos"
+    },
+    "trial_ending": {
+      "condition": "trial_days_left <= 1",
+      "discount_percent": 20,
+      "description": "Oferta especial fin de trial"
+    },
+    "seasonal": {
+      "condition": "special_promo_active",
+      "discount_percent": 15,
+      "description": "Promoción por tiempo limitado"
+    },
+    "loyalty": {
+      "condition": "user_age_days > 90",
+      "discount_percent": 5,
+      "description": "Descuento por antigüedad"
+    }
+  },
+  "limits": {
+    "max_discount_percent": 40,
+    "max_discount_stack": 3,
+    "trial_requires_payment_method": false,
+    "auto_renew_default": true
+  },
+  "payment_methods": [
+    "stripe",
+    "paypal",
+    "apple_pay",
+    "google_pay",
+    "sepa_direct_debit"
+  ],
+  "marketing": {
+    "value_props": [
+      "Ahorra más de €680 al año en vuelos",
+      "Notificaciones 24x más rápidas que usuarios free",
+      "0 chollos perdidos por límites",
+      "Únete a 892+ usuarios premium",
+      "Rating 4.8/5 ⭐"
+    ],
+    "social_proof": {
+      "premium_users": 892,
+      "avg_rating": 4.8,
+      "total_savings_generated": 156000,
+      "top_hunters_premium_percent": 85
+    }
+  }
+}
