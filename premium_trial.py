@@ -1,708 +1,770 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Premium Trial System - IT6 Day 4/5
-Sistema de trials premium con optimización de conversión
+Premium Trial System for Frictionless Conversion
+IT6 - DAY 2/5
+
+Features:
+- 7-day trial activation without payment method
+- Automatic feature unlocking during trial
+- Trial countdown and reminders
+- Nurturing flow (Day 1, 3, 5, 7)
+- Trial-to-paid conversion tracking
+- Engagement scoring
 
 Author: @Juanka_Spain
-Version: 13.2.0
+Version: 14.0.0-alpha.2
 Date: 2026-01-16
 """
 
 import json
-import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass, asdict, field
-from pathlib import Path
+from dataclasses import dataclass, asdict
 from enum import Enum
+from pathlib import Path
 
-logger = logging.getLogger(__name__)
 
-
-class TrialType(Enum):
-    """Tipos de trial"""
-    STANDARD = "standard"  # 7 días, sin tarjeta
-    EXTENDED = "extended"  # 14 días, con tarjeta
-    FEATURE_SPECIFIC = "feature_specific"  # Trial de feature específica
-
+# ============================================================================
+# ENUMS & CONSTANTS
+# ============================================================================
 
 class TrialStatus(Enum):
-    """Estados del trial"""
+    """Trial subscription status"""
     ACTIVE = "active"
-    CONVERTED = "converted"  # Se convirtió a pago
-    EXPIRED = "expired"  # Expiró sin convertir
-    CANCELLED = "cancelled"  # Usuario canceló
+    EXPIRED = "expired"
+    CONVERTED = "converted"
+    CANCELLED = "cancelled"
 
 
-class ConversionTrigger(Enum):
-    """Triggers para conversión"""
-    VALUE_MOMENT = "value_moment"  # Encontró un gran chollo
-    USAGE_THRESHOLD = "usage_threshold"  # Usó mucho el servicio
-    EXPIRATION_NEAR = "expiration_near"  # Trial por expirar
-    FEATURE_DEPENDENCY = "feature_dependency"  # Depende de una feature premium
+class NurturingStage(Enum):
+    """Trial nurturing stages"""
+    DAY_1_WELCOME = "day1_welcome"
+    DAY_3_VALUE = "day3_value"
+    DAY_5_REMINDER = "day5_reminder"
+    DAY_7_LAST_CHANCE = "day7_last_chance"
 
+
+# Premium features unlocked during trial
+PREMIUM_FEATURES = {
+    "unlimited_searches": {
+        "name": "Búsquedas Ilimitadas",
+        "description": "Sin límite diario de búsquedas",
+        "icon": "🔍"
+    },
+    "unlimited_watchlist": {
+        "name": "Watchlist Sin Límites",
+        "description": "Monitoriza todas las rutas que quieras",
+        "icon": "⭐"
+    },
+    "priority_notifications": {
+        "name": "Notificaciones Priority",
+        "description": "Alertas instantáneas de chollos",
+        "icon": "🔔"
+    },
+    "advanced_filters": {
+        "name": "Filtros Avanzados",
+        "description": "Personaliza tus búsquedas",
+        "icon": "🎯"
+    },
+    "price_alerts": {
+        "name": "Alertas de Precio",
+        "description": "Notificaciones cuando baje el precio",
+        "icon": "💰"
+    },
+    "export_data": {
+        "name": "Exportar Datos",
+        "description": "Descarga tu historial en CSV/PDF",
+        "icon": "📄"
+    },
+    "no_ads": {
+        "name": "Sin Publicidad",
+        "description": "Experiencia premium sin anuncios",
+        "icon": "🚫"
+    },
+    "priority_support": {
+        "name": "Soporte 24/7",
+        "description": "Asistencia prioritaria",
+        "icon": "🎖️"
+    }
+}
+
+
+# Trial nurturing messages
+NURTURING_MESSAGES = {
+    NurturingStage.DAY_1_WELCOME: {
+        "title": "🎉 ¡Bienvenido a Premium!",
+        "message": (
+            "Tu trial de 7 días ha comenzado. Tienes acceso completo a todas las features premium.\n\n"
+            "💡 Tip del día: Configura tu watchlist con rutas ilimitadas para no perderte ningún chollo."
+        ),
+        "cta": "Configurar Watchlist"
+    },
+    NurturingStage.DAY_3_VALUE: {
+        "title": "📊 Tu Progreso Premium",
+        "message": (
+            "En 3 días con Premium has:\n"
+            "• Encontrado {deals_found} chollos\n"
+            "• Ahorrado €{savings}\n"
+            "• Recibido {notifications} notificaciones priority\n\n"
+            "¡Usuarios premium ahorran 65% más que usuarios free!"
+        ),
+        "cta": "Ver Mi Dashboard"
+    },
+    NurturingStage.DAY_5_REMINDER: {
+        "title": "⏰ Quedan 2 Días de Trial",
+        "message": (
+            "Tu trial expira en 2 días. No pierdas acceso a:\n\n"
+            "✅ Búsquedas ilimitadas\n"
+            "✅ Notificaciones instantáneas\n"
+            "✅ Watchlist sin límites\n\n"
+            "🎁 Obtén 20% descuento si actualizas ahora."
+        ),
+        "cta": "Activar Premium con Descuento"
+    },
+    NurturingStage.DAY_7_LAST_CHANCE: {
+        "title": "🔥 Último Día de Trial",
+        "message": (
+            "Tu trial expira HOY a las 23:59.\n\n"
+            "En tu trial has ahorrado €{trial_savings}. Continúa ahorrando por solo €9.99/mes.\n\n"
+            "🎉 OFERTA ESPECIAL: 25% OFF si actualizas en las próximas 24h."
+        ),
+        "cta": "No Perder Acceso Premium"
+    }
+}
+
+
+# ============================================================================
+# DATA CLASSES
+# ============================================================================
 
 @dataclass
-class Trial:
-    """Trial premium"""
-    trial_id: str
+class PremiumTrial:
+    """Premium trial subscription"""
     user_id: int
-    tier: str
-    trial_type: str
-    status: str
-    
-    # Fechas
-    started_at: str
-    expires_at: str
-    converted_at: Optional[str] = None
-    
-    # Onboarding
-    onboarding_completed: bool = False
-    value_moments: int = 0  # Momentos de valor experimentados
-    
-    # Usage durante trial
-    searches_performed: int = 0
-    deals_found: int = 0
-    features_tried: List[str] = field(default_factory=list)
-    
-    # Conversion tracking
-    conversion_prompts_shown: int = 0
-    last_prompt_at: Optional[str] = None
-    
-    # Retention
-    engagement_score: float = 0.0  # 0-100
-    churn_risk: str = "low"  # low, medium, high
-
-
-@dataclass
-class TrialOnboarding:
-    """Flujo de onboarding del trial"""
-    trial_id: str
-    user_id: int
-    
-    # Steps completados
-    profile_setup: bool = False
-    first_search: bool = False
-    first_alert_created: bool = False
-    first_deal_found: bool = False
-    dashboard_viewed: bool = False
-    
-    # Progress
-    completion_pct: float = 0.0
-    
-    # Time to value
-    ttfv_seconds: Optional[float] = None  # Time To First Value
-    started_at: str = field(default_factory=lambda: datetime.now().isoformat())
-
-
-@dataclass
-class ConversionAttempt:
-    """Intento de conversión"""
-    attempt_id: str
-    trial_id: str
-    user_id: int
-    
-    # Trigger
-    trigger_type: str
-    trigger_context: str
-    
-    # Offer
-    discount_pct: float = 0.0
-    special_offer: Optional[str] = None
-    
-    # Resultado
-    shown_at: str = field(default_factory=lambda: datetime.now().isoformat())
-    action_taken: Optional[str] = None  # converted, maybe_later, dismissed
+    start_date: datetime
+    end_date: datetime
+    status: str  # TrialStatus
+    features_used: List[str]
+    engagement_score: float  # 0-100
     converted: bool = False
+    conversion_date: Optional[datetime] = None
+    cancel_date: Optional[datetime] = None
+    nurturing_sent: List[str] = None  # Stages already sent
+    
+    def __post_init__(self):
+        if self.nurturing_sent is None:
+            self.nurturing_sent = []
+    
+    @property
+    def days_remaining(self) -> int:
+        """Days remaining in trial"""
+        if self.status != TrialStatus.ACTIVE.value:
+            return 0
+        delta = self.end_date - datetime.now()
+        return max(0, delta.days)
+    
+    @property
+    def hours_remaining(self) -> float:
+        """Hours remaining in trial"""
+        if self.status != TrialStatus.ACTIVE.value:
+            return 0
+        delta = self.end_date - datetime.now()
+        return max(0, delta.total_seconds() / 3600)
+    
+    @property
+    def is_active(self) -> bool:
+        """Check if trial is currently active"""
+        return self.status == TrialStatus.ACTIVE.value and datetime.now() < self.end_date
+    
+    @property
+    def is_ending_soon(self) -> bool:
+        """Check if trial is ending in <2 days"""
+        return self.is_active and self.days_remaining <= 2
+    
+    def to_dict(self) -> Dict:
+        data = asdict(self)
+        data['start_date'] = self.start_date.isoformat()
+        data['end_date'] = self.end_date.isoformat()
+        if self.conversion_date:
+            data['conversion_date'] = self.conversion_date.isoformat()
+        if self.cancel_date:
+            data['cancel_date'] = self.cancel_date.isoformat()
+        return data
+    
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'PremiumTrial':
+        data['start_date'] = datetime.fromisoformat(data['start_date'])
+        data['end_date'] = datetime.fromisoformat(data['end_date'])
+        if data.get('conversion_date'):
+            data['conversion_date'] = datetime.fromisoformat(data['conversion_date'])
+        if data.get('cancel_date'):
+            data['cancel_date'] = datetime.fromisoformat(data['cancel_date'])
+        return cls(**data)
 
 
-class PremiumTrialManager:
+@dataclass
+class TrialEngagement:
+    """Track trial user engagement"""
+    user_id: int
+    trial_start: datetime
+    searches_made: int = 0
+    deals_found: int = 0
+    watchlist_added: int = 0
+    notifications_received: int = 0
+    groups_joined: int = 0
+    referrals_made: int = 0
+    session_count: int = 0
+    total_session_duration: float = 0  # seconds
+    features_explored: List[str] = None
+    
+    def __post_init__(self):
+        if self.features_explored is None:
+            self.features_explored = []
+    
+    @property
+    def engagement_score(self) -> float:
+        """
+        Calculate engagement score (0-100).
+        Higher score = more likely to convert.
+        """
+        score = 0
+        
+        # Searches (max 20 points)
+        score += min(20, self.searches_made * 2)
+        
+        # Deals found (max 15 points)
+        score += min(15, self.deals_found * 3)
+        
+        # Watchlist usage (max 15 points)
+        score += min(15, self.watchlist_added * 5)
+        
+        # Notifications (max 10 points)
+        score += min(10, self.notifications_received)
+        
+        # Social features (max 15 points)
+        score += min(10, self.groups_joined * 5)
+        score += min(5, self.referrals_made * 2.5)
+        
+        # Session engagement (max 15 points)
+        score += min(10, self.session_count * 2)
+        avg_session = self.total_session_duration / max(1, self.session_count)
+        score += min(5, avg_session / 60)  # 5 points for 5+ min avg
+        
+        # Feature exploration (max 10 points)
+        score += min(10, len(self.features_explored) * 2)
+        
+        return min(100, score)
+    
+    def to_dict(self) -> Dict:
+        data = asdict(self)
+        data['trial_start'] = self.trial_start.isoformat()
+        data['engagement_score'] = self.engagement_score
+        return data
+    
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'TrialEngagement':
+        # Remove computed field
+        data.pop('engagement_score', None)
+        data['trial_start'] = datetime.fromisoformat(data['trial_start'])
+        return cls(**data)
+
+
+# ============================================================================
+# TRIAL MANAGER
+# ============================================================================
+
+class TrialManager:
     """
-    Gestor de trials premium.
+    Manages premium trial activations and conversions.
     
     Features:
-    - Activación de trial
-    - Onboarding optimizado
-    - Tracking de engagement
-    - Conversion optimization
-    - Retention tactics
+    - Frictionless 7-day trial (no payment method required)
+    - Automatic feature unlocking
+    - Trial countdown and reminders
+    - Engagement tracking
+    - Nurturing flow
+    - Trial-to-paid conversion
     """
     
-    # Configuración de trials
-    TRIAL_CONFIGS = {
-        TrialType.STANDARD.value: {
-            "days": 7,
-            "requires_card": False,
-            "tier": "pro",
-            "features": "all"
-        },
-        TrialType.EXTENDED.value: {
-            "days": 14,
-            "requires_card": True,
-            "tier": "pro",
-            "features": "all"
-        },
-        TrialType.FEATURE_SPECIFIC.value: {
-            "days": 3,
-            "requires_card": False,
-            "tier": "basic",
-            "features": "limited"
-        },
-    }
-    
-    # Descuentos por momento de conversión
-    CONVERSION_DISCOUNTS = {
-        "early_bird": 30,  # Primeros 2 días: 30% off
-        "mid_trial": 20,  # Días 3-5: 20% off
-        "last_chance": 40,  # Último día: 40% off
-    }
-    
-    def __init__(self, data_dir: str = "."):
+    def __init__(self, data_dir: str = ".", trial_days: int = 7):
         self.data_dir = Path(data_dir)
-        self.trials_file = self.data_dir / "premium_trials.json"
-        self.onboarding_file = self.data_dir / "trial_onboarding.json"
-        self.attempts_file = self.data_dir / "conversion_attempts.json"
-        self.analytics_file = self.data_dir / "trial_analytics.json"
+        self.trial_days = trial_days
+        self.trials_file = self.data_dir / "trial_activations.json"
+        self.engagement_file = self.data_dir / "trial_engagement.json"
         
-        self.trials: Dict[str, Trial] = {}
-        self.onboarding: Dict[str, TrialOnboarding] = {}
-        self.attempts: List[ConversionAttempt] = []
-        self.analytics: Dict = self._init_analytics()
+        # Load data
+        self.trials: Dict[int, PremiumTrial] = self._load_trials()
+        self.engagement: Dict[int, TrialEngagement] = self._load_engagement()
         
-        self._load_data()
-        logger.info("🎁 PremiumTrialManager initialized")
+        print(f"✅ TrialManager initialized ({trial_days}-day trials)")
     
-    def _init_analytics(self) -> Dict:
-        """Inicializa analytics"""
-        return {
-            "total_trials": 0,
-            "active_trials": 0,
-            "converted_trials": 0,
-            "expired_trials": 0,
-            "conversion_rate": 0.0,
-            "avg_ttfv": 0.0,
-            "avg_engagement": 0.0,
-            "conversion_by_trigger": {},
-            "last_updated": datetime.now().isoformat()
-        }
+    # ========================================================================
+    # DATA PERSISTENCE
+    # ========================================================================
     
-    def _load_data(self):
-        """Carga datos"""
-        if self.trials_file.exists():
+    def _load_trials(self) -> Dict[int, PremiumTrial]:
+        """Load trial subscriptions from file"""
+        if not self.trials_file.exists():
+            return {}
+        
+        try:
             with open(self.trials_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                self.trials = {k: Trial(**v) for k, v in data.items()}
-        
-        if self.onboarding_file.exists():
-            with open(self.onboarding_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                self.onboarding = {
-                    k: TrialOnboarding(**v) for k, v in data.items()
+                return {
+                    int(user_id): PremiumTrial.from_dict(trial)
+                    for user_id, trial in data.items()
                 }
+        except Exception as e:
+            print(f"⚠️ Error loading trials: {e}")
+            return {}
+    
+    def _save_trials(self):
+        """Save trial subscriptions to file"""
+        try:
+            data = {
+                str(user_id): trial.to_dict()
+                for user_id, trial in self.trials.items()
+            }
+            with open(self.trials_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"⚠️ Error saving trials: {e}")
+    
+    def _load_engagement(self) -> Dict[int, TrialEngagement]:
+        """Load engagement tracking from file"""
+        if not self.engagement_file.exists():
+            return {}
         
-        if self.attempts_file.exists():
-            with open(self.attempts_file, 'r', encoding='utf-8') as f:
+        try:
+            with open(self.engagement_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                self.attempts = [ConversionAttempt(**a) for a in data]
-        
-        if self.analytics_file.exists():
-            with open(self.analytics_file, 'r', encoding='utf-8') as f:
-                self.analytics = json.load(f)
+                return {
+                    int(user_id): TrialEngagement.from_dict(eng)
+                    for user_id, eng in data.items()
+                }
+        except Exception as e:
+            print(f"⚠️ Error loading engagement: {e}")
+            return {}
     
-    def _save_data(self):
-        """Guarda datos"""
-        with open(self.trials_file, 'w', encoding='utf-8') as f:
-            data = {k: asdict(v) for k, v in self.trials.items()}
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        
-        with open(self.onboarding_file, 'w', encoding='utf-8') as f:
-            data = {k: asdict(v) for k, v in self.onboarding.items()}
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        
-        with open(self.attempts_file, 'w', encoding='utf-8') as f:
-            data = [asdict(a) for a in self.attempts]
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        
-        with open(self.analytics_file, 'w', encoding='utf-8') as f:
-            json.dump(self.analytics, f, indent=2, ensure_ascii=False)
+    def _save_engagement(self):
+        """Save engagement tracking to file"""
+        try:
+            data = {
+                str(user_id): eng.to_dict()
+                for user_id, eng in self.engagement.items()
+            }
+            with open(self.engagement_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"⚠️ Error saving engagement: {e}")
     
-    def start_trial(
-        self,
-        user_id: int,
-        trial_type: TrialType = TrialType.STANDARD
-    ) -> Tuple[bool, str, Optional[Trial]]:
+    # ========================================================================
+    # TRIAL ACTIVATION
+    # ========================================================================
+    
+    def can_start_trial(self, user_id: int) -> Tuple[bool, str]:
         """
-        Inicia un trial premium.
+        Check if user can start a trial.
         
         Returns:
-            (success, message, trial)
+            (can_start, reason)
         """
-        import hashlib
+        # Check if already has trial
+        if user_id in self.trials:
+            trial = self.trials[user_id]
+            
+            if trial.is_active:
+                return False, "Ya tienes un trial activo"
+            
+            if trial.converted:
+                return False, "Ya eres usuario premium"
+            
+            if trial.status == TrialStatus.EXPIRED.value:
+                return False, "Ya usaste tu trial gratuito"
+            
+            if trial.status == TrialStatus.CANCELLED.value:
+                # Allow re-activation after 30 days
+                days_since = (datetime.now() - trial.cancel_date).days
+                if days_since < 30:
+                    return False, f"Puedes reactivar en {30 - days_since} días"
         
-        # Verificar si ya tiene trial activo
-        existing = self._get_user_active_trial(user_id)
-        if existing:
-            return False, "❌ Ya tienes un trial activo", None
+        return True, "Eligible for trial"
+    
+    def start_trial(self, user_id: int) -> PremiumTrial:
+        """
+        Start a premium trial for user.
+        No payment method required.
+        """
+        can_start, reason = self.can_start_trial(user_id)
+        if not can_start:
+            raise ValueError(f"Cannot start trial: {reason}")
         
-        # Crear trial
-        trial_id = hashlib.md5(
-            f"{user_id}{datetime.now()}".encode()
-        ).hexdigest()[:12]
+        # Create trial
+        start_date = datetime.now()
+        end_date = start_date + timedelta(days=self.trial_days)
         
-        config = self.TRIAL_CONFIGS[trial_type.value]
-        
-        trial = Trial(
-            trial_id=trial_id,
+        trial = PremiumTrial(
             user_id=user_id,
-            tier=config["tier"],
-            trial_type=trial_type.value,
+            start_date=start_date,
+            end_date=end_date,
             status=TrialStatus.ACTIVE.value,
-            started_at=datetime.now().isoformat(),
-            expires_at=(
-                datetime.now() + timedelta(days=config["days"])
-            ).isoformat()
+            features_used=[],
+            engagement_score=0.0
         )
         
-        self.trials[trial_id] = trial
+        self.trials[user_id] = trial
         
-        # Crear onboarding
-        onboarding = TrialOnboarding(
-            trial_id=trial_id,
-            user_id=user_id
-        )
-        self.onboarding[trial_id] = onboarding
-        
-        # Analytics
-        self.analytics["total_trials"] += 1
-        self.analytics["active_trials"] += 1
-        
-        self._save_data()
-        
-        msg = (
-            f"🎉 ¡Trial {config['tier'].upper()} activado!\n"
-            f"⏰ {config['days']} días de acceso completo\n"
-            f"✅ Sin tarjeta requerida\n"
-            f"\n🚀 Empecemos con tu onboarding..."
+        # Initialize engagement tracking
+        self.engagement[user_id] = TrialEngagement(
+            user_id=user_id,
+            trial_start=start_date
         )
         
-        logger.info(f"🎁 Trial started for user {user_id}")
-        return True, msg, trial
+        self._save_trials()
+        self._save_engagement()
+        
+        print(f"✅ Trial started for user {user_id} (expires {end_date.date()})")
+        return trial
     
-    def _get_user_active_trial(self, user_id: int) -> Optional[Trial]:
-        """Obtiene el trial activo de un usuario"""
-        for trial in self.trials.values():
-            if (
-                trial.user_id == user_id and
-                trial.status == TrialStatus.ACTIVE.value
-            ):
-                return trial
-        return None
+    def get_trial(self, user_id: int) -> Optional[PremiumTrial]:
+        """Get user's trial if exists"""
+        return self.trials.get(user_id)
     
-    def complete_onboarding_step(
-        self,
-        trial_id: str,
-        step: str
-    ) -> bool:
-        """
-        Marca un paso del onboarding como completado.
+    def has_active_trial(self, user_id: int) -> bool:
+        """Check if user has active trial"""
+        trial = self.get_trial(user_id)
+        return trial is not None and trial.is_active
+    
+    def is_trial_user(self, user_id: int) -> bool:
+        """Check if user is in trial (includes converted)"""
+        return user_id in self.trials
+    
+    # ========================================================================
+    # ENGAGEMENT TRACKING
+    # ========================================================================
+    
+    def track_feature_use(self, user_id: int, feature_name: str):
+        """Track that user used a premium feature"""
+        if user_id not in self.trials:
+            return
         
-        Steps: profile_setup, first_search, first_alert_created,
-               first_deal_found, dashboard_viewed
+        trial = self.trials[user_id]
+        if feature_name not in trial.features_used:
+            trial.features_used.append(feature_name)
+            self._save_trials()
+        
+        if user_id in self.engagement:
+            eng = self.engagement[user_id]
+            if feature_name not in eng.features_explored:
+                eng.features_explored.append(feature_name)
+                self._save_engagement()
+    
+    def track_activity(self, user_id: int, activity_type: str, value: int = 1):
         """
-        if trial_id not in self.onboarding:
+        Track trial user activity.
+        
+        activity_type: searches, deals, watchlist, notifications, groups, referrals, session
+        """
+        if user_id not in self.engagement:
+            return
+        
+        eng = self.engagement[user_id]
+        
+        if activity_type == "searches":
+            eng.searches_made += value
+        elif activity_type == "deals":
+            eng.deals_found += value
+        elif activity_type == "watchlist":
+            eng.watchlist_added += value
+        elif activity_type == "notifications":
+            eng.notifications_received += value
+        elif activity_type == "groups":
+            eng.groups_joined += value
+        elif activity_type == "referrals":
+            eng.referrals_made += value
+        elif activity_type == "session":
+            eng.session_count += 1
+        elif activity_type == "session_duration":
+            eng.total_session_duration += value
+        
+        # Update engagement score in trial
+        if user_id in self.trials:
+            self.trials[user_id].engagement_score = eng.engagement_score
+            self._save_trials()
+        
+        self._save_engagement()
+    
+    # ========================================================================
+    # TRIAL CONVERSION
+    # ========================================================================
+    
+    def convert_trial(self, user_id: int, plan_id: str) -> bool:
+        """
+        Convert trial to paid subscription.
+        
+        Returns:
+            True if converted successfully
+        """
+        if user_id not in self.trials:
             return False
         
-        onboarding = self.onboarding[trial_id]
+        trial = self.trials[user_id]
         
-        # Marcar step
-        if hasattr(onboarding, step):
-            setattr(onboarding, step, True)
+        if not trial.is_active:
+            print(f"⚠️ Cannot convert inactive trial")
+            return False
         
-        # Actualizar progreso
-        total_steps = 5
-        completed = sum([
-            onboarding.profile_setup,
-            onboarding.first_search,
-            onboarding.first_alert_created,
-            onboarding.first_deal_found,
-            onboarding.dashboard_viewed
-        ])
+        # Mark as converted
+        trial.status = TrialStatus.CONVERTED.value
+        trial.converted = True
+        trial.conversion_date = datetime.now()
         
-        onboarding.completion_pct = (completed / total_steps) * 100
+        self._save_trials()
         
-        # Si es first_deal_found, calcular TTFV
-        if step == "first_deal_found" and not onboarding.ttfv_seconds:
-            started = datetime.fromisoformat(onboarding.started_at)
-            ttfv = (datetime.now() - started).total_seconds()
-            onboarding.ttfv_seconds = ttfv
-            
-            # Actualizar analytics
-            if self.analytics["avg_ttfv"] == 0:
-                self.analytics["avg_ttfv"] = ttfv
-            else:
-                # Promedio móvil
-                self.analytics["avg_ttfv"] = (
-                    self.analytics["avg_ttfv"] * 0.9 + ttfv * 0.1
-                )
-        
-        # Marcar onboarding completado
-        if onboarding.completion_pct == 100:
-            if trial_id in self.trials:
-                self.trials[trial_id].onboarding_completed = True
-                self.trials[trial_id].value_moments += 1
-        
-        self._save_data()
-        
+        print(f"✅ Trial converted to paid for user {user_id}")
         return True
     
-    def track_trial_activity(
-        self,
-        trial_id: str,
-        activity_type: str,
-        value: int = 1
-    ):
+    def cancel_trial(self, user_id: int) -> bool:
         """
-        Registra actividad durante el trial.
-        
-        Types: search, deal_found, feature_tried
-        """
-        if trial_id not in self.trials:
-            return
-        
-        trial = self.trials[trial_id]
-        
-        if activity_type == "search":
-            trial.searches_performed += value
-        elif activity_type == "deal_found":
-            trial.deals_found += value
-            trial.value_moments += 1
-        elif activity_type == "feature_tried":
-            # Evitar duplicados
-            if value not in trial.features_tried:
-                trial.features_tried.append(str(value))
-        
-        # Actualizar engagement score
-        self._calculate_engagement(trial_id)
-        
-        self._save_data()
-    
-    def _calculate_engagement(self, trial_id: str):
-        """
-        Calcula engagement score (0-100).
-        
-        Basado en:
-        - Searches performed
-        - Deals found
-        - Features tried
-        - Onboarding progress
-        - Value moments
-        """
-        trial = self.trials[trial_id]
-        onboarding = self.onboarding.get(trial_id)
-        
-        score = 0.0
-        
-        # Searches (max 20 pts)
-        score += min(20, trial.searches_performed * 2)
-        
-        # Deals (max 30 pts)
-        score += min(30, trial.deals_found * 6)
-        
-        # Features tried (max 20 pts)
-        score += min(20, len(trial.features_tried) * 5)
-        
-        # Onboarding (max 20 pts)
-        if onboarding:
-            score += onboarding.completion_pct * 0.2
-        
-        # Value moments (max 10 pts)
-        score += min(10, trial.value_moments * 2)
-        
-        trial.engagement_score = min(100, score)
-        
-        # Determinar churn risk
-        if trial.engagement_score >= 70:
-            trial.churn_risk = "low"
-        elif trial.engagement_score >= 40:
-            trial.churn_risk = "medium"
-        else:
-            trial.churn_risk = "high"
-    
-    def should_show_conversion_prompt(
-        self,
-        trial_id: str
-    ) -> Tuple[bool, Optional[ConversionTrigger]]:
-        """
-        Determina si mostrar prompt de conversión.
+        Cancel active trial.
         
         Returns:
-            (should_show, trigger_type)
+            True if cancelled successfully
         """
-        if trial_id not in self.trials:
-            return False, None
+        if user_id not in self.trials:
+            return False
         
-        trial = self.trials[trial_id]
+        trial = self.trials[user_id]
         
-        # No mostrar si ya convirtió
-        if trial.status != TrialStatus.ACTIVE.value:
-            return False, None
+        if not trial.is_active:
+            return False
         
-        # Verificar tiempo desde último prompt
-        if trial.last_prompt_at:
-            last_prompt = datetime.fromisoformat(trial.last_prompt_at)
-            hours_since = (datetime.now() - last_prompt).total_seconds() / 3600
-            
-            # Mínimo 12 horas entre prompts
-            if hours_since < 12:
-                return False, None
+        trial.status = TrialStatus.CANCELLED.value
+        trial.cancel_date = datetime.now()
         
-        # VALUE_MOMENT: acaba de encontrar un gran deal
-        if trial.value_moments >= 3:
-            return True, ConversionTrigger.VALUE_MOMENT
+        self._save_trials()
         
-        # USAGE_THRESHOLD: está usando mucho el servicio
-        if trial.engagement_score >= 70:
-            return True, ConversionTrigger.USAGE_THRESHOLD
-        
-        # EXPIRATION_NEAR: trial por expirar
-        expires = datetime.fromisoformat(trial.expires_at)
-        days_remaining = (expires - datetime.now()).days
-        
-        if days_remaining <= 1:
-            return True, ConversionTrigger.EXPIRATION_NEAR
-        
-        # FEATURE_DEPENDENCY: usa mucho ciertas features
-        if len(trial.features_tried) >= 5:
-            return True, ConversionTrigger.FEATURE_DEPENDENCY
-        
-        return False, None
+        print(f"🚫 Trial cancelled for user {user_id}")
+        return True
     
-    def create_conversion_attempt(
-        self,
-        trial_id: str,
-        trigger: ConversionTrigger,
-        context: str = ""
-    ) -> ConversionAttempt:
-        """
-        Crea un intento de conversión.
-        """
-        import hashlib
-        
-        trial = self.trials[trial_id]
-        
-        # Determinar descuento
-        expires = datetime.fromisoformat(trial.expires_at)
-        days_remaining = (expires - datetime.now()).days
-        
-        if days_remaining >= 5:
-            discount = self.CONVERSION_DISCOUNTS["early_bird"]
-        elif days_remaining >= 2:
-            discount = self.CONVERSION_DISCOUNTS["mid_trial"]
-        else:
-            discount = self.CONVERSION_DISCOUNTS["last_chance"]
-        
-        # Crear attempt
-        attempt_id = hashlib.md5(
-            f"{trial_id}{datetime.now()}".encode()
-        ).hexdigest()[:12]
-        
-        attempt = ConversionAttempt(
-            attempt_id=attempt_id,
-            trial_id=trial_id,
-            user_id=trial.user_id,
-            trigger_type=trigger.value,
-            trigger_context=context,
-            discount_pct=discount
-        )
-        
-        self.attempts.append(attempt)
-        
-        # Actualizar trial
-        trial.conversion_prompts_shown += 1
-        trial.last_prompt_at = datetime.now().isoformat()
-        
-        self._save_data()
-        
-        logger.info(
-            f"💸 Conversion attempt created for trial {trial_id} "
-            f"(trigger: {trigger.value}, discount: {discount}%)"
-        )
-        
-        return attempt
-    
-    def track_conversion_action(
-        self,
-        attempt_id: str,
-        action: str
-    ):
-        """
-        Registra acción en un intento de conversión.
-        
-        Actions: converted, maybe_later, dismissed
-        """
-        attempt = next(
-            (a for a in self.attempts if a.attempt_id == attempt_id),
-            None
-        )
-        
-        if not attempt:
+    def expire_trial(self, user_id: int):
+        """Mark trial as expired (called automatically)"""
+        if user_id not in self.trials:
             return
         
-        attempt.action_taken = action
-        
-        if action == "converted":
-            attempt.converted = True
-            
-            # Actualizar trial
-            trial = self.trials.get(attempt.trial_id)
-            if trial:
-                trial.status = TrialStatus.CONVERTED.value
-                trial.converted_at = datetime.now().isoformat()
-                
-                # Analytics
-                self.analytics["active_trials"] -= 1
-                self.analytics["converted_trials"] += 1
-                
-                # Por trigger
-                trigger = attempt.trigger_type
-                if trigger not in self.analytics["conversion_by_trigger"]:
-                    self.analytics["conversion_by_trigger"][trigger] = {
-                        "attempts": 0,
-                        "conversions": 0
-                    }
-                self.analytics["conversion_by_trigger"][trigger]["conversions"] += 1
-        
-        self._save_data()
-        self._update_analytics()
+        trial = self.trials[user_id]
+        trial.status = TrialStatus.EXPIRED.value
+        self._save_trials()
     
-    def expire_trial(self, trial_id: str):
+    # ========================================================================
+    # NURTURING FLOW
+    # ========================================================================
+    
+    def get_nurturing_message(self, user_id: int) -> Optional[Dict]:
         """
-        Expira un trial.
+        Get appropriate nurturing message based on trial day.
+        
+        Returns:
+            Dict with title, message, cta or None
         """
-        if trial_id not in self.trials:
-            return
-        
-        trial = self.trials[trial_id]
-        
-        if trial.status == TrialStatus.ACTIVE.value:
-            trial.status = TrialStatus.EXPIRED.value
-            
-            self.analytics["active_trials"] -= 1
-            self.analytics["expired_trials"] += 1
-            
-            self._save_data()
-            self._update_analytics()
-            
-            logger.info(f"⏰ Trial {trial_id} expired")
-    
-    def check_expired_trials(self):
-        """
-        Verifica y expira trials vencidos.
-        """
-        now = datetime.now()
-        
-        for trial in self.trials.values():
-            if trial.status != TrialStatus.ACTIVE.value:
-                continue
-            
-            expires = datetime.fromisoformat(trial.expires_at)
-            
-            if now >= expires:
-                self.expire_trial(trial.trial_id)
-    
-    def _update_analytics(self):
-        """Actualiza analytics"""
-        # Conversion rate
-        total = self.analytics["total_trials"]
-        converted = self.analytics["converted_trials"]
-        
-        if total > 0:
-            self.analytics["conversion_rate"] = (converted / total) * 100
-        
-        # Avg engagement
-        if self.trials:
-            total_engagement = sum(t.engagement_score for t in self.trials.values())
-            self.analytics["avg_engagement"] = total_engagement / len(self.trials)
-        
-        self.analytics["last_updated"] = datetime.now().isoformat()
-    
-    def get_trial(self, trial_id: str) -> Optional[Trial]:
-        """Obtiene un trial"""
-        return self.trials.get(trial_id)
-    
-    def get_user_trial(self, user_id: int) -> Optional[Trial]:
-        """Obtiene el trial de un usuario (activo o más reciente)"""
-        user_trials = [
-            t for t in self.trials.values()
-            if t.user_id == user_id
-        ]
-        
-        if not user_trials:
+        trial = self.get_trial(user_id)
+        if not trial or not trial.is_active:
             return None
         
-        # Primero buscar activo
-        active = next(
-            (t for t in user_trials if t.status == TrialStatus.ACTIVE.value),
-            None
-        )
+        days_in = (datetime.now() - trial.start_date).days
         
-        if active:
-            return active
+        # Determine stage
+        stage = None
+        if days_in == 0 and NurturingStage.DAY_1_WELCOME.value not in trial.nurturing_sent:
+            stage = NurturingStage.DAY_1_WELCOME
+        elif days_in == 3 and NurturingStage.DAY_3_VALUE.value not in trial.nurturing_sent:
+            stage = NurturingStage.DAY_3_VALUE
+        elif days_in == 5 and NurturingStage.DAY_5_REMINDER.value not in trial.nurturing_sent:
+            stage = NurturingStage.DAY_5_REMINDER
+        elif days_in >= 6 and NurturingStage.DAY_7_LAST_CHANCE.value not in trial.nurturing_sent:
+            stage = NurturingStage.DAY_7_LAST_CHANCE
         
-        # Si no, el más reciente
-        return max(user_trials, key=lambda t: t.started_at)
+        if not stage:
+            return None
+        
+        # Get base message
+        message = NURTURING_MESSAGES[stage].copy()
+        
+        # Personalize with user data
+        if user_id in self.engagement:
+            eng = self.engagement[user_id]
+            
+            # Calculate savings (mock for now)
+            trial_savings = eng.deals_found * 150  # Assume €150 avg per deal
+            
+            message['message'] = message['message'].format(
+                deals_found=eng.deals_found,
+                savings=trial_savings,
+                notifications=eng.notifications_received,
+                trial_savings=trial_savings
+            )
+        
+        # Mark as sent
+        trial.nurturing_sent.append(stage.value)
+        self._save_trials()
+        
+        return message
     
-    def get_analytics(self) -> Dict:
-        """Retorna analytics"""
-        return self.analytics
+    # ========================================================================
+    # TRIAL MANAGEMENT
+    # ========================================================================
+    
+    def check_expirations(self) -> List[int]:
+        """
+        Check for expired trials and mark them.
+        
+        Returns:
+            List of user_ids with newly expired trials
+        """
+        expired = []
+        now = datetime.now()
+        
+        for user_id, trial in self.trials.items():
+            if trial.status == TrialStatus.ACTIVE.value and now >= trial.end_date:
+                self.expire_trial(user_id)
+                expired.append(user_id)
+        
+        return expired
+    
+    # ========================================================================
+    # ANALYTICS
+    # ========================================================================
+    
+    def get_trial_stats(self) -> Dict:
+        """Get trial performance statistics"""
+        total_trials = len(self.trials)
+        active_trials = sum(1 for t in self.trials.values() if t.is_active)
+        converted = sum(1 for t in self.trials.values() if t.converted)
+        expired = sum(1 for t in self.trials.values() if t.status == TrialStatus.EXPIRED.value)
+        cancelled = sum(1 for t in self.trials.values() if t.status == TrialStatus.CANCELLED.value)
+        
+        # Engagement scores
+        if self.engagement:
+            avg_engagement = sum(e.engagement_score for e in self.engagement.values()) / len(self.engagement)
+        else:
+            avg_engagement = 0
+        
+        # Conversion rate
+        completed_trials = converted + expired + cancelled
+        conv_rate = converted / completed_trials if completed_trials > 0 else 0
+        
+        return {
+            'total_trials': total_trials,
+            'active': active_trials,
+            'converted': converted,
+            'expired': expired,
+            'cancelled': cancelled,
+            'conversion_rate': conv_rate,
+            'avg_engagement_score': avg_engagement
+        }
 
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def format_trial_status(trial: PremiumTrial) -> str:
+    """
+    Format trial status message for user.
+    
+    Args:
+        trial: PremiumTrial object
+    
+    Returns:
+        Formatted status message
+    """
+    if not trial.is_active:
+        return "⚠️ Tu trial ha expirado. Actualiza a premium para continuar."
+    
+    days = trial.days_remaining
+    hours = trial.hours_remaining
+    
+    if days > 1:
+        time_str = f"{days} días"
+    elif days == 1:
+        time_str = "1 día"
+    else:
+        time_str = f"{int(hours)} horas"
+    
+    return f"""✨ Premium Trial Activo
+
+⏰ Quedan: {time_str}
+🎯 Engagement: {trial.engagement_score:.0f}/100
+✅ Features usadas: {len(trial.features_used)}/{len(PREMIUM_FEATURES)}
+
+💡 No pierdas acceso. Actualiza antes de que expire.
+"""
+
+
+# ============================================================================
+# MAIN (TESTING)
+# ============================================================================
 
 if __name__ == "__main__":
-    # Testing
-    print("🚀 Testing PremiumTrialManager...\n")
+    print("\n" + "="*60)
+    print("🎁 TESTING: Premium Trial System")
+    print("="*60 + "\n")
     
-    manager = PremiumTrialManager()
+    # Initialize manager
+    manager = TrialManager()
     
-    # Test 1: Start trial
-    print("1. Starting trial...")
-    success, msg, trial = manager.start_trial(12345)
-    print(f"   {msg}\n")
+    test_user = 98765
     
-    if trial:
-        # Test 2: Complete onboarding
-        print("2. Completing onboarding steps...")
-        manager.complete_onboarding_step(trial.trial_id, "profile_setup")
-        manager.complete_onboarding_step(trial.trial_id, "first_search")
-        print("   Steps completed\n")
-        
-        # Test 3: Track activity
-        print("3. Tracking activity...")
-        manager.track_trial_activity(trial.trial_id, "search", 5)
-        manager.track_trial_activity(trial.trial_id, "deal_found", 2)
-        print(f"   Engagement: {trial.engagement_score:.1f}\n")
-        
-        # Test 4: Check conversion prompt
-        print("4. Checking conversion prompt...")
-        should_show, trigger = manager.should_show_conversion_prompt(trial.trial_id)
-        print(f"   Should show: {should_show}")
-        if trigger:
-            print(f"   Trigger: {trigger.value}\n")
-        
-        # Test 5: Create conversion attempt
-        if should_show:
-            print("5. Creating conversion attempt...")
-            attempt = manager.create_conversion_attempt(
-                trial.trial_id,
-                trigger,
-                "test context"
-            )
-            print(f"   Discount: {attempt.discount_pct}%\n")
+    print("1️⃣ Trial Activation")
+    print("-" * 40)
     
-    # Test 6: Analytics
-    print("6. Analytics...")
-    analytics = manager.get_analytics()
-    print(f"   Total trials: {analytics['total_trials']}")
-    print(f"   Conversion rate: {analytics['conversion_rate']:.1f}%")
+    can_start, reason = manager.can_start_trial(test_user)
+    print(f"Can start trial: {can_start} ({reason})")
     
-    print("\n✅ Tests completados!")
+    if can_start:
+        trial = manager.start_trial(test_user)
+        print(f"\n✅ Trial activated!")
+        print(f"Start: {trial.start_date.date()}")
+        print(f"End: {trial.end_date.date()}")
+        print(f"Status: {trial.status}")
+    
+    print("\n2️⃣ Feature Usage Tracking")
+    print("-" * 40)
+    
+    # Simulate feature usage
+    manager.track_feature_use(test_user, "unlimited_searches")
+    manager.track_feature_use(test_user, "priority_notifications")
+    manager.track_activity(test_user, "searches", 5)
+    manager.track_activity(test_user, "deals", 2)
+    manager.track_activity(test_user, "watchlist", 3)
+    
+    trial = manager.get_trial(test_user)
+    print(f"Features used: {trial.features_used}")
+    print(f"Engagement score: {trial.engagement_score:.1f}/100")
+    
+    print("\n3️⃣ Nurturing Message")
+    print("-" * 40)
+    
+    nurturing = manager.get_nurturing_message(test_user)
+    if nurturing:
+        print(f"\n{nurturing['title']}")
+        print(f"{nurturing['message']}")
+        print(f"\n[{nurturing['cta']}]")
+    
+    print("\n4️⃣ Trial Status")
+    print("-" * 40)
+    print(format_trial_status(trial))
+    
+    print("\n5️⃣ Trial Stats")
+    print("-" * 40)
+    stats = manager.get_trial_stats()
+    print(f"Total trials: {stats['total_trials']}")
+    print(f"Active: {stats['active']}")
+    print(f"Converted: {stats['converted']}")
+    print(f"Conversion rate: {stats['conversion_rate']*100:.1f}%")
+    print(f"Avg engagement: {stats['avg_engagement_score']:.1f}/100")
+    
+    print("\n" + "="*60)
+    print("✅ Testing Complete!")
+    print("="*60 + "\n")
