@@ -2,19 +2,19 @@
 # -*- coding: utf-8 -*-
 """
 ═════════════════════════════════════════════════════════════════════════════
-║       🎆 CAZADOR SUPREMO v13.0 ENTERPRISE EDITION 🎆                    ║
-║   🚀 Sistema Profesional de Monitorización de Vuelos + Retention 2026 🚀║
+║       🎆 CAZADOR SUPREMO v13.1 ENTERPRISE EDITION 🎆                    ║
+║   🚀 Sistema Profesional de Monitorización + Retention + Viral 2026 🚀  ║
 ═════════════════════════════════════════════════════════════════════════════
 
-👨‍💻 Autor: @Juanka_Spain | 🏷️ v13.0.0 Enterprise | 📅 2026-01-15 | 📋 MIT License
+👨‍💻 Autor: @Juanka_Spain | 🏷️ v13.1.0 Enterprise | 📅 2026-01-16 | 📋 MIT License
 
-🌟 ENTERPRISE FEATURES V13.0 - IT4 RETENTION COMPLETE:
+🌟 ENTERPRISE FEATURES V13.1 - IT4 + IT5 COMPLETE:
 ✅ Hook Model Completo               ✅ FlightCoins Economy           ✅ Tier System (4 niveles)
 ✅ Achievement System (9 tipos)      ✅ Daily Rewards + Streaks       ✅ Personal Watchlist
 ✅ Smart Notifications IA            ✅ Background Tasks (5)          ✅ Interactive Onboarding
-✅ Quick Actions Bar                 ✅ /daily command               ✅ /watchlist command
-✅ /profile command                  ✅ Auto-Scan Scheduler          ✅ Deals Detection
-✅ Trends Analysis                   ✅ Multi-Currency EUR/USD/GBP   ✅ SerpAPI Real Integration
+✅ Quick Actions Bar                 ✅ Referral System 🔥 NEW       ✅ Deal Sharing 🔥 NEW
+✅ Group Hunting 🔥 NEW             ✅ Leaderboards 🔥 NEW          ✅ Social Sharing 🔥 NEW
+✅ K-factor Tracking 🔥 NEW         ✅ Viral Mechanics 🔥 NEW       ✅ Season System 🔥 NEW
 
 📦 Dependencies: python-telegram-bot>=20.0 pandas requests colorama
 🚀 Usage: python cazador_supremo_enterprise.py
@@ -48,6 +48,14 @@ except ImportError as e:
     print(f"⚠️ Módulos de retención no disponibles: {e}")
     RETENTION_ENABLED = False
 
+# Importar módulos virales (IT5)
+try:
+    from bot_commands_viral import ViralCommandHandler
+    VIRAL_ENABLED = True
+except ImportError as e:
+    print(f"⚠️ Módulos virales no disponibles: {e}")
+    VIRAL_ENABLED = False
+
 try:
     from colorama import init, Fore, Style
     init(autoreset=True)
@@ -66,8 +74,9 @@ if sys.platform == 'win32':
     except: pass
 
 # CONFIG
-VERSION = "13.0.0 Enterprise"
+VERSION = "13.1.0 Enterprise"
 APP_NAME = "Cazador Supremo"
+BOT_USERNAME = "VuelosRobot"  # Cambiar por tu username real
 CONFIG_FILE, LOG_FILE, CSV_FILE = "config.json", "cazador_supremo.log", "deals_history.csv"
 MAX_WORKERS, API_TIMEOUT = 25, 15
 CACHE_TTL, CIRCUIT_BREAK_THRESHOLD = 300, 5
@@ -481,7 +490,17 @@ class TelegramBotManager:
                 logger.info("✅ Módulos de retención cargados correctamente")
             except Exception as e:
                 logger.error(f"❌ Error cargando módulos de retención: {e}")
-                RETENTION_ENABLED = False
+        
+        # Inicializar módulos virales (IT5) si están disponibles
+        if VIRAL_ENABLED:
+            try:
+                self.viral_cmds = ViralCommandHandler(
+                    bot_username=BOT_USERNAME,
+                    retention_mgr=self.retention_mgr if RETENTION_ENABLED else None
+                )
+                logger.info("✅ Módulos virales cargados correctamente")
+            except Exception as e:
+                logger.error(f"❌ Error cargando módulos virales: {e}")
     
     async def start(self):
         self.app = Application.builder().token(self.config.bot_token).build()
@@ -515,6 +534,16 @@ class TelegramBotManager:
                 self.scanner,
                 self.smart_notifier
             )
+        
+        # Comandos virales (IT5)
+        if VIRAL_ENABLED:
+            self.app.add_handler(CommandHandler('refer', self.cmd_refer))
+            self.app.add_handler(CommandHandler('myref', self.cmd_myref))
+            self.app.add_handler(CommandHandler('groups', self.cmd_groups))
+            self.app.add_handler(CommandHandler('creategroup', self.cmd_creategroup))
+            self.app.add_handler(CommandHandler('joingroup', self.cmd_joingroup))
+            self.app.add_handler(CommandHandler('leaderboard', self.cmd_leaderboard))
+            self.app.add_handler(CommandHandler('season', self.cmd_season))
         
         self.app.add_handler(CallbackQueryHandler(self.handle_callback))
         
@@ -558,12 +587,63 @@ class TelegramBotManager:
                             )
                         except: pass
     
+    async def _process_referral(self, user_id: int, ref_code: str):
+        """Procesa un referido desde el parámetro start."""
+        if not VIRAL_ENABLED:
+            return
+        
+        try:
+            # Validar y procesar referido
+            success, message = self.viral_cmds.referral_mgr.process_referral(
+                ref_code=ref_code,
+                referred_id=user_id
+            )
+            
+            if success:
+                # Enviar notificación al nuevo usuario
+                await self.app.bot.send_message(
+                    chat_id=user_id,
+                    text=f"✅ {message}",
+                    parse_mode='Markdown'
+                )
+                
+                # Notificar al referrer
+                referral_code = self.viral_cmds.referral_mgr._find_code_by_string(ref_code)
+                if referral_code:
+                    await self.app.bot.send_message(
+                        chat_id=referral_code.user_id,
+                        text=f"🎉 ¡Nuevo referido! Ganaste coins. Usa /myref para ver tus stats.",
+                        parse_mode='Markdown'
+                    )
+        except Exception as e:
+            logger.error(f"❌ Error procesando referido: {e}")
+    
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = update.effective_message
         if not msg: return
         user = update.effective_user
         
         await context.bot.send_chat_action(chat_id=msg.chat_id, action=ChatAction.TYPING)
+        
+        # Check si viene desde referido (IT5)
+        if context.args and len(context.args) > 0:
+            start_param = context.args[0]
+            
+            if start_param.startswith('ref_') and VIRAL_ENABLED:
+                ref_code = start_param.replace('ref_', '')
+                await self._process_referral(user.id, ref_code)
+            elif start_param.startswith('deal_') and VIRAL_ENABLED:
+                # Tracking de clicks en deals compartidos
+                short_code = start_param.replace('deal_', '')
+                success, deal = self.viral_cmds.deal_sharing_mgr.track_click(short_code, user.id)
+                if success and deal:
+                    await msg.reply_text(
+                        f"🔥 *¡Chollo compartido!*\n\n"
+                        f"Ruta: {deal.route}\n"
+                        f"Precio: {deal.price}{deal.currency}\n"
+                        f"Ahorro: {deal.savings_pct:.0f}%",
+                        parse_mode='Markdown'
+                    )
         
         # Check si es nuevo usuario y hacer onboarding
         if RETENTION_ENABLED:
@@ -581,29 +661,35 @@ class TelegramBotManager:
             "/route - Búsqueda personalizada\n"
             "/deals - Ver chollos\n"
             "/trends - Análisis tendencias\n"
-            "/clearcache - Limpiar caché\n"
-            "/status - Estado sistema\n"
-            "/help - Ayuda\n"
+            "/help - Ayuda completa\n"
         )
         
         if RETENTION_ENABLED:
             welcome += (
-                "\n*Comandos Gamificación:* 🎮\n"
+                "\n*Gamificación:* 🎮\n"
                 "/daily - Reward diario 💰\n"
                 "/watchlist - Tu watchlist 📍\n"
                 "/profile - Tu perfil 📊\n"
-                "/shop - Tienda FlightCoins 🛒"
+            )
+        
+        if VIRAL_ENABLED:
+            welcome += (
+                "\n*Crecimiento Viral:* 🔥\n"
+                "/refer - Invita amigos 👥\n"
+                "/groups - Grupos de caza 🎯\n"
+                "/leaderboard - Rankings 🏆\n"
             )
         
         keyboard = [
-            [InlineKeyboardButton("🔍 Escanear", callback_data="scan")],
-            [InlineKeyboardButton("💰 Chollos", callback_data="deals")],
-            [InlineKeyboardButton("📈 Tendencias", callback_data="trends")]
+            [InlineKeyboardButton("🔍 Escanear", callback_data="scan"),
+             InlineKeyboardButton("💰 Chollos", callback_data="deals")]
         ]
         
         if RETENTION_ENABLED:
-            keyboard.append([InlineKeyboardButton("🎁 Reward Diario", callback_data="daily")])
-            keyboard.append([InlineKeyboardButton("📊 Mi Perfil", callback_data="profile")])
+            keyboard.append([InlineKeyboardButton("🎁 Daily Reward", callback_data="daily")])
+        
+        if VIRAL_ENABLED:
+            keyboard.append([InlineKeyboardButton("🔥 Referir Amigo", callback_data="viral_refer")])
         
         await msg.reply_text(welcome, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
         
@@ -698,6 +784,10 @@ class TelegramBotManager:
             
             for deal in deals[:3]:
                 await msg.reply_text(deal.get_message(), parse_mode='Markdown')
+                
+                # Añadir botones de compartir (IT5)
+                if VIRAL_ENABLED:
+                    await self.viral_cmds.handle_share_deal(update, context, deal)
         else:
             await msg.reply_text("🙁 No hay chollos disponibles ahora")
     
@@ -753,6 +843,11 @@ class TelegramBotManager:
             if self.background_tasks:
                 msg_text += "\n✅ Background tasks: Activas"
         
+        if VIRAL_ENABLED:
+            analytics = self.viral_cmds.referral_mgr.get_global_analytics()
+            msg_text += f"\n🔥 K-factor: {analytics.get('viral_coefficient', 0):.2f}"
+            msg_text += f"\n🎯 Referidos activos: {analytics.get('active_referrals', 0)}"
+        
         await msg.reply_text(msg_text, parse_mode='Markdown')
     
     async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -760,32 +855,40 @@ class TelegramBotManager:
         if not msg: return
         
         help_text = (
-            f"📚 *Ayuda - {APP_NAME}*\n\n"
-            "*Comandos Core:*\n"
+            f"📚 *Ayuda - {APP_NAME} v{VERSION}*\n\n"
+            "*🔍 Comandos Core:*\n"
             "/start - Iniciar bot\n"
             "/scan - Escanear todas las rutas\n"
             "/route MAD BCN 2026-02-15 - Búsqueda personalizada\n"
             "/deals - Ver chollos disponibles\n"
             "/trends MAD-MIA - Tendencias de precio\n"
-            "/clearcache - Limpiar caché\n"
             "/status - Estado del sistema\n"
         )
         
         if RETENTION_ENABLED:
             help_text += (
-                "\n*Comandos Gamificación:* 🎮\n"
-                "/daily - Reclama reward diario (50-200 coins)\n"
-                "/watchlist add MAD-MIA 450 - Añadir a watchlist\n"
-                "/watchlist view - Ver tu watchlist\n"
-                "/profile - Ver tu perfil y estadísticas\n"
-                "/shop - Tienda de FlightCoins\n"
+                "\n*🎮 Gamificación:*\n"
+                "/daily - Reward diario (50-200 coins)\n"
+                "/watchlist - Gestionar watchlist\n"
+                "/profile - Ver perfil y stats\n"
+                "/shop - Tienda FlightCoins\n"
             )
         
-        help_text += f"\n_Versión: {VERSION}_"
+        if VIRAL_ENABLED:
+            help_text += (
+                "\n*🔥 Viral Growth:*\n"
+                "/refer - Tu código de referido\n"
+                "/myref - Stats de referidos\n"
+                "/groups - Explorar grupos\n"
+                "/creategroup - Crear grupo\n"
+                "/joingroup - Unirse a grupo\n"
+                "/leaderboard - Rankings globales\n"
+                "/season - Info temporada actual\n"
+            )
         
         await msg.reply_text(help_text, parse_mode='Markdown')
     
-    # Comandos de retención
+    # Comandos de retención (IT4)
     async def cmd_daily(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not RETENTION_ENABLED:
             await update.effective_message.reply_text("⚠️ Sistema de retención no disponible")
@@ -810,35 +913,82 @@ class TelegramBotManager:
             return
         await self.retention_cmds.handle_shop(update, context)
     
+    # Comandos virales (IT5)
+    async def cmd_refer(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not VIRAL_ENABLED:
+            await update.effective_message.reply_text("⚠️ Sistema viral no disponible")
+            return
+        await self.viral_cmds.handle_refer(update, context)
+    
+    async def cmd_myref(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not VIRAL_ENABLED:
+            await update.effective_message.reply_text("⚠️ Sistema viral no disponible")
+            return
+        await self.viral_cmds.handle_myref(update, context)
+    
+    async def cmd_groups(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not VIRAL_ENABLED:
+            await update.effective_message.reply_text("⚠️ Sistema viral no disponible")
+            return
+        await self.viral_cmds.handle_groups(update, context)
+    
+    async def cmd_creategroup(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not VIRAL_ENABLED:
+            await update.effective_message.reply_text("⚠️ Sistema viral no disponible")
+            return
+        await self.viral_cmds.handle_creategroup(update, context)
+    
+    async def cmd_joingroup(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not VIRAL_ENABLED:
+            await update.effective_message.reply_text("⚠️ Sistema viral no disponible")
+            return
+        await self.viral_cmds.handle_joingroup(update, context)
+    
+    async def cmd_leaderboard(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not VIRAL_ENABLED:
+            await update.effective_message.reply_text("⚠️ Sistema viral no disponible")
+            return
+        await self.viral_cmds.handle_leaderboard(update, context)
+    
+    async def cmd_season(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not VIRAL_ENABLED:
+            await update.effective_message.reply_text("⚠️ Sistema viral no disponible")
+            return
+        await self.viral_cmds.handle_season(update, context)
+    
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         if not query: return
         await query.answer()
         
+        data = query.data
+        
         # Callbacks core
-        if query.data == "scan":
+        if data == "scan":
             await self.cmd_scan(update, context)
-        elif query.data == "deals":
+        elif data == "deals":
             await self.cmd_deals(update, context)
-        elif query.data == "trends":
+        elif data == "trends":
             await query.message.reply_text("⚠️ Usa: /trends MAD-MIA")
         
-        # Callbacks de retención
+        # Callbacks de retención (IT4)
         elif RETENTION_ENABLED:
-            if query.data == "daily":
+            if data == "daily":
                 await self.cmd_daily(update, context)
-            elif query.data == "profile":
+            elif data == "profile":
                 await self.cmd_profile(update, context)
-            elif query.data.startswith("qa_"):
-                # Quick Actions callbacks
+            elif data.startswith("qa_"):
                 await self.quick_actions_mgr.handle_callback(
                     update, context, self.retention_mgr, self.scanner, self.deals_mgr
                 )
-            elif query.data.startswith("onb_"):
-                # Onboarding callbacks
+            elif data.startswith("onb_"):
                 await self.onboarding_mgr.handle_callback(
                     update, context, self.retention_mgr
                 )
+        
+        # Callbacks virales (IT5)
+        if VIRAL_ENABLED and data.startswith("viral_"):
+            await self.viral_cmds.handle_callback(update, context)
 
 async def main():
     print(f"\n{'='*80}")
@@ -846,12 +996,19 @@ async def main():
     print(f"{'='*80}\n")
     
     if RETENTION_ENABLED:
-        print("✅ Módulos de retención: ACTIVOS")
+        print("✅ Módulos de retención (IT4): ACTIVOS")
         print("   🎮 Hook Model | 💰 FlightCoins | 🏆 Achievements")
         print("   🔔 Smart Notifications | ⏰ Background Tasks")
         print("   🎉 Onboarding | ⚡ Quick Actions\n")
     else:
         print("⚠️ Módulos de retención: NO DISPONIBLES\n")
+    
+    if VIRAL_ENABLED:
+        print("✅ Módulos virales (IT5): ACTIVOS")
+        print("   👥 Referral System | 🔗 Deal Sharing | 🎯 Group Hunting")
+        print("   🏆 Leaderboards | 📊 K-factor Tracking | 🌐 Social Sharing\n")
+    else:
+        print("⚠️ Módulos virales: NO DISPONIBLES\n")
     
     try:
         config = ConfigManager()
@@ -861,11 +1018,13 @@ async def main():
         
         await bot_mgr.start()
         print("✅ Bot iniciado correctamente")
+        print(f"📱 Bot username: @{BOT_USERNAME}")
+        print("\n⌨️  Presiona Ctrl+C para detener\n")
         
         while bot_mgr.running:
             await asyncio.sleep(1)
     except KeyboardInterrupt:
-        print("\n⏹️ Deteniendo bot...")
+        print("\n⏹️  Deteniendo bot...")
     except Exception as e:
         print(f"❌ Error fatal: {e}")
     finally:
