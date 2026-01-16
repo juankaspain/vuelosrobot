@@ -2,19 +2,29 @@
 # -*- coding: utf-8 -*-
 """
 ═════════════════════════════════════════════════════════════════════════════
-║       🎆 CAZADOR SUPREMO v13.0 ENTERPRISE EDITION 🎆                    ║
-║   🚀 Sistema Profesional de Monitorización de Vuelos + Retention 2026 🚀║
+║       🎆 CAZADOR SUPREMO v13.5 ENTERPRISE EDITION 🎆                    ║
+║   🚀 Sistema Profesional: Retention + Viral Growth + Monetization 🚀   ║
 ═════════════════════════════════════════════════════════════════════════════
 
-👨‍💻 Autor: @Juanka_Spain | 🏷️ v13.0.0 Enterprise | 📅 2026-01-15 | 📋 MIT License
+👨‍💻 Autor: @Juanka_Spain | 🏷️ v13.5.0 Enterprise | 📅 2026-01-16 | 📋 MIT License
 
-🌟 ENTERPRISE FEATURES V13.0 - IT4 RETENTION COMPLETE:
+🌟 ENTERPRISE FEATURES V13.5 - IT4 + IT5 + IT6 COMPLETE:
+
+🎮 IT4 - RETENTION SYSTEM:
 ✅ Hook Model Completo               ✅ FlightCoins Economy           ✅ Tier System (4 niveles)
 ✅ Achievement System (9 tipos)      ✅ Daily Rewards + Streaks       ✅ Personal Watchlist
 ✅ Smart Notifications IA            ✅ Background Tasks (5)          ✅ Interactive Onboarding
-✅ Quick Actions Bar                 ✅ /daily command               ✅ /watchlist command
-✅ /profile command                  ✅ Auto-Scan Scheduler          ✅ Deals Detection
-✅ Trends Analysis                   ✅ Multi-Currency EUR/USD/GBP   ✅ SerpAPI Real Integration
+✅ Quick Actions Bar                 ✅ Auto-Scan Scheduler          ✅ Multi-Currency
+
+🔥 IT5 - VIRAL GROWTH LOOPS:
+✅ Referral System (2-sided)         ✅ Lifetime Commissions 10%     ✅ 4 Referral Tiers
+✅ Deal Sharing + Deep Links         ✅ Group Hunting                ✅ Leaderboards
+✅ Social Sharing Optimized          ✅ K-factor Tracking            ✅ Viral Analytics
+
+💰 IT6 - FREEMIUM & MONETIZATION:
+✅ Freemium System Base              ✅ Smart Paywalls               ✅ Value Metrics Dashboard
+✅ Premium Trial (7 días)            ✅ Pricing Engine               ✅ Premium Analytics
+✅ Conversion Funnel                 ✅ Churn Prevention             ✅ ROI Calculator
 
 📦 Dependencies: python-telegram-bot>=20.0 pandas requests colorama
 🚀 Usage: python cazador_supremo_enterprise.py
@@ -35,7 +45,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from telegram.constants import ChatAction
 
-# Importar módulos de retención
+# Importar módulos IT4 - Retention
 try:
     from retention_system import RetentionManager, UserTier, AchievementType, TIER_BENEFITS
     from bot_commands_retention import RetentionCommandHandler
@@ -45,8 +55,34 @@ try:
     from quick_actions import QuickActionsManager
     RETENTION_ENABLED = True
 except ImportError as e:
-    print(f"⚠️ Módulos de retención no disponibles: {e}")
+    print(f"⚠️ Módulos IT4 (Retention) no disponibles: {e}")
     RETENTION_ENABLED = False
+
+# Importar módulos IT5 - Viral Growth
+try:
+    from viral_growth_system import ViralGrowthManager
+    from bot_commands_viral import ViralCommandHandler
+    from deal_sharing_system import DealSharingManager
+    from social_sharing import SocialSharingManager
+    from group_hunting import GroupHuntingManager
+    from competitive_leaderboards import LeaderboardManager
+    VIRAL_ENABLED = True
+except ImportError as e:
+    print(f"⚠️ Módulos IT5 (Viral Growth) no disponibles: {e}")
+    VIRAL_ENABLED = False
+
+# Importar módulos IT6 - Freemium & Monetization
+try:
+    from freemium_system import FreemiumManager
+    from smart_paywalls import SmartPaywallManager
+    from value_metrics import ValueMetricsManager
+    from premium_trial import PremiumTrialManager
+    from pricing_engine import PricingEngine
+    from premium_analytics import PremiumAnalytics
+    FREEMIUM_ENABLED = True
+except ImportError as e:
+    print(f"⚠️ Módulos IT6 (Freemium) no disponibles: {e}")
+    FREEMIUM_ENABLED = False
 
 try:
     from colorama import init, Fore, Style
@@ -66,7 +102,7 @@ if sys.platform == 'win32':
     except: pass
 
 # CONFIG
-VERSION = "13.0.0 Enterprise"
+VERSION = "13.5.0 Enterprise"
 APP_NAME = "Cazador Supremo"
 CONFIG_FILE, LOG_FILE, CSV_FILE = "config.json", "cazador_supremo.log", "deals_history.csv"
 MAX_WORKERS, API_TIMEOUT = 25, 15
@@ -149,6 +185,11 @@ class Deal:
     historical_avg: float
     detected_at: datetime
     notified: bool = False
+    deal_id: Optional[str] = None
+    
+    def __post_init__(self):
+        if not self.deal_id:
+            self.deal_id = f"DEAL_{int(self.detected_at.timestamp())}_{random.randint(1000,9999)}"
     
     def get_message(self) -> str:
         fp = self.flight_price
@@ -162,7 +203,8 @@ class Deal:
         if fp.departure_date: msg += f"📅 *Salida:* {fp.departure_date}\n"
         if fp.airline: msg += f"🛫 *Aerolínea:* {fp.airline}\n"
         msg += f"🔗 *Escalas:* {fp.stops}\n"
-        msg += f"{fp.get_confidence_emoji()} *Confianza:* {fp.confidence:.0%}"
+        msg += f"{fp.get_confidence_emoji()} *Confianza:* {fp.confidence:.0%}\n\n"
+        msg += f"🔖 *Deal ID:* `{self.deal_id}`"
         return msg
 
 class ColorizedLogger:
@@ -469,19 +511,44 @@ class TelegramBotManager:
         self.deals_mgr = DealsManager(data_mgr, config)
         self.app, self.running = None, False
         
-        # Inicializar módulos de retención si están disponibles
+        # Inicializar módulos IT4 - Retention
         if RETENTION_ENABLED:
             try:
                 self.retention_mgr = RetentionManager()
                 self.smart_notifier = SmartNotifier(config.bot_token)
-                self.background_tasks = None  # Se inicializa después del start
+                self.background_tasks = None
                 self.onboarding_mgr = OnboardingManager()
                 self.quick_actions_mgr = QuickActionsManager()
-                self.retention_cmds = None  # Se inicializa después del start
-                logger.info("✅ Módulos de retención cargados correctamente")
+                self.retention_cmds = None
+                logger.info("✅ IT4 (Retention) cargado")
             except Exception as e:
-                logger.error(f"❌ Error cargando módulos de retención: {e}")
-                RETENTION_ENABLED = False
+                logger.error(f"❌ Error IT4: {e}")
+        
+        # Inicializar módulos IT5 - Viral Growth
+        if VIRAL_ENABLED:
+            try:
+                self.viral_growth_mgr = ViralGrowthManager()
+                self.deal_sharing_mgr = DealSharingManager(config.bot_token)
+                self.social_sharing_mgr = SocialSharingManager()
+                self.group_hunting_mgr = GroupHuntingManager()
+                self.leaderboard_mgr = LeaderboardManager()
+                self.viral_cmds = None
+                logger.info("✅ IT5 (Viral Growth) cargado")
+            except Exception as e:
+                logger.error(f"❌ Error IT5: {e}")
+        
+        # Inicializar módulos IT6 - Freemium
+        if FREEMIUM_ENABLED:
+            try:
+                self.freemium_mgr = FreemiumManager()
+                self.paywall_mgr = SmartPaywallManager()
+                self.value_metrics_mgr = ValueMetricsManager()
+                self.premium_trial_mgr = PremiumTrialManager()
+                self.pricing_engine = PricingEngine()
+                self.premium_analytics = PremiumAnalytics()
+                logger.info("✅ IT6 (Freemium) cargado")
+            except Exception as e:
+                logger.error(f"❌ Error IT6: {e}")
     
     async def start(self):
         self.app = Application.builder().token(self.config.bot_token).build()
@@ -496,25 +563,37 @@ class TelegramBotManager:
         self.app.add_handler(CommandHandler('status', self.cmd_status))
         self.app.add_handler(CommandHandler('help', self.cmd_help))
         
-        # Comandos de retención
+        # Comandos IT4 - Retention
         if RETENTION_ENABLED:
             self.retention_cmds = RetentionCommandHandler(
-                self.retention_mgr, 
-                self.scanner,
-                self.deals_mgr
+                self.retention_mgr, self.scanner, self.deals_mgr
             )
             self.app.add_handler(CommandHandler('daily', self.cmd_daily))
             self.app.add_handler(CommandHandler('watchlist', self.cmd_watchlist))
             self.app.add_handler(CommandHandler('profile', self.cmd_profile))
             self.app.add_handler(CommandHandler('shop', self.cmd_shop))
             
-            # Inicializar background tasks
             self.background_tasks = BackgroundTaskManager(
-                self.app.bot,
-                self.retention_mgr,
-                self.scanner,
-                self.smart_notifier
+                self.app.bot, self.retention_mgr, self.scanner, self.smart_notifier
             )
+        
+        # Comandos IT5 - Viral Growth
+        if VIRAL_ENABLED:
+            self.viral_cmds = ViralCommandHandler(
+                self.viral_growth_mgr, self.deal_sharing_mgr,
+                self.group_hunting_mgr, self.leaderboard_mgr
+            )
+            self.app.add_handler(CommandHandler('invite', self.cmd_invite))
+            self.app.add_handler(CommandHandler('referrals', self.cmd_referrals))
+            self.app.add_handler(CommandHandler('share_deal', self.cmd_share_deal))
+            self.app.add_handler(CommandHandler('groups', self.cmd_groups))
+            self.app.add_handler(CommandHandler('leaderboard', self.cmd_leaderboard))
+        
+        # Comandos IT6 - Freemium
+        if FREEMIUM_ENABLED:
+            self.app.add_handler(CommandHandler('premium', self.cmd_premium))
+            self.app.add_handler(CommandHandler('upgrade', self.cmd_upgrade))
+            self.app.add_handler(CommandHandler('roi', self.cmd_roi))
         
         self.app.add_handler(CallbackQueryHandler(self.handle_callback))
         
@@ -523,7 +602,6 @@ class TelegramBotManager:
         await self.app.start()
         await self.app.updater.start_polling(drop_pending_updates=True)
         
-        # Iniciar tareas automáticas
         if self.config.auto_scan_enabled:
             asyncio.create_task(self.auto_scan_loop())
         
@@ -565,14 +643,21 @@ class TelegramBotManager:
         
         await context.bot.send_chat_action(chat_id=msg.chat_id, action=ChatAction.TYPING)
         
-        # Check si es nuevo usuario y hacer onboarding
+        # Check onboarding para nuevos usuarios
         if RETENTION_ENABLED:
             profile = self.retention_mgr.get_or_create_profile(user.id, user.username or "user")
-            
-            # Si es nuevo (sin búsquedas), iniciar onboarding
             if profile.total_searches == 0:
                 await self.onboarding_mgr.start_onboarding(update, context, self.retention_mgr)
                 return
+        
+        # Check referral code en deep link
+        if VIRAL_ENABLED and context.args:
+            ref_code = context.args[0]
+            if ref_code.startswith('ref_'):
+                try:
+                    await self.viral_growth_mgr.process_referral(user.id, ref_code)
+                    await msg.reply_text("🎉 ¡Bienvenido! Has ganado 300 FlightCoins de bonus 💰")
+                except: pass
         
         welcome = (
             f"🎆 *{APP_NAME} v{VERSION}* 🎆\n\n"
@@ -580,43 +665,55 @@ class TelegramBotManager:
             "/scan - Escanear rutas\n"
             "/route - Búsqueda personalizada\n"
             "/deals - Ver chollos\n"
-            "/trends - Análisis tendencias\n"
-            "/clearcache - Limpiar caché\n"
-            "/status - Estado sistema\n"
-            "/help - Ayuda\n"
+            "/trends - Análisis\n"
         )
         
         if RETENTION_ENABLED:
             welcome += (
-                "\n*Comandos Gamificación:* 🎮\n"
+                "\n*🎮 Gamificación:*\n"
                 "/daily - Reward diario 💰\n"
-                "/watchlist - Tu watchlist 📍\n"
                 "/profile - Tu perfil 📊\n"
-                "/shop - Tienda FlightCoins 🛒"
+            )
+        
+        if VIRAL_ENABLED:
+            welcome += (
+                "\n*🔥 Viral & Social:*\n"
+                "/invite - Invita amigos 🎁\n"
+                "/leaderboard - Rankings 🏆\n"
+            )
+        
+        if FREEMIUM_ENABLED:
+            welcome += (
+                "\n*💎 Premium:*\n"
+                "/premium - Prueba gratis 7 días\n"
+                "/upgrade - Ver planes\n"
             )
         
         keyboard = [
-            [InlineKeyboardButton("🔍 Escanear", callback_data="scan")],
-            [InlineKeyboardButton("💰 Chollos", callback_data="deals")],
-            [InlineKeyboardButton("📈 Tendencias", callback_data="trends")]
+            [InlineKeyboardButton("🔍 Escanear", callback_data="scan"),
+             InlineKeyboardButton("💰 Chollos", callback_data="deals")]
         ]
         
-        if RETENTION_ENABLED:
-            keyboard.append([InlineKeyboardButton("🎁 Reward Diario", callback_data="daily")])
-            keyboard.append([InlineKeyboardButton("📊 Mi Perfil", callback_data="profile")])
+        if VIRAL_ENABLED:
+            keyboard.append([InlineKeyboardButton("🎁 Invitar Amigos", callback_data="invite"),
+                           InlineKeyboardButton("🏆 Rankings", callback_data="leaderboard")])
+        
+        if FREEMIUM_ENABLED:
+            keyboard.append([InlineKeyboardButton("💎 Activar Premium", callback_data="premium")])
         
         await msg.reply_text(welcome, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
-        
-        # Mostrar Quick Actions Bar si está disponible
-        if RETENTION_ENABLED:
-            qa_keyboard = self.quick_actions_mgr.get_keyboard(user.id, self.retention_mgr)
-            if qa_keyboard:
-                await msg.reply_text("⚡ *Acciones Rápidas*", parse_mode='Markdown', reply_markup=qa_keyboard)
     
     async def cmd_scan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = update.effective_message
         if not msg: return
         user = update.effective_user
+        
+        # Check freemium limits
+        if FREEMIUM_ENABLED:
+            can_use, paywall = await self.freemium_mgr.check_feature_access(user.id, 'scan')
+            if not can_use:
+                await self.paywall_mgr.show_paywall(update, context, 'scan_limit')
+                return
         
         await context.bot.send_chat_action(chat_id=msg.chat_id, action=ChatAction.TYPING)
         await msg.reply_text("🔍 Iniciando escaneo...")
@@ -625,7 +722,6 @@ class TelegramBotManager:
         prices = self.scanner.scan_routes(routes)
         
         if RETENTION_ENABLED:
-            # Track búsqueda
             for route in routes:
                 self.retention_mgr.track_search(user.id, user.username or "user", route.route_code)
         
@@ -634,9 +730,15 @@ class TelegramBotManager:
             response = "✅ *Escaneo completado*\n\n"
             for p in prices[:5]:
                 response += f"{p.get_confidence_emoji()} {p.name}: {p.format_price()} ({p.source.value})\n"
-            if len(prices) > 5:
-                response += f"\n_...y {len(prices)-5} resultados más_"
-            await msg.reply_text(response, parse_mode='Markdown')
+            
+            # Add share button si viral está activo
+            keyboard = None
+            if VIRAL_ENABLED:
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📤 Compartir Resultados", callback_data="share_scan")]
+                ])
+            
+            await msg.reply_text(response, parse_mode='Markdown', reply_markup=keyboard)
         else:
             await msg.reply_text("❌ No se obtuvieron resultados")
     
@@ -659,15 +761,14 @@ class TelegramBotManager:
             if RETENTION_ENABLED:
                 self.retention_mgr.track_search(user.id, user.username or "user", route.route_code)
             
-            await msg.reply_text(f"🔍 Buscando vuelos {origin} → {dest} para {date} (±3 días)...")
+            await msg.reply_text(f"🔍 Buscando {origin} → {dest} para {date}...")
             prices = self.scanner.scan_route_flexible(route, date)
             
             if prices:
-                response = f"✅ *Encontrados {len(prices)} vuelos*\n\n"
+                response = f"✅ *{len(prices)} vuelos encontrados*\n\n"
                 for i, p in enumerate(prices, 1):
                     response += f"{i}️⃣ {p.format_price()} - {p.departure_date}\n"
                     if p.airline: response += f"   ✈️ {p.airline}\n"
-                    response += f"   {p.get_confidence_emoji()} {p.confidence:.0%} confianza\n\n"
                 await msg.reply_text(response, parse_mode='Markdown')
             else:
                 await msg.reply_text("❌ No se encontraron vuelos")
@@ -688,18 +789,23 @@ class TelegramBotManager:
         
         if deals:
             if RETENTION_ENABLED:
-                # Track deals encontrados
                 for deal in deals[:3]:
                     self.retention_mgr.track_deal_found(
-                        user.id, 
-                        user.username or "user",
+                        user.id, user.username or "user",
                         deal.flight_price.price * deal.savings_pct / 100
                     )
             
             for deal in deals[:3]:
-                await msg.reply_text(deal.get_message(), parse_mode='Markdown')
+                keyboard = None
+                if VIRAL_ENABLED:
+                    share_url = self.deal_sharing_mgr.generate_deal_link(deal.deal_id, user.id)
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("📤 Compartir Deal", url=share_url)]
+                    ])
+                
+                await msg.reply_text(deal.get_message(), parse_mode='Markdown', reply_markup=keyboard)
         else:
-            await msg.reply_text("🙁 No hay chollos disponibles ahora")
+            await msg.reply_text("🙁 No hay chollos disponibles")
     
     async def cmd_trends(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = update.effective_message
@@ -718,140 +824,202 @@ class TelegramBotManager:
             emoji = "📉" if trend['trend'] == 'down' else "📈"
             response = (
                 f"📈 *Tendencia: {route_code}*\n\n"
-                f"📊 *Media:* €{trend['avg']:.0f}\n"
-                f"💰 *Mínimo:* €{trend['min']:.0f}\n"
-                f"💸 *Máximo:* €{trend['max']:.0f}\n"
-                f"📊 *Datos:* {trend['count']} precios\n"
-                f"{emoji} *Tendencia:* {'Bajando' if trend['trend']=='down' else 'Subiendo'}"
+                f"📊 Media: €{trend['avg']:.0f}\n"
+                f"💰 Mínimo: €{trend['min']:.0f}\n"
+                f"💸 Máximo: €{trend['max']:.0f}\n"
+                f"{emoji} {trend['trend'].upper()}"
             )
             await msg.reply_text(response, parse_mode='Markdown')
         else:
-            await msg.reply_text("❌ No hay datos históricos para esta ruta")
+            await msg.reply_text("❌ No hay datos históricos")
     
     async def cmd_clearcache(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = update.effective_message
         if not msg: return
         cleared = self.scanner.cache.clear()
-        await msg.reply_text(f"🗑️ *Caché limpiado*\n\n📄 Items eliminados: {cleared}", parse_mode='Markdown')
+        await msg.reply_text(f"🗑️ Caché limpiado: {cleared} items")
     
     async def cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = update.effective_message
         if not msg: return
         
-        cache_size = self.scanner.cache.size
-        hit_rate = self.scanner.cache.hit_rate
-        
-        msg_text = (
-            "📊 *Estado del Sistema*\n\n"
-            f"🗃️ Caché: {cache_size} items ({hit_rate:.1%} hit rate)\n"
-            f"⚡ Circuit: {self.scanner.circuit.state.value}"
+        status = (
+            f"📊 *Estado - {APP_NAME} v{VERSION}*\n\n"
+            f"🗃️ Caché: {self.scanner.cache.size} ({self.scanner.cache.hit_rate:.1%})\n"
+            f"⚡ Circuit: {self.scanner.circuit.state.value}\n"
         )
         
         if RETENTION_ENABLED:
-            total_users = len(self.retention_mgr.profiles)
-            msg_text += f"\n👥 Usuarios: {total_users}"
-            if self.background_tasks:
-                msg_text += "\n✅ Background tasks: Activas"
+            status += f"\n🎮 IT4 Retention: ✅ Activo\n"
+        if VIRAL_ENABLED:
+            status += f"🔥 IT5 Viral Growth: ✅ Activo\n"
+        if FREEMIUM_ENABLED:
+            status += f"💎 IT6 Freemium: ✅ Activo\n"
         
-        await msg.reply_text(msg_text, parse_mode='Markdown')
+        await msg.reply_text(status, parse_mode='Markdown')
     
     async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = update.effective_message
         if not msg: return
         
         help_text = (
-            f"📚 *Ayuda - {APP_NAME}*\n\n"
-            "*Comandos Core:*\n"
-            "/start - Iniciar bot\n"
-            "/scan - Escanear todas las rutas\n"
-            "/route MAD BCN 2026-02-15 - Búsqueda personalizada\n"
-            "/deals - Ver chollos disponibles\n"
-            "/trends MAD-MIA - Tendencias de precio\n"
-            "/clearcache - Limpiar caché\n"
-            "/status - Estado del sistema\n"
+            f"📚 *Ayuda - {APP_NAME} v{VERSION}*\n\n"
+            "*Core:* /scan /route /deals /trends\n"
         )
         
         if RETENTION_ENABLED:
-            help_text += (
-                "\n*Comandos Gamificación:* 🎮\n"
-                "/daily - Reclama reward diario (50-200 coins)\n"
-                "/watchlist add MAD-MIA 450 - Añadir a watchlist\n"
-                "/watchlist view - Ver tu watchlist\n"
-                "/profile - Ver tu perfil y estadísticas\n"
-                "/shop - Tienda de FlightCoins\n"
-            )
-        
-        help_text += f"\n_Versión: {VERSION}_"
+            help_text += "*Retention:* /daily /profile /watchlist\n"
+        if VIRAL_ENABLED:
+            help_text += "*Viral:* /invite /referrals /leaderboard\n"
+        if FREEMIUM_ENABLED:
+            help_text += "*Premium:* /premium /upgrade /roi\n"
         
         await msg.reply_text(help_text, parse_mode='Markdown')
     
-    # Comandos de retención
+    # IT4 - Retention Commands
     async def cmd_daily(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if not RETENTION_ENABLED:
-            await update.effective_message.reply_text("⚠️ Sistema de retención no disponible")
-            return
+        if not RETENTION_ENABLED: return
         await self.retention_cmds.handle_daily(update, context)
     
     async def cmd_watchlist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if not RETENTION_ENABLED:
-            await update.effective_message.reply_text("⚠️ Sistema de retención no disponible")
-            return
+        if not RETENTION_ENABLED: return
         await self.retention_cmds.handle_watchlist(update, context)
     
     async def cmd_profile(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if not RETENTION_ENABLED:
-            await update.effective_message.reply_text("⚠️ Sistema de retención no disponible")
-            return
+        if not RETENTION_ENABLED: return
         await self.retention_cmds.handle_profile(update, context)
     
     async def cmd_shop(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if not RETENTION_ENABLED:
-            await update.effective_message.reply_text("⚠️ Sistema de retención no disponible")
-            return
+        if not RETENTION_ENABLED: return
         await self.retention_cmds.handle_shop(update, context)
+    
+    # IT5 - Viral Commands
+    async def cmd_invite(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not VIRAL_ENABLED: return
+        await self.viral_cmds.handle_invite(update, context)
+    
+    async def cmd_referrals(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not VIRAL_ENABLED: return
+        await self.viral_cmds.handle_referrals(update, context)
+    
+    async def cmd_share_deal(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not VIRAL_ENABLED: return
+        await self.viral_cmds.handle_share_deal(update, context)
+    
+    async def cmd_groups(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not VIRAL_ENABLED: return
+        await self.viral_cmds.handle_groups(update, context)
+    
+    async def cmd_leaderboard(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not VIRAL_ENABLED: return
+        await self.viral_cmds.handle_leaderboard(update, context)
+    
+    # IT6 - Freemium Commands
+    async def cmd_premium(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not FREEMIUM_ENABLED: return
+        msg = update.effective_message
+        user = update.effective_user
+        
+        trial_info = await self.premium_trial_mgr.start_trial(user.id)
+        if trial_info:
+            await msg.reply_text(
+                f"💎 *Premium Trial Activado*\n\n"
+                f"✅ 7 días gratis\n"
+                f"🚀 Todas las features desbloqueadas\n"
+                f"⏰ Expira: {trial_info['expires']}\n\n"
+                f"_Cancela cuando quieras_",
+                parse_mode='Markdown'
+            )
+    
+    async def cmd_upgrade(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not FREEMIUM_ENABLED: return
+        msg = update.effective_message
+        user = update.effective_user
+        
+        pricing = self.pricing_engine.get_personalized_pricing(user.id)
+        await msg.reply_text(
+            f"💎 *Planes Premium*\n\n"
+            f"📅 *Mensual:* {pricing['monthly']}€/mes\n"
+            f"📆 *Anual:* {pricing['annual']}€/año ({pricing['discount']}% OFF)\n\n"
+            f"✨ Features Premium:\n"
+            f"• Escaneos ilimitados\n"
+            f"• Alertas avanzadas\n"
+• Prioridad soporte\n"
+            f"• Analytics detallados",
+            parse_mode='Markdown'
+        )
+    
+    async def cmd_roi(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not FREEMIUM_ENABLED: return
+        msg = update.effective_message
+        user = update.effective_user
+        
+        roi_data = await self.value_metrics_mgr.calculate_user_roi(user.id)
+        await msg.reply_text(
+            f"📊 *Tu ROI con {APP_NAME}*\n\n"
+            f"💰 Ahorro total: €{roi_data['total_savings']:.0f}\n"
+            f"✈️ Deals aprovechados: {roi_data['deals_used']}\n"
+            f"📈 ROI: {roi_data['roi_percent']:.1f}%\n\n"
+            f"_¡Sigue ahorrando!_ 🚀",
+            parse_mode='Markdown'
+        )
     
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         if not query: return
         await query.answer()
         
-        # Callbacks core
+        # Core callbacks
         if query.data == "scan":
             await self.cmd_scan(update, context)
         elif query.data == "deals":
             await self.cmd_deals(update, context)
-        elif query.data == "trends":
-            await query.message.reply_text("⚠️ Usa: /trends MAD-MIA")
         
-        # Callbacks de retención
-        elif RETENTION_ENABLED:
+        # IT4 callbacks
+        elif RETENTION_ENABLED and query.data in ["daily", "profile"]:
             if query.data == "daily":
                 await self.cmd_daily(update, context)
             elif query.data == "profile":
                 await self.cmd_profile(update, context)
             elif query.data.startswith("qa_"):
-                # Quick Actions callbacks
                 await self.quick_actions_mgr.handle_callback(
                     update, context, self.retention_mgr, self.scanner, self.deals_mgr
                 )
             elif query.data.startswith("onb_"):
-                # Onboarding callbacks
                 await self.onboarding_mgr.handle_callback(
                     update, context, self.retention_mgr
                 )
+        
+        # IT5 callbacks
+        elif VIRAL_ENABLED and query.data in ["invite", "leaderboard", "share_scan"]:
+            if query.data == "invite":
+                await self.cmd_invite(update, context)
+            elif query.data == "leaderboard":
+                await self.cmd_leaderboard(update, context)
+        
+        # IT6 callbacks
+        elif FREEMIUM_ENABLED and query.data in ["premium", "upgrade"]:
+            if query.data == "premium":
+                await self.cmd_premium(update, context)
+            elif query.data == "upgrade":
+                await self.cmd_upgrade(update, context)
 
 async def main():
     print(f"\n{'='*80}")
     print(f"{f'{APP_NAME} v{VERSION}'.center(80)}")
     print(f"{'='*80}\n")
     
-    if RETENTION_ENABLED:
-        print("✅ Módulos de retención: ACTIVOS")
-        print("   🎮 Hook Model | 💰 FlightCoins | 🏆 Achievements")
-        print("   🔔 Smart Notifications | ⏰ Background Tasks")
-        print("   🎉 Onboarding | ⚡ Quick Actions\n")
+    features_status = []
+    if RETENTION_ENABLED: features_status.append("✅ IT4 Retention")
+    if VIRAL_ENABLED: features_status.append("✅ IT5 Viral Growth")
+    if FREEMIUM_ENABLED: features_status.append("✅ IT6 Freemium")
+    
+    if features_status:
+        print("\n".join(features_status))
     else:
-        print("⚠️ Módulos de retención: NO DISPONIBLES\n")
+        print("⚠️ Solo módulos core activos")
+    
+    print()
     
     try:
         config = ConfigManager()
@@ -860,7 +1028,7 @@ async def main():
         bot_mgr = TelegramBotManager(config, scanner, data_mgr)
         
         await bot_mgr.start()
-        print("✅ Bot iniciado correctamente")
+        print("\n✅ Bot iniciado correctamente\n")
         
         while bot_mgr.running:
             await asyncio.sleep(1)
