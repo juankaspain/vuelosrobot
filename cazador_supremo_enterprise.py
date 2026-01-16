@@ -41,14 +41,14 @@ from telegram.constants import ChatAction
 # Importar módulos de retención
 try:
     from retention_system import RetentionManager, UserTier, AchievementType, TIER_BENEFITS
-    from bot_commands_retention import RetentionCommandHandler
+    from bot_commands_retention import RetentionCommands
     from smart_notifications import SmartNotifier
     from background_tasks import BackgroundTaskManager
     from onboarding_flow import OnboardingManager
     from quick_actions import QuickActionsManager
     RETENTION_ENABLED = True
 except ImportError as e:
-    print(f"⚠️ Módulos de retención no disponibles: {e}")
+    print(f"⚠️ Módulos de retención no disponibles: {e}", file=sys.stderr)
     RETENTION_ENABLED = False
 
 # Importar módulos virales (IT5)
@@ -56,7 +56,7 @@ try:
     from bot_commands_viral import ViralCommandHandler
     VIRAL_ENABLED = True
 except ImportError as e:
-    print(f"⚠️ Módulos virales no disponibles: {e}")
+    print(f"⚠️ Módulos virales no disponibles: {e}", file=sys.stderr)
     VIRAL_ENABLED = False
 
 try:
@@ -533,10 +533,8 @@ class TelegramBotManager:
         
         # Comandos de retención
         if RETENTION_ENABLED:
-            self.retention_cmds = RetentionCommandHandler(
-                self.retention_mgr, 
-                self.scanner,
-                self.deals_mgr
+            self.retention_cmds = RetentionCommands(
+                self.retention_mgr
             )
             self.app.add_handler(CommandHandler('daily', self.cmd_daily))
             self.app.add_handler(CommandHandler('watchlist', self.cmd_watchlist))
@@ -976,25 +974,25 @@ class TelegramBotManager:
         if not RETENTION_ENABLED:
             await update.effective_message.reply_text("⚠️ Sistema de retención no disponible")
             return
-        await self.retention_cmds.handle_daily(update, context)
+        await self.retention_cmds.cmd_daily(update, context)
     
     async def cmd_watchlist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not RETENTION_ENABLED:
             await update.effective_message.reply_text("⚠️ Sistema de retención no disponible")
             return
-        await self.retention_cmds.handle_watchlist(update, context)
+        await self.retention_cmds.cmd_watchlist(update, context)
     
     async def cmd_profile(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not RETENTION_ENABLED:
             await update.effective_message.reply_text("⚠️ Sistema de retención no disponible")
             return
-        await self.retention_cmds.handle_profile(update, context)
+        await self.retention_cmds.cmd_profile(update, context)
     
     async def cmd_shop(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not RETENTION_ENABLED:
             await update.effective_message.reply_text("⚠️ Sistema de retención no disponible")
             return
-        await self.retention_cmds.handle_shop(update, context)
+        await self.retention_cmds.cmd_shop(update, context)
     
     # Comandos virales (IT5)
     async def cmd_refer(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
