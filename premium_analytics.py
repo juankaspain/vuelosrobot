@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Premium Analytics & Churn Prevention
+Premium Analytics & Conversion Funnel Tracking
 IT6 - DAY 5/5
 
 Features:
-- Conversion funnel tracking (Paywall → Trial → Paid)
-- Revenue metrics (MRR, ARR, ARPU, LTV)
+- Complete conversion funnel tracking
+- Premium revenue metrics (MRR, ARR, ARPU, LTV)
 - Retention cohort analysis
 - Churn prediction and prevention
-- Premium user analytics
+- A/B test result tracking
 
 Author: @Juanka_Spain
 Version: 14.0.0-alpha.5
@@ -20,28 +20,66 @@ import json
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
-from collections import defaultdict
+from enum import Enum
 from pathlib import Path
+import statistics
+from collections import defaultdict
 
 
 # ============================================================================
-# CONSTANTS
+# ENUMS & CONSTANTS
 # ============================================================================
 
-# Funnel stages
-FUNNEL_STAGES = [
-    "paywall_viewed",
-    "paywall_clicked",
-    "trial_started",
-    "trial_engaged",  # Used premium features
-    "paid_converted"
-]
+class FunnelStage(Enum):
+    """Conversion funnel stages"""
+    VISITOR = "visitor"                    # New user
+    ACTIVATED = "activated"                # Completed onboarding
+    ENGAGED = "engaged"                    # Used core features
+    PAYWALL_VIEW = "paywall_view"          # Saw paywall
+    PAYWALL_CLICK = "paywall_click"        # Clicked upgrade
+    TRIAL_START = "trial_start"            # Started trial
+    TRIAL_ENGAGED = "trial_engaged"        # Used premium features
+    PAID = "paid"                          # Became paying customer
 
-# Churn risk thresholds
-CHURN_RISK_THRESHOLDS = {
-    "high": 70,  # >70% risk = high
-    "medium": 40,  # 40-70% risk = medium
-    "low": 40  # <40% risk = low
+
+class ChurnRisk(Enum):
+    """Churn risk levels"""
+    LOW = "low"          # <20% chance
+    MEDIUM = "medium"    # 20-50% chance
+    HIGH = "high"        # 50-80% chance
+    CRITICAL = "critical" # >80% chance
+
+
+# Churn signals (weighted)
+CHURN_SIGNALS = {
+    'days_since_last_login': {
+        'weight': 0.25,
+        'thresholds': {7: 0.2, 14: 0.5, 30: 0.8, 60: 1.0}
+    },
+    'searches_last_7d': {
+        'weight': 0.20,
+        'thresholds': {10: 0.0, 5: 0.3, 2: 0.6, 0: 1.0}
+    },
+    'deals_found_last_30d': {
+        'weight': 0.15,
+        'thresholds': {5: 0.0, 3: 0.3, 1: 0.6, 0: 0.9}
+    },
+    'notification_open_rate': {
+        'weight': 0.15,
+        'thresholds': {0.7: 0.0, 0.5: 0.3, 0.3: 0.6, 0.1: 1.0}
+    },
+    'support_tickets': {
+        'weight': 0.10,
+        'thresholds': {0: 0.0, 1: 0.3, 2: 0.6, 3: 0.9}
+    },
+    'feature_usage_drop': {
+        'weight': 0.10,
+        'thresholds': {0.0: 0.0, 0.3: 0.3, 0.5: 0.6, 0.8: 1.0}
+    },
+    'negative_feedback': {
+        'weight': 0.05,
+        'thresholds': {False: 0.0, True: 0.8}
+    }
 }
 
 
@@ -50,574 +88,541 @@ CHURN_RISK_THRESHOLDS = {
 # ============================================================================
 
 @dataclass
-class FunnelEvent:
-    """Single event in conversion funnel"""
-    user_id: int
-    stage: str  # One of FUNNEL_STAGES
-    timestamp: datetime
-    metadata: Dict = None
+class FunnelMetrics:
+    """Conversion funnel metrics"""
+    stage: str  # FunnelStage value
+    users: int
+    conversion_to_next: float  # %
+    avg_time_to_next_stage: float  # hours
+    dropoff_rate: float  # %
     
     def to_dict(self) -> Dict:
-        data = asdict(self)
-        data['timestamp'] = self.timestamp.isoformat()
-        return data
-    
-    @classmethod
-    def from_dict(cls, data: Dict) -> 'FunnelEvent':
-        data['timestamp'] = datetime.fromisoformat(data['timestamp'])
-        return cls(**data)
+        return asdict(self)
 
 
 @dataclass
-class PremiumSubscription:
-    """Premium subscription record"""
-    user_id: int
-    plan_tier: str
-    start_date: datetime
-    billing_period: str  # "monthly" or "annual"
-    monthly_value: float  # MRR contribution
-    is_active: bool = True
-    cancel_date: Optional[datetime] = None
-    churn_risk_score: float = 0.0  # 0-100
+class RevenueMetrics:
+    """Revenue metrics"""
+    mrr: float  # Monthly Recurring Revenue
+    arr: float  # Annual Recurring Revenue
+    arpu: float  # Average Revenue Per User
+    ltv: float  # Lifetime Value
+    cac: float  # Customer Acquisition Cost
+    ltv_cac_ratio: float
     
     def to_dict(self) -> Dict:
-        data = asdict(self)
-        data['start_date'] = self.start_date.isoformat()
-        if self.cancel_date:
-            data['cancel_date'] = self.cancel_date.isoformat()
-        return data
+        return asdict(self)
+
+
+@dataclass
+class CohortData:
+    """Retention cohort data"""
+    cohort_month: str  # YYYY-MM
+    cohort_size: int
+    retention_rates: Dict[int, float]  # month -> retention %
     
-    @classmethod
-    def from_dict(cls, data: Dict) -> 'PremiumSubscription':
-        data['start_date'] = datetime.fromisoformat(data['start_date'])
-        if data.get('cancel_date'):
-            data['cancel_date'] = datetime.fromisoformat(data['cancel_date'])
-        return cls(**data)
+    def to_dict(self) -> Dict:
+        return asdict(self)
 
 
 @dataclass
 class ChurnPrediction:
-    """Churn prediction for a user"""
+    """Churn risk prediction"""
     user_id: int
-    risk_score: float  # 0-100
-    risk_level: str  # "low", "medium", "high"
-    factors: List[str]  # Risk factors identified
-    recommended_actions: List[str]  # Win-back actions
-    prediction_date: datetime
+    risk_level: str  # ChurnRisk value
+    risk_score: float  # 0-1
+    signals: Dict[str, float]  # signal -> contribution
+    recommendation: str
     
     def to_dict(self) -> Dict:
-        data = asdict(self)
-        data['prediction_date'] = self.prediction_date.isoformat()
-        return data
+        return asdict(self)
 
 
 # ============================================================================
-# ANALYTICS MANAGER
+# CONVERSION FUNNEL TRACKER
 # ============================================================================
 
-class AnalyticsManager:
+class ConversionFunnel:
     """
-    Manages premium analytics and churn prevention.
+    Tracks users through conversion funnel.
     
-    Features:
-    - Conversion funnel tracking
-    - Revenue metrics (MRR, ARR, ARPU, LTV)
-    - Retention analysis
-    - Churn prediction
+    Funnel stages:
+    1. Visitor (new user)
+    2. Activated (completed onboarding)
+    3. Engaged (used core features)
+    4. Paywall View (saw upgrade prompt)
+    5. Paywall Click (clicked upgrade)
+    6. Trial Start (started premium trial)
+    7. Trial Engaged (used premium features)
+    8. Paid (converted to paying customer)
     """
     
     def __init__(self, data_dir: str = "."):
         self.data_dir = Path(data_dir)
         self.funnel_file = self.data_dir / "conversion_funnel.json"
-        self.subscriptions_file = self.data_dir / "premium_subscriptions.json"
-        self.churn_file = self.data_dir / "churn_predictions.json"
         
-        # Load data
-        self.funnel_events: List[FunnelEvent] = self._load_funnel()
-        self.subscriptions: Dict[int, PremiumSubscription] = self._load_subscriptions()
-        self.churn_predictions: Dict[int, ChurnPrediction] = self._load_churn()
+        # Load funnel data: {user_id: {stage: timestamp}}
+        self.funnel_data: Dict[int, Dict[str, datetime]] = self._load_funnel()
         
-        print("✅ AnalyticsManager initialized")
+        print("✅ ConversionFunnel initialized")
     
     # ========================================================================
     # DATA PERSISTENCE
     # ========================================================================
     
-    def _load_funnel(self) -> List[FunnelEvent]:
-        """Load funnel events"""
+    def _load_funnel(self) -> Dict[int, Dict[str, datetime]]:
+        """Load funnel data from file"""
         if not self.funnel_file.exists():
-            return []
+            return {}
         
         try:
             with open(self.funnel_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                return [FunnelEvent.from_dict(e) for e in data]
+                return {
+                    int(user_id): {
+                        stage: datetime.fromisoformat(timestamp)
+                        for stage, timestamp in stages.items()
+                    }
+                    for user_id, stages in data.items()
+                }
         except Exception as e:
             print(f"⚠️ Error loading funnel: {e}")
-            return []
+            return {}
     
     def _save_funnel(self):
-        """Save funnel events"""
+        """Save funnel data to file"""
         try:
-            data = [e.to_dict() for e in self.funnel_events]
+            data = {
+                str(user_id): {
+                    stage: timestamp.isoformat()
+                    for stage, timestamp in stages.items()
+                }
+                for user_id, stages in self.funnel_data.items()
+            }
             with open(self.funnel_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"⚠️ Error saving funnel: {e}")
     
-    def _load_subscriptions(self) -> Dict[int, PremiumSubscription]:
-        """Load subscriptions"""
-        if not self.subscriptions_file.exists():
-            return {}
-        
-        try:
-            with open(self.subscriptions_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                return {
-                    int(user_id): PremiumSubscription.from_dict(sub)
-                    for user_id, sub in data.items()
-                }
-        except Exception as e:
-            print(f"⚠️ Error loading subscriptions: {e}")
-            return {}
-    
-    def _save_subscriptions(self):
-        """Save subscriptions"""
-        try:
-            data = {
-                str(user_id): sub.to_dict()
-                for user_id, sub in self.subscriptions.items()
-            }
-            with open(self.subscriptions_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            print(f"⚠️ Error saving subscriptions: {e}")
-    
-    def _load_churn(self) -> Dict[int, ChurnPrediction]:
-        """Load churn predictions"""
-        if not self.churn_file.exists():
-            return {}
-        
-        try:
-            with open(self.churn_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                return {
-                    int(user_id): ChurnPrediction(**pred)
-                    for user_id, pred in data.items()
-                }
-        except Exception as e:
-            print(f"⚠️ Error loading churn: {e}")
-            return {}
-    
-    def _save_churn(self):
-        """Save churn predictions"""
-        try:
-            data = {
-                str(user_id): pred.to_dict()
-                for user_id, pred in self.churn_predictions.items()
-            }
-            with open(self.churn_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            print(f"⚠️ Error saving churn: {e}")
-    
     # ========================================================================
     # FUNNEL TRACKING
     # ========================================================================
     
-    def track_funnel_event(self, user_id: int, stage: str, metadata: Dict = None):
-        """
-        Track a funnel event.
+    def track_stage(self, user_id: int, stage: FunnelStage):
+        """Track user reaching a funnel stage"""
+        if user_id not in self.funnel_data:
+            self.funnel_data[user_id] = {}
         
-        Args:
-            user_id: User ID
-            stage: One of FUNNEL_STAGES
-            metadata: Optional metadata
-        """
-        if stage not in FUNNEL_STAGES:
-            print(f"⚠️ Invalid funnel stage: {stage}")
-            return
-        
-        event = FunnelEvent(
-            user_id=user_id,
-            stage=stage,
-            timestamp=datetime.now(),
-            metadata=metadata or {}
-        )
-        
-        self.funnel_events.append(event)
-        self._save_funnel()
+        # Only track first time reaching stage
+        if stage.value not in self.funnel_data[user_id]:
+            self.funnel_data[user_id][stage.value] = datetime.now()
+            self._save_funnel()
     
-    def get_funnel_stats(self, days: int = 30) -> Dict:
-        """
-        Get conversion funnel statistics.
+    def get_user_stage(self, user_id: int) -> Optional[FunnelStage]:
+        """Get current funnel stage for user"""
+        if user_id not in self.funnel_data:
+            return None
         
-        Args:
-            days: Days to look back
+        stages = self.funnel_data[user_id]
+        
+        # Return furthest stage reached
+        for stage in reversed(list(FunnelStage)):
+            if stage.value in stages:
+                return stage
+        
+        return None
+    
+    # ========================================================================
+    # FUNNEL METRICS
+    # ========================================================================
+    
+    def calculate_funnel_metrics(self) -> List[FunnelMetrics]:
+        """
+        Calculate metrics for each funnel stage.
         
         Returns:
-            Dict with funnel stats
+            List of FunnelMetrics for each stage
         """
-        cutoff = datetime.now() - timedelta(days=days)
-        recent_events = [e for e in self.funnel_events if e.timestamp >= cutoff]
+        metrics = []
+        stages = list(FunnelStage)
         
-        # Count users at each stage
-        stage_users = defaultdict(set)
-        for event in recent_events:
-            stage_users[event.stage].add(event.user_id)
-        
-        # Calculate conversion rates
-        stats = {
-            'period_days': days,
-            'stages': {}
-        }
-        
-        for i, stage in enumerate(FUNNEL_STAGES):
-            users_at_stage = len(stage_users[stage])
+        for i, stage in enumerate(stages):
+            # Count users at this stage
+            users_at_stage = sum(
+                1 for user_stages in self.funnel_data.values()
+                if stage.value in user_stages
+            )
             
-            # Conversion rate from previous stage
-            if i > 0:
-                prev_stage = FUNNEL_STAGES[i-1]
-                prev_users = len(stage_users[prev_stage])
-                conv_rate = (users_at_stage / prev_users * 100) if prev_users > 0 else 0
+            if users_at_stage == 0:
+                continue
+            
+            # Calculate conversion to next stage
+            if i < len(stages) - 1:
+                next_stage = stages[i + 1]
+                users_at_next = sum(
+                    1 for user_stages in self.funnel_data.values()
+                    if next_stage.value in user_stages
+                )
+                conversion_rate = (users_at_next / users_at_stage) * 100
+                dropoff_rate = 100 - conversion_rate
+                
+                # Calculate avg time to next stage
+                times = []
+                for user_stages in self.funnel_data.values():
+                    if stage.value in user_stages and next_stage.value in user_stages:
+                        delta = user_stages[next_stage.value] - user_stages[stage.value]
+                        times.append(delta.total_seconds() / 3600)  # hours
+                
+                avg_time = statistics.mean(times) if times else 0
             else:
-                conv_rate = 100  # First stage
+                conversion_rate = 100  # Last stage
+                dropoff_rate = 0
+                avg_time = 0
             
-            stats['stages'][stage] = {
-                'users': users_at_stage,
-                'conversion_rate': round(conv_rate, 1)
-            }
+            metrics.append(FunnelMetrics(
+                stage=stage.value,
+                users=users_at_stage,
+                conversion_to_next=conversion_rate,
+                avg_time_to_next_stage=avg_time,
+                dropoff_rate=dropoff_rate
+            ))
         
-        # Overall conversion rate (paywall → paid)
-        if stage_users['paywall_viewed']:
-            overall_rate = len(stage_users['paid_converted']) / len(stage_users['paywall_viewed']) * 100
-        else:
-            overall_rate = 0
+        return metrics
+
+
+# ============================================================================
+# PREMIUM ANALYTICS
+# ============================================================================
+
+class PremiumAnalytics:
+    """
+    Analytics for premium subscriptions.
+    
+    Tracks:
+    - Revenue metrics (MRR, ARR, ARPU, LTV)
+    - Retention cohorts
+    - Churn prediction
+    - Performance dashboards
+    """
+    
+    def __init__(self, data_dir: str = "."):
+        self.data_dir = Path(data_dir)
+        self.subscriptions_file = self.data_dir / "premium_subscriptions.json"
+        self.cohorts_file = self.data_dir / "retention_cohorts.json"
         
-        stats['overall_conversion_rate'] = round(overall_rate, 1)
+        # Load data
+        self.subscriptions = self._load_subscriptions()
+        self.cohorts = self._load_cohorts()
         
-        return stats
+        print("✅ PremiumAnalytics initialized")
     
     # ========================================================================
-    # SUBSCRIPTION MANAGEMENT
+    # DATA PERSISTENCE
     # ========================================================================
     
-    def add_subscription(self, user_id: int, plan_tier: str, billing_period: str, monthly_value: float):
-        """
-        Add a premium subscription.
+    def _load_subscriptions(self) -> List[Dict]:
+        """Load subscription data"""
+        if not self.subscriptions_file.exists():
+            return []
         
-        Args:
-            user_id: User ID
-            plan_tier: Plan tier (basic_monthly, etc.)
-            billing_period: "monthly" or "annual"
-            monthly_value: MRR contribution
-        """
-        sub = PremiumSubscription(
-            user_id=user_id,
-            plan_tier=plan_tier,
-            start_date=datetime.now(),
-            billing_period=billing_period,
-            monthly_value=monthly_value
-        )
-        
-        self.subscriptions[user_id] = sub
-        self._save_subscriptions()
-        
-        # Track in funnel
-        self.track_funnel_event(user_id, "paid_converted")
+        try:
+            with open(self.subscriptions_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"⚠️ Error loading subscriptions: {e}")
+            return []
     
-    def cancel_subscription(self, user_id: int):
-        """Cancel a subscription"""
-        if user_id in self.subscriptions:
-            self.subscriptions[user_id].is_active = False
-            self.subscriptions[user_id].cancel_date = datetime.now()
-            self._save_subscriptions()
+    def _load_cohorts(self) -> List[CohortData]:
+        """Load cohort data"""
+        if not self.cohorts_file.exists():
+            return []
+        
+        try:
+            with open(self.cohorts_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return [CohortData(**c) for c in data]
+        except Exception as e:
+            print(f"⚠️ Error loading cohorts: {e}")
+            return []
+    
+    def _save_cohorts(self):
+        """Save cohort data"""
+        try:
+            data = [c.to_dict() for c in self.cohorts]
+            with open(self.cohorts_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"⚠️ Error saving cohorts: {e}")
     
     # ========================================================================
     # REVENUE METRICS
     # ========================================================================
     
-    def get_revenue_metrics(self) -> Dict:
+    def calculate_revenue_metrics(self, cac: float = 10.0) -> RevenueMetrics:
         """
-        Calculate key revenue metrics.
-        
-        Returns:
-            Dict with MRR, ARR, ARPU, etc.
-        """
-        active_subs = [s for s in self.subscriptions.values() if s.is_active]
-        
-        if not active_subs:
-            return {
-                'mrr': 0,
-                'arr': 0,
-                'arpu': 0,
-                'active_subscriptions': 0
-            }
-        
-        # MRR (Monthly Recurring Revenue)
-        mrr = sum(s.monthly_value for s in active_subs)
-        
-        # ARR (Annual Recurring Revenue)
-        arr = mrr * 12
-        
-        # ARPU (Average Revenue Per User)
-        arpu = mrr / len(active_subs)
-        
-        # Calculate churn rate (last 30 days)
-        thirty_days_ago = datetime.now() - timedelta(days=30)
-        recent_cancels = sum(
-            1 for s in self.subscriptions.values()
-            if s.cancel_date and s.cancel_date >= thirty_days_ago
-        )
-        total_subs = len(self.subscriptions)
-        churn_rate = (recent_cancels / total_subs * 100) if total_subs > 0 else 0
-        
-        return {
-            'mrr': round(mrr, 2),
-            'arr': round(arr, 2),
-            'arpu': round(arpu, 2),
-            'active_subscriptions': len(active_subs),
-            'total_subscriptions': total_subs,
-            'churn_rate': round(churn_rate, 1)
-        }
-    
-    def calculate_ltv(self, user_id: int) -> float:
-        """
-        Calculate Lifetime Value for a user.
+        Calculate revenue metrics.
         
         Args:
-            user_id: User ID
+            cac: Customer Acquisition Cost (default €10)
         
         Returns:
-            LTV in EUR
+            RevenueMetrics
         """
-        if user_id not in self.subscriptions:
-            return 0.0
+        if not self.subscriptions:
+            return RevenueMetrics(
+                mrr=0, arr=0, arpu=0, ltv=0,
+                cac=cac, ltv_cac_ratio=0
+            )
         
-        sub = self.subscriptions[user_id]
+        # Active subscriptions
+        active_subs = [
+            s for s in self.subscriptions
+            if s.get('status') == 'active'
+        ]
         
-        # Calculate months subscribed
-        if sub.is_active:
-            end_date = datetime.now()
-        else:
-            end_date = sub.cancel_date or datetime.now()
+        if not active_subs:
+            return RevenueMetrics(
+                mrr=0, arr=0, arpu=0, ltv=0,
+                cac=cac, ltv_cac_ratio=0
+            )
         
-        months = (end_date - sub.start_date).days / 30
-        months = max(1, months)  # At least 1 month
+        # MRR: Sum of all monthly recurring revenue
+        mrr = 0
+        for sub in active_subs:
+            if sub.get('billing_period') == 'monthly':
+                mrr += sub.get('price', 0)
+            elif sub.get('billing_period') == 'annual':
+                mrr += sub.get('price', 0) / 12
         
-        # LTV = monthly value * months subscribed
-        ltv = sub.monthly_value * months
+        # ARR: MRR * 12
+        arr = mrr * 12
         
-        return round(ltv, 2)
+        # ARPU: Average Revenue Per User
+        arpu = mrr / len(active_subs) if active_subs else 0
+        
+        # LTV: Simplified calculation (ARPU * avg lifetime in months)
+        # Assume avg lifetime = 24 months (to be refined with real data)
+        avg_lifetime_months = 24
+        ltv = arpu * avg_lifetime_months
+        
+        # LTV:CAC ratio
+        ltv_cac_ratio = ltv / cac if cac > 0 else 0
+        
+        return RevenueMetrics(
+            mrr=mrr,
+            arr=arr,
+            arpu=arpu,
+            ltv=ltv,
+            cac=cac,
+            ltv_cac_ratio=ltv_cac_ratio
+        )
+    
+    # ========================================================================
+    # RETENTION COHORTS
+    # ========================================================================
+    
+    def calculate_cohort_retention(self) -> List[CohortData]:
+        """
+        Calculate retention cohorts.
+        
+        Groups users by signup month and tracks retention.
+        
+        Returns:
+            List of CohortData
+        """
+        # Group subscriptions by cohort (signup month)
+        cohorts = defaultdict(list)
+        
+        for sub in self.subscriptions:
+            if 'start_date' not in sub:
+                continue
+            
+            start_date = datetime.fromisoformat(sub['start_date'])
+            cohort_key = start_date.strftime('%Y-%m')
+            cohorts[cohort_key].append(sub)
+        
+        # Calculate retention for each cohort
+        cohort_data = []
+        
+        for cohort_month, subs in sorted(cohorts.items()):
+            cohort_size = len(subs)
+            retention_rates = {}
+            
+            # Calculate retention for each month
+            for month_offset in range(13):  # 0-12 months
+                active_count = 0
+                
+                for sub in subs:
+                    start_date = datetime.fromisoformat(sub['start_date'])
+                    check_date = start_date + timedelta(days=30 * month_offset)
+                    
+                    # Check if still active at check_date
+                    if sub.get('status') == 'active':
+                        active_count += 1
+                    elif 'cancel_date' in sub:
+                        cancel_date = datetime.fromisoformat(sub['cancel_date'])
+                        if cancel_date > check_date:
+                            active_count += 1
+                
+                retention_rate = (active_count / cohort_size) * 100 if cohort_size > 0 else 0
+                retention_rates[month_offset] = retention_rate
+            
+            cohort_data.append(CohortData(
+                cohort_month=cohort_month,
+                cohort_size=cohort_size,
+                retention_rates=retention_rates
+            ))
+        
+        return cohort_data
     
     # ========================================================================
     # CHURN PREDICTION
     # ========================================================================
     
-    def predict_churn(self, user_id: int, engagement_data: Dict) -> ChurnPrediction:
+    def predict_churn(self, user_id: int, user_profile: Dict) -> ChurnPrediction:
         """
-        Predict churn risk for a user.
+        Predict churn risk for user.
         
         Args:
             user_id: User ID
-            engagement_data: Dict with engagement metrics
+            user_profile: Dict with user activity data
         
         Returns:
-            ChurnPrediction object
+            ChurnPrediction with risk level and recommendations
         """
         risk_score = 0.0
-        factors = []
+        signal_contributions = {}
         
-        # Factor 1: Low login frequency (30 points)
-        days_since_login = engagement_data.get('days_since_login', 0)
-        if days_since_login > 14:
-            risk_score += 30
-            factors.append("No login in 14+ days")
-        elif days_since_login > 7:
-            risk_score += 15
-            factors.append("No login in 7+ days")
-        
-        # Factor 2: Low feature usage (25 points)
-        searches_last_30d = engagement_data.get('searches_last_30d', 0)
-        if searches_last_30d == 0:
-            risk_score += 25
-            factors.append("No searches in 30 days")
-        elif searches_last_30d < 5:
-            risk_score += 12
-            factors.append("Low search activity")
-        
-        # Factor 3: No deals found (20 points)
-        deals_last_30d = engagement_data.get('deals_found_last_30d', 0)
-        if deals_last_30d == 0:
-            risk_score += 20
-            factors.append("No deals found in 30 days")
-        
-        # Factor 4: Empty watchlist (15 points)
-        watchlist_size = engagement_data.get('watchlist_routes', 0)
-        if watchlist_size == 0:
-            risk_score += 15
-            factors.append("Empty watchlist")
-        
-        # Factor 5: No social engagement (10 points)
-        groups = engagement_data.get('groups_joined', 0)
-        if groups == 0:
-            risk_score += 10
-            factors.append("Not in any groups")
+        # Calculate weighted risk from each signal
+        for signal, config in CHURN_SIGNALS.items():
+            value = user_profile.get(signal, 0)
+            weight = config['weight']
+            thresholds = config['thresholds']
+            
+            # Find contribution from thresholds
+            contribution = 0.0
+            for threshold, score in sorted(thresholds.items(), reverse=True):
+                if isinstance(threshold, bool):
+                    if value == threshold:
+                        contribution = score
+                        break
+                elif value >= threshold:
+                    contribution = score
+                    break
+            
+            weighted_contribution = contribution * weight
+            risk_score += weighted_contribution
+            signal_contributions[signal] = weighted_contribution
         
         # Determine risk level
-        if risk_score >= CHURN_RISK_THRESHOLDS['high']:
-            risk_level = "high"
-        elif risk_score >= CHURN_RISK_THRESHOLDS['medium']:
-            risk_level = "medium"
+        if risk_score < 0.2:
+            risk_level = ChurnRisk.LOW
+            recommendation = "Usuario comprometido. Continuar con engagement normal."
+        elif risk_score < 0.5:
+            risk_level = ChurnRisk.MEDIUM
+            recommendation = "Enviar email de re-engagement con value reminder."
+        elif risk_score < 0.8:
+            risk_level = ChurnRisk.HIGH
+            recommendation = "Contacto directo + oferta especial (20% descuento)."
         else:
-            risk_level = "low"
+            risk_level = ChurnRisk.CRITICAL
+            recommendation = "Acción inmediata: llamada + oferta win-back agresiva."
         
-        # Recommended actions
-        actions = self._get_winback_actions(risk_level, factors)
-        
-        prediction = ChurnPrediction(
+        return ChurnPrediction(
             user_id=user_id,
-            risk_score=min(100, risk_score),
-            risk_level=risk_level,
-            factors=factors,
-            recommended_actions=actions,
-            prediction_date=datetime.now()
+            risk_level=risk_level.value,
+            risk_score=risk_score,
+            signals=signal_contributions,
+            recommendation=recommendation
         )
-        
-        # Save prediction
-        self.churn_predictions[user_id] = prediction
-        self._save_churn()
-        
-        # Update subscription
-        if user_id in self.subscriptions:
-            self.subscriptions[user_id].churn_risk_score = prediction.risk_score
-            self._save_subscriptions()
-        
-        return prediction
-    
-    def _get_winback_actions(self, risk_level: str, factors: List[str]) -> List[str]:
-        """
-        Get recommended win-back actions based on risk.
-        
-        Args:
-            risk_level: "low", "medium", "high"
-            factors: List of risk factors
-        
-        Returns:
-            List of action recommendations
-        """
-        actions = []
-        
-        if risk_level == "high":
-            actions.append("🚨 Send urgent re-engagement email")
-            actions.append("🎁 Offer 50% discount for 3 months")
-            actions.append("📞 Personal call from support team")
-        elif risk_level == "medium":
-            actions.append("📧 Send value reminder email")
-            actions.append("🎯 Highlight unused features")
-            actions.append("💰 Show personal savings dashboard")
-        else:  # low
-            actions.append("💡 Send weekly deal digest")
-            actions.append("🆕 Encourage watchlist setup")
-        
-        # Specific actions based on factors
-        if "Empty watchlist" in factors:
-            actions.append("➡️ Guide to set up watchlist")
-        
-        if "Not in any groups" in factors:
-            actions.append("➡️ Invite to relevant groups")
-        
-        if "No deals found" in factors:
-            actions.append("➡️ Suggest popular routes with deals")
-        
-        return actions
-    
-    def get_at_risk_users(self, min_risk: str = "medium") -> List[Tuple[int, ChurnPrediction]]:
-        """
-        Get list of users at risk of churning.
-        
-        Args:
-            min_risk: Minimum risk level ("low", "medium", "high")
-        
-        Returns:
-            List of (user_id, prediction) tuples
-        """
-        risk_levels = ["high", "medium", "low"]
-        min_index = risk_levels.index(min_risk)
-        target_levels = risk_levels[:min_index + 1]
-        
-        at_risk = [
-            (user_id, pred)
-            for user_id, pred in self.churn_predictions.items()
-            if pred.risk_level in target_levels
-        ]
-        
-        # Sort by risk score (highest first)
-        at_risk.sort(key=lambda x: x[1].risk_score, reverse=True)
-        
-        return at_risk
     
     # ========================================================================
     # ANALYTICS DASHBOARD
     # ========================================================================
     
-    def get_dashboard_summary(self) -> Dict:
-        """
-        Get complete analytics dashboard summary.
+    def get_dashboard_metrics(self) -> Dict:
+        """Get complete analytics dashboard metrics"""
+        revenue = self.calculate_revenue_metrics()
+        cohorts = self.calculate_cohort_retention()
         
-        Returns:
-            Dict with all key metrics
-        """
-        revenue = self.get_revenue_metrics()
-        funnel = self.get_funnel_stats(30)
-        at_risk = self.get_at_risk_users("medium")
+        # Calculate aggregate metrics
+        total_users = len(self.subscriptions)
+        active_users = sum(1 for s in self.subscriptions if s.get('status') == 'active')
+        churned_users = sum(1 for s in self.subscriptions if s.get('status') == 'cancelled')
+        
+        churn_rate = (churned_users / total_users * 100) if total_users > 0 else 0
+        
+        # Latest cohort retention
+        latest_cohort = cohorts[-1] if cohorts else None
+        month_1_retention = latest_cohort.retention_rates.get(1, 0) if latest_cohort else 0
         
         return {
-            'revenue': revenue,
-            'funnel': funnel,
-            'churn': {
-                'high_risk_users': sum(1 for _, p in at_risk if p.risk_level == "high"),
-                'medium_risk_users': sum(1 for _, p in at_risk if p.risk_level == "medium"),
-                'total_at_risk': len(at_risk)
+            'revenue': revenue.to_dict(),
+            'users': {
+                'total': total_users,
+                'active': active_users,
+                'churned': churned_users,
+                'churn_rate': churn_rate
+            },
+            'retention': {
+                'month_1': month_1_retention,
+                'cohorts_tracked': len(cohorts)
             }
         }
 
 
 # ============================================================================
-# HELPER FUNCTIONS
+# FORMATTING HELPERS
 # ============================================================================
 
-def format_analytics_dashboard(summary: Dict) -> str:
+def format_funnel_report(metrics: List[FunnelMetrics]) -> str:
     """
-    Format analytics dashboard for display.
+    Format conversion funnel report.
     
     Args:
-        summary: From get_dashboard_summary()
+        metrics: List of FunnelMetrics
     
     Returns:
-        Formatted string
+        Formatted report string
     """
-    rev = summary['revenue']
-    funnel = summary['funnel']
-    churn = summary['churn']
+    report = "📡 Conversion Funnel\n\n"
     
-    return f"""📊 Premium Analytics Dashboard
+    for i, metric in enumerate(metrics):
+        stage_emoji = ["👥", "✅", "🔥", "👀", "👆", "✨", "🎯", "💰"][i]
+        
+        report += f"{stage_emoji} {metric.stage.upper()}\n"
+        report += f"   Users: {metric.users:,}\n"
+        
+        if metric.conversion_to_next < 100:
+            report += f"   → Next: {metric.conversion_to_next:.1f}%\n"
+            report += f"   Dropoff: {metric.dropoff_rate:.1f}%\n"
+            if metric.avg_time_to_next_stage > 0:
+                report += f"   Avg time: {metric.avg_time_to_next_stage:.1f}h\n"
+        
+        report += "\n"
+    
+    return report
 
-💰 Revenue Metrics:
-• MRR: €{rev['mrr']:,.2f}
-• ARR: €{rev['arr']:,.2f}
-• ARPU: €{rev['arpu']:.2f}
-• Active subs: {rev['active_subscriptions']}
-• Churn rate: {rev['churn_rate']}%
 
-📩 Conversion Funnel (30d):
-• Overall: {funnel['overall_conversion_rate']}%
-{chr(10).join(f"  - {stage}: {data['users']} users ({data['conversion_rate']}%)" for stage, data in funnel['stages'].items())}
+def format_revenue_report(metrics: RevenueMetrics) -> str:
+    """
+    Format revenue metrics report.
+    
+    Args:
+        metrics: RevenueMetrics
+    
+    Returns:
+        Formatted report string
+    """
+    return f"""💰 Revenue Metrics
 
-⚠️ Churn Risk:
-• High risk: {churn['high_risk_users']} users
-• Medium risk: {churn['medium_risk_users']} users
-• Total at risk: {churn['total_at_risk']} users
+📊 MRR: €{metrics.mrr:,.2f}
+📈 ARR: €{metrics.arr:,.2f}
+👥 ARPU: €{metrics.arpu:.2f}
+✨ LTV: €{metrics.ltv:.2f}
+🎯 LTV:CAC: {metrics.ltv_cac_ratio:.1f}x
+
+{'EXCELENTE' if metrics.ltv_cac_ratio >= 3 else 'MEJORAR'} (target: 3x+)
 """
 
 
@@ -630,60 +635,41 @@ if __name__ == "__main__":
     print("📊 TESTING: Premium Analytics")
     print("="*60 + "\n")
     
-    # Initialize manager
-    manager = AnalyticsManager()
+    # Initialize systems
+    funnel = ConversionFunnel()
+    analytics = PremiumAnalytics()
     
-    # Simulate funnel
-    test_users = [10001, 10002, 10003, 10004, 10005]
-    
+    # Test funnel tracking
     print("1️⃣ Funnel Tracking")
     print("-" * 40)
     
-    for user_id in test_users:
-        manager.track_funnel_event(user_id, "paywall_viewed")
+    test_user = 55555
+    funnel.track_stage(test_user, FunnelStage.VISITOR)
+    funnel.track_stage(test_user, FunnelStage.ACTIVATED)
+    funnel.track_stage(test_user, FunnelStage.ENGAGED)
+    funnel.track_stage(test_user, FunnelStage.PAYWALL_VIEW)
     
-    for user_id in test_users[:4]:
-        manager.track_funnel_event(user_id, "paywall_clicked")
+    current_stage = funnel.get_user_stage(test_user)
+    print(f"User stage: {current_stage.value if current_stage else 'None'}")
     
-    for user_id in test_users[:3]:
-        manager.track_funnel_event(user_id, "trial_started")
-    
-    for user_id in test_users[:2]:
-        manager.track_funnel_event(user_id, "paid_converted")
-        manager.add_subscription(user_id, "basic_monthly", "monthly", 9.99)
-    
-    funnel = manager.get_funnel_stats(30)
-    print(f"Overall conversion: {funnel['overall_conversion_rate']}%")
-    
-    print("\n2️⃣ Revenue Metrics")
+    # Test churn prediction
+    print("\n2️⃣ Churn Prediction")
     print("-" * 40)
     
-    revenue = manager.get_revenue_metrics()
-    print(f"MRR: €{revenue['mrr']}")
-    print(f"ARR: €{revenue['arr']}")
-    print(f"ARPU: €{revenue['arpu']}")
-    print(f"Active subs: {revenue['active_subscriptions']}")
-    
-    print("\n3️⃣ Churn Prediction")
-    print("-" * 40)
-    
-    engagement = {
-        'days_since_login': 15,
-        'searches_last_30d': 2,
+    at_risk_user = {
+        'days_since_last_login': 20,
+        'searches_last_7d': 1,
         'deals_found_last_30d': 0,
-        'watchlist_routes': 0,
-        'groups_joined': 0
+        'notification_open_rate': 0.2,
+        'support_tickets': 2,
+        'feature_usage_drop': 0.6,
+        'negative_feedback': True
     }
     
-    prediction = manager.predict_churn(10001, engagement)
-    print(f"Risk score: {prediction.risk_score}/100")
+    prediction = analytics.predict_churn(12345, at_risk_user)
     print(f"Risk level: {prediction.risk_level}")
-    print(f"Factors: {prediction.factors}")
-    print(f"Actions: {prediction.recommended_actions}")
-    
-    print("\n4️⃣ Dashboard Summary")
-    print("-" * 40)
-    print(format_analytics_dashboard(manager.get_dashboard_summary()))
+    print(f"Risk score: {prediction.risk_score:.2f}")
+    print(f"Recommendation: {prediction.recommendation}")
     
     print("\n" + "="*60)
     print("✅ Testing Complete!")
