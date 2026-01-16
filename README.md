@@ -7,7 +7,20 @@
 
 **Sistema profesional de monitorización de vuelos con IA, gamificación, retención y crecimiento viral**
 
-*Última actualización: 16 de enero de 2026, 01:21 CET*
+*Última actualización: 16 de enero de 2026, 01:43 CET*
+
+---
+
+## 📖 Tabla de Contenidos
+
+- [🌟 Features Enterprise](#-features-enterprise)
+- [📖 Guía Completa de Usuario](#-guía-completa-de-usuario)
+- [👥 Sistema de Referidos](#-sistema-de-referidos)
+- [🔗 Compartir Chollos](#-compartir-chollos)
+- [👥 Caza Grupal](#-caza-grupal)
+- [🏆 Leaderboards Competitivos](#-leaderboards-competitivos)
+- [💾 Instalación](#-instalación)
+- [📋 Release Notes](#-release-notes)
 
 ---
 
@@ -50,6 +63,900 @@
 - 🆕 **Auto Deal Sharing** - Botones automáticos en cada chollo 🔥 v13.2
 - 🆕 **Enhanced Tracking** - Mejor tracking de conversiones 🔥 v13.2
 - 🆕 **Deep Link Support** - Soporte completo de deep links 🔥 v13.2
+
+---
+
+## 📖 Guía Completa de Usuario
+
+### 🎉 Primeros Pasos
+
+#### 1️⃣ Iniciar el Bot
+
+**Comando**: `/start`
+
+**Qué sucede**:
+- Si eres nuevo usuario, se inicia el **onboarding interactivo**
+- Recibirás un tutorial de 60-90 segundos
+- Se crea tu perfil con 500 FlightCoins de bienvenida
+- Se te asigna el tier Bronze inicial
+
+**Ejemplo de respuesta**:
+```
+🎆 Cazador Supremo v13.2 Enterprise 🎆
+
+¡Bienvenido! Soy tu asistente para encontrar vuelos baratos.
+
+[Botones]
+[🔍 Escanear] [💰 Chollos]
+[🎁 Daily Reward] [🔥 Referir Amigo]
+```
+
+**Si vienes desde un referido**:
+```
+/start ref_VUELOS-A3F9-X7K2
+
+✅ ¡Bienvenido! Fuiste referido por @amigo
+💰 Ganaste 300 FlightCoins de bienvenida
+🎁 +1 slot en watchlist
+```
+
+---
+
+### 🔍 Búsqueda de Vuelos
+
+#### 2️⃣ Escanear Todas las Rutas
+
+**Comando**: `/scan`
+
+**Qué hace**:
+- Escanea todas las rutas configuradas en `config.json`
+- Busca precios en múltiples fuentes (SerpAPI + ML Predictor)
+- Muestra los 5 mejores resultados
+- Guarda histórico para análisis de tendencias
+
+**Ejemplo de uso**:
+```
+👤 Usuario: /scan
+
+🤖 Bot: 🔍 Iniciando escaneo...
+
+✅ Escaneo completado
+
+🎯 MAD-MIA: €520 (GoogleFlights 🔍)
+✅ MAD-NYC: €450 (ML-Smart 🧠)
+🎯 MAD-BCN: €85 (GoogleFlights 🔍)
+✅ MAD-CDG: €155 (ML-Smart 🧠)
+🎯 MAD-LHR: €175 (GoogleFlights 🔍)
+
+...y 12 resultados más
+```
+
+**Recompensas**:
+- +10 FlightCoins por escaneo
+- Cuenta para el logro "Explorer" (100 búsquedas)
+- Mantiene tu streak activo
+
+---
+
+#### 3️⃣ Búsqueda Personalizada con Fechas
+
+**Comando**: `/route [ORIGEN] [DESTINO] [FECHA]`
+
+**Parámetros**:
+- `ORIGEN`: Código IATA de 3 letras (ej: MAD, BCN, NYC)
+- `DESTINO`: Código IATA de 3 letras
+- `FECHA`: Formato YYYY-MM-DD
+
+**Características**:
+- ✅ Búsqueda flexible **±3 días** automática
+- ✅ Ordenados por precio (más barato primero)
+- ✅ Muestra hasta 5 opciones
+- ✅ Incluye aerolínea y escalas
+
+**Ejemplo 1 - Vuelo nacional**:
+```
+👤 Usuario: /route MAD BCN 2026-03-15
+
+🤖 Bot: 🔍 Buscando vuelos MAD → BCN para 2026-03-15 (±3 días)...
+
+✅ Encontrados 5 vuelos
+
+1️⃣ €75 - 2026-03-14
+   ✈️ Vueling
+   🎯 95% confianza
+
+2️⃣ €82 - 2026-03-15
+   ✈️ Iberia
+   🎯 95% confianza
+
+3️⃣ €89 - 2026-03-16
+   ✈️ Air Europa
+   ✅ 85% confianza
+```
+
+**Ejemplo 2 - Vuelo internacional**:
+```
+👤 Usuario: /route MAD MIA 2026-06-20
+
+🤖 Bot: 🔍 Buscando vuelos MAD → MIA para 2026-06-20 (±3 días)...
+
+✅ Encontrados 5 vuelos
+
+1️⃣ €485 - 2026-06-19
+   ✈️ American Airlines
+   🎯 95% confianza
+
+2️⃣ €520 - 2026-06-20
+   ✈️ Iberia
+   🎯 95% confianza
+
+3️⃣ €545 - 2026-06-21
+   ✈️ Air Europa + Copa
+   ✅ 85% confianza
+```
+
+**Recompensas**:
+- +20 FlightCoins por búsqueda personalizada
+- 2x XP para el logro "Power User"
+
+---
+
+#### 4️⃣ Ver Chollos Disponibles
+
+**Comando**: `/deals`
+
+**Qué hace**:
+- Escanea todas las rutas en tiempo real
+- Compara con precios históricos (30 días)
+- Detecta chollos con ahorro ≥20%
+- Muestra top 3 chollos con más ahorro
+- **🆕 Incluye botones de compartir automáticamente**
+
+**Ejemplo de respuesta**:
+```
+👤 Usuario: /deals
+
+🤖 Bot: 🔍 Buscando chollos...
+
+🔥 ¡CHOLLO DETECTADO! 🔥
+
+✈️ Ruta: MAD-MIA (Madrid a Miami)
+💰 Precio: €485 (GoogleFlights 🔍)
+📉 Ahorro: 28.5% vs histórico
+📊 Media histórica: €680
+📅 Salida: 2026-03-20
+🛫 Aerolínea: Iberia
+🔗 Escalas: 0
+🎯 Confianza: 95%
+
+📤 Comparte este chollo:
+[📱 Telegram] [🟢 WhatsApp]
+[🐦 Twitter] [🔗 Copiar]
+```
+
+**Recompensas al encontrar deals**:
+- +100 FlightCoins por chollo encontrado
+- +50 coins adicionales si el ahorro es >30%
+- Avance en logro "Deal Hunter"
+- Si compartes: +50 coins por share
+
+---
+
+#### 5️⃣ Análisis de Tendencias
+
+**Comando**: `/trends [RUTA]`
+
+**Parámetro**:
+- `RUTA`: Formato ORIGEN-DESTINO (ej: MAD-MIA)
+
+**Qué muestra**:
+- Precio medio últimos 30 días
+- Precio mínimo detectado
+- Precio máximo detectado
+- Número de datos analizados
+- Tendencia (subiendo/bajando)
+
+**Ejemplo**:
+```
+👤 Usuario: /trends MAD-MIA
+
+🤖 Bot:
+📈 Tendencia: MAD-MIA
+
+📊 Media: €680
+💰 Mínimo: €485
+💸 Máximo: €850
+📊 Datos: 45 precios
+📉 Tendencia: Bajando
+
+💡 Recomendación: ¡Buen momento para comprar!
+```
+
+**Uso avanzado**:
+- Analiza tendencias antes de reservar
+- Identifica temporada baja/alta
+- Detecta patrones de precio
+
+---
+
+### 🎮 Sistema de Gamificación
+
+#### 6️⃣ Recompensa Diaria (Daily Reward)
+
+**Comando**: `/daily`
+
+**Qué ofrece**:
+- Recompensa diaria de 50-200 FlightCoins
+- Sistema de **streaks** (rachas diarias)
+- Bonus multiplicador por días consecutivos
+- Resetea a las 00:00 cada día
+
+**Ejemplo - Día 1**:
+```
+👤 Usuario: /daily
+
+🤖 Bot:
+🎁 ¡Recompensa Diaria Reclamada!
+
+💰 +100 FlightCoins
+🔥 Streak: 1 día
+
+¡Vuelve mañana para mantener tu racha!
+```
+
+**Ejemplo - Día 7 (con streak)**:
+```
+👤 Usuario: /daily
+
+🤖 Bot:
+🎉 ¡MILESTONE ALCANZADO! 🎉
+
+💰 +200 FlightCoins (base: 100 + bonus: 100)
+🔥 Streak: 7 días consecutivos!
+🏆 Bonus 2x por racha semanal
+
+¡Sigue así para desbloquear más rewards!
+```
+
+**Sistema de Streaks**:
+| Días | Multiplicador | Coins Base | Coins Total |
+|------|---------------|------------|-------------|
+| 1-2 | 1.0x | 100 | 100 |
+| 3-6 | 1.5x | 100 | 150 |
+| 7-13 | 2.0x | 100 | 200 |
+| 14-29 | 2.5x | 100 | 250 |
+| 30+ | 3.0x | 100 | 300 |
+
+---
+
+#### 7️⃣ Tu Watchlist Personal
+
+**Comando**: `/watchlist`
+
+**Funcionalidad**:
+- Lista de rutas que monitoreas activamente
+- Notificaciones automáticas cuando hay chollos
+- Slots limitados por tier (Bronze: 3, Gold: 10, Diamond: ilimitado)
+
+**Subcomandos**:
+```
+/watchlist                    # Ver lista actual
+/watchlist add MAD-MIA       # Añadir ruta
+/watchlist remove MAD-MIA    # Quitar ruta
+```
+
+**Ejemplo - Ver watchlist**:
+```
+👤 Usuario: /watchlist
+
+🤖 Bot:
+⭐ Tu Watchlist Personal
+
+1️⃣ MAD-MIA (Madrid → Miami)
+   💰 Último precio: €520
+   🔔 Notificaciones: ON
+
+2️⃣ MAD-NYC (Madrid → Nueva York)
+   💰 Último precio: €485
+   🔔 Notificaciones: ON
+
+Slots usados: 2/3 (🥉 Bronze)
+
+💡 Mejora a Silver para +2 slots
+```
+
+**Ejemplo - Añadir ruta**:
+```
+👤 Usuario: /watchlist add MAD-LON
+
+🤖 Bot:
+✅ Ruta añadida a tu watchlist
+
+✈️ MAD-LON (Madrid → Londres)
+🔔 Recibirás notificaciones cuando haya chollos
+📊 Slots: 3/3 (🥉 Bronze) - ¡LLENO!
+
+💡 Tip: Mejora a 🥈 Silver para +2 slots
+```
+
+**Notificaciones automáticas**:
+- Cuando detecta chollo en tu watchlist
+- Smart timing (aprende tu mejor hora)
+- No-spam (máx 1 notif cada 30min por ruta)
+
+---
+
+#### 8️⃣ Ver Tu Perfil
+
+**Comando**: `/profile`
+
+**Qué muestra**:
+- Tier actual y progreso
+- FlightCoins balance
+- Estadísticas completas
+- Logros desbloqueados
+- Siguiente milestone
+
+**Ejemplo - Usuario Bronze**:
+```
+👤 Usuario: /profile
+
+🤖 Bot:
+👤 Perfil de @juanka_spain
+
+🎯 Tier: 🥉 Bronze
+📊 Progreso: ███░░░░░░░ 35% a Silver
+💰 FlightCoins: 1,250
+
+📊 Estadísticas:
+🔍 Búsquedas totales: 45
+🔥 Chollos encontrados: 8
+💸 Ahorro generado: €2,450
+🔥 Streak actual: 5 días
+⭐ Watchlist: 3/3 slots
+
+🏆 Logros (3/20):
+✅ First Search
+✅ Daily Warrior (7 días)
+✅ Deal Hunter (10 chollos)
+
+👉 Siguiente: "Explorer" (55 búsquedas más)
+```
+
+**Ejemplo - Usuario Diamond**:
+```
+👤 Usuario: /profile
+
+🤖 Bot:
+💎 Perfil VIP de @top_hunter
+
+🎯 Tier: 💎 Diamond
+🌟 Status: VIP Elite
+💰 FlightCoins: 25,680
+
+📊 Estadísticas:
+🔍 Búsquedas totales: 892
+🔥 Chollos encontrados: 156
+💸 Ahorro generado: €48,920
+🔥 Streak actual: 45 días
+⭐ Watchlist: 24/∞ slots
+
+🏆 Logros (18/20):
+✅ Todos los logros principales
+🏆 Badges especiales: Champion, Referral King
+
+👑 ¡Eres un Cazador Supremo!
+```
+
+---
+
+#### 9️⃣ Tienda de FlightCoins
+
+**Comando**: `/shop`
+
+**Qué puedes comprar**:
+- Slots de watchlist adicionales
+- Búsquedas premium ilimitadas
+- Boost de notificaciones
+- Badges personalizados
+
+**Ejemplo**:
+```
+👤 Usuario: /shop
+
+🤖 Bot:
+🛍️ Tienda de FlightCoins
+💰 Tu balance: 1,250 coins
+
+📦 Productos Disponibles:
+
+1️⃣ +1 Watchlist Slot
+   💰 500 coins
+   ⏳ Permanente
+   [🛍️ Comprar]
+
+2️⃣ Búsquedas Ilimitadas 7d
+   💰 1,000 coins
+   ⏳ 7 días
+   [🛍️ Comprar]
+
+3️⃣ Priority Notifications
+   💰 750 coins
+   ⏳ 30 días
+   [🛍️ Comprar]
+
+4️⃣ Custom Badge
+   💰 2,000 coins
+   ⏳ Permanente
+   [🛍️ Comprar]
+```
+
+**Proceso de compra**:
+```
+👤 Usuario: [Click en Comprar #1]
+
+🤖 Bot:
+✅ ¡Compra exitosa!
+
+🎁 +1 Watchlist Slot añadido
+💰 Nuevo balance: 750 coins
+⭐ Slots disponibles: 4/4
+```
+
+---
+
+### 🔥 Sistema Viral
+
+#### 🔟 Obtener Tu Código de Referido
+
+**Comando**: `/refer`
+
+**Qué recibes**:
+- Tu código único personal
+- Link para compartir
+- Stats actuales de referidos
+- Recompensas del tier
+- Próximo milestone
+
+**Ejemplo**:
+```
+👤 Usuario: /refer
+
+🤖 Bot:
+👥 Tu Código de Referido
+
+🎯 Código: VUELOS-A3F9-X7K2
+🔗 Link: https://t.me/VuelosRobot?start=ref_VUELOS-A3F9-X7K2
+
+📊 Tus Stats:
+👥 Referidos activos: 8
+💰 Coins ganados: 6,400
+🎯 Tier actual: 🥇 Gold
+
+🎁 Recompensas Gold:
+• 1,000 coins por referido
+• +10 búsquedas premium
+• Ambos ganáis
+
+🎯 Próximo Milestone:
+• 10 referidos → +2,500 coins + Badge especial
+• Te faltan: 2 referidos
+
+[📤 Compartir Link]
+```
+
+---
+
+#### 1️⃣️1️⃣ Ver Stats de Tus Referidos
+
+**Comando**: `/myref`
+
+**Información detallada**:
+- Total de referidos (activos/inactivos)
+- Coins totales ganados
+- Conversion rate
+- Lista de referidos
+- Milestones desbloqueados
+
+**Ejemplo**:
+```
+👤 Usuario: /myref
+
+🤖 Bot:
+📈 Stats Detalladas de Referidos
+
+👥 Referidos Totales: 15
+✅ Activos: 12
+⏸️ Inactivos: 3
+
+💰 Coins Ganados: 15,800
+📈 Conversion Rate: 80%
+🔥 K-factor: 1.2 (VIRAL 🚀)
+
+🏆 Milestones Desbloqueados:
+✅ 5 referidos (+1,000 coins)
+✅ 10 referidos (+2,500 coins + Badge)
+🔒 25 referidos (faltan 10)
+
+👥 Últimos Referidos:
+1. @maria_travels - Activo - 45 búsquedas
+2. @pedro_vuelos - Activo - 32 búsquedas
+3. @ana_deals - Activo - 28 búsquedas
+4. @luis_trips - Activo - 18 búsquedas
+5. @carmen_flights - Activo - 12 búsquedas
+```
+
+---
+
+#### 1️⃣️2️⃣ Explorar Grupos de Caza
+
+**Comando**: `/groups`
+
+**Qué muestra**:
+- Grupos públicos disponibles
+- Número de miembros
+- Chollos encontrados
+- Botón para unirse
+
+**Ejemplo**:
+```
+👤 Usuario: /groups
+
+🤖 Bot:
+🎯 Grupos de Caza Disponibles
+
+🌍 GRUPOS PÚBLICOS:
+
+1️⃣ Cazadores Madrid
+   👥 Miembros: 45
+   🔥 Chollos: 128
+   🎯 Enfoque: Desde Madrid
+   [➡️ Unirse]
+
+2️⃣ Miami Hunters
+   👥 Miembros: 38
+   🔥 Chollos: 95
+   🎯 Enfoque: Destino Miami
+   [➡️ Unirse]
+
+3️⃣ Vuelos Caribe
+   👥 Miembros: 52
+   🔥 Chollos: 156
+   🎯 Enfoque: Región Caribe
+   [➡️ Unirse]
+
+🔒 Tus Grupos Privados: 2
+
+[➕ Crear Nuevo Grupo]
+```
+
+---
+
+#### 1️⃣️3️⃣ Crear Tu Grupo de Caza
+
+**Comando**: `/creategroup [NOMBRE] [DESCRIPCIÓN]`
+
+**Tipos de grupo**:
+- Público: Cualquiera puede unirse
+- Privado: Solo por código de invitación
+- Ruta: Enfocado en una ruta específica
+- Destino: Enfocado en un destino
+
+**Ejemplo**:
+```
+👤 Usuario: /creategroup "Madrid Deals" "Chollos desde Madrid"
+
+🤖 Bot:
+🎉 ¡Grupo Creado Exitosamente!
+
+🎯 Nombre: Madrid Deals
+📝 Descripción: Chollos desde Madrid
+👑 Rol: Owner
+🌍 Tipo: Público
+👥 Miembros: 1 (tú)
+
+🔒 Código invitación: MDL-X7K9
+🔗 Link: t.me/VuelosRobot?startgroup=MDL-X7K9
+
+⚙️ Configuración:
+• Precio máximo: Sin límite
+• Ahorro mínimo: 20%
+• Notificaciones: ON
+
+[📤 Invitar Miembros]
+[⚙️ Configurar Filtros]
+```
+
+---
+
+#### 1️⃣️4️⃣ Unirse a un Grupo
+
+**Comando**: `/joingroup [GROUP_ID]`
+
+**Ejemplo - Grupo público**:
+```
+👤 Usuario: /joingroup cazadores-madrid
+
+🤖 Bot:
+✅ ¡Te uniste al grupo!
+
+🎯 Grupo: Cazadores Madrid
+👥 Miembros: 46 (incluídote)
+🔥 Chollos encontrados: 128
+🎯 Tu rol: 🎯 Hunter
+
+🔔 Recibirás notificaciones cuando:
+• Se encuentre un nuevo chollo
+• Alguien comparta un deal
+• Cambios importantes en el grupo
+```
+
+**Ejemplo - Grupo privado**:
+```
+👤 Usuario: /joingroup elite-deals
+
+🤖 Bot:
+🔒 Grupo Privado
+
+🎯 Nombre: Elite Deals VIP
+👥 Miembros: 12
+
+⚠️ Necesitas código de invitación
+💬 Envía: /joingroup elite-deals [CÓDIGO]
+```
+
+---
+
+#### 1️⃣️5️⃣ Ver Leaderboards Globales
+
+**Comando**: `/leaderboard [CATEGORIA]`
+
+**Categorías disponibles**:
+- `deals_found` - Más chollos encontrados
+- `savings_total` - Más ahorro generado
+- `referrals` - Más referidos activos
+- `shares` - Más compartidas virales
+- `group_contribution` - Más activo en grupos
+- `streak` - Mayor racha diaria
+- `coins_earned` - Más coins acumulados
+
+**Ejemplo 1 - Deals Found**:
+```
+👤 Usuario: /leaderboard deals_found
+
+🤖 Bot:
+🏆 Leaderboard: Deals Found
+📅 Temporada: Mensual Enero 2026
+⏳ Finaliza en: 15 días
+
+🥇 #1 @deal_master
+   🔥 156 chollos encontrados
+   💰 Premio: 5,000 coins + Champion Badge
+
+🥈 #2 @flight_hunter
+   🔥 142 chollos encontrados
+   💰 Premio: 3,000 coins + Runner-up
+
+🥉 #3 @bargain_finder
+   🔥 128 chollos encontrados
+   💰 Premio: 2,000 coins + Third Place
+
+4️⃣ @cheap_flights - 98 chollos
+5️⃣ @travel_deals - 89 chollos
+...
+📍 Tu posición: #12 (45 chollos)
+
+💡 ¡Faltan 53 chollos para Top 10!
+
+[Ver Otras Categorías]
+```
+
+**Ejemplo 2 - Total Savings**:
+```
+👤 Usuario: /leaderboard savings_total
+
+🤖 Bot:
+🏆 Leaderboard: Ahorro Total
+📅 Temporada: Mensual Enero 2026
+
+🥇 #1 @savings_king
+   💸 €48,920 ahorrados
+   🏆 VIP 30d + Custom Badge
+
+🥈 #2 @deal_master
+   💸 €42,150 ahorrados
+   🏆 VIP 15d
+
+🥉 #3 @budget_traveler
+   💸 €38,680 ahorrados
+   🏆 VIP 7d
+
+...
+📍 Tu posición: #28 (€8,450 ahorrados)
+```
+
+---
+
+#### 1️⃣️6️⃣ Ver Temporada Actual
+
+**Comando**: `/season`
+
+**Qué muestra**:
+- Nombre y fechas de la temporada
+- Días restantes
+- Categorías activas
+- Premios por ranking
+- Tu participación
+
+**Ejemplo**:
+```
+👤 Usuario: /season
+
+🤖 Bot:
+🌟 Temporada Actual
+
+🏆 Nombre: "Enero 2026 Challenge"
+📅 Inicio: 01/01/2026
+📅 Fin: 31/01/2026
+⏳ Quedan: 15 días
+
+🎯 Categorías Activas (7):
+• 🔥 Deals Found
+• 💰 Total Savings
+• 👥 Referrals
+• 📤 Viral Shares
+• 🎯 Group Activity
+• 🔥 Streak Master
+• 💸 Coins Earned
+
+🎁 Premios Top 3:
+🥇 #1: 5,000 coins + VIP 30d + Champion Badge
+🥈 #2: 3,000 coins + VIP 15d
+🥉 #3: 2,000 coins + VIP 7d
+
+📊 Tu Participación:
+• Deals Found: #12
+• Total Savings: #28
+• Referrals: #8 🔥
+
+[📈 Ver Leaderboards]
+```
+
+---
+
+### ⚙️ Comandos de Sistema
+
+#### 1️⃣️7️⃣ Limpiar Caché
+
+**Comando**: `/clearcache`
+
+**Cuándo usar**:
+- Cuando los precios parezcan desactualizados
+- Después de cambios en config.json
+- Si hay errores de búsqueda
+
+**Ejemplo**:
+```
+👤 Usuario: /clearcache
+
+🤖 Bot:
+🗑️ Caché Limpiado
+
+📄 Items eliminados: 47
+✅ Caché ahora vacío
+
+Próximas búsquedas usarán datos frescos.
+```
+
+---
+
+#### 1️⃣️8️⃣ Ver Estado del Sistema
+
+**Comando**: `/status`
+
+**Información del sistema**:
+- Estado de caché
+- Circuit breaker status
+- Estadísticas de usuarios
+- Métricas virales
+- Background tasks
+
+**Ejemplo**:
+```
+👤 Usuario: /status
+
+🤖 Bot:
+📊 Estado del Sistema
+
+🗃️ Caché: 47 items (85.2% hit rate)
+⚡ Circuit: 🟢 Closed (saludable)
+
+👥 Usuarios: 1,248
+🎯 Usuarios activos hoy: 456
+
+🔥 Métricas Virales:
+• K-factor: 1.32 (VIRAL 🚀)
+• Referidos activos: 3,856
+• Grupos activos: 67
+• Miembros totales: 892
+
+✅ Background tasks: Activas
+✅ Sistema: Operativo
+```
+
+---
+
+#### 1️⃣️9️⃣ Ayuda Completa
+
+**Comando**: `/help`
+
+**Muestra**:
+- Lista completa de comandos
+- Comandos organizados por categoría
+- Ejemplos de uso
+
+---
+
+### 💡 Tips y Trucos
+
+#### ✨ Maximiza Tu Ahorro
+
+1. **Activa tu watchlist**
+   - Añade rutas que te interesan
+   - Recibe notificaciones automáticas
+   - No te pierdas ningún chollo
+
+2. **Usa búsqueda flexible**
+   - El bot busca ±3 días automáticamente
+   - Flexibilidad de fechas = mejores precios
+   - Ahorro promedio: +15%
+
+3. **Comprueba tendencias**
+   - Usa `/trends` antes de comprar
+   - Identifica temporada baja
+   - Espera el momento óptimo
+
+#### 🚀 Maximiza Tus Coins
+
+1. **Daily reward diario**
+   - 100-300 coins/día
+   - Mantén tu streak
+   - Bonus multiplicadores
+
+2. **Encuentra chollos**
+   - +100 coins por chollo
+   - +50 extra si ahorro >30%
+   - Comparte para +50 más
+
+3. **Refiere amigos**
+   - 500-1500 coins por referido
+   - Bonus bidireccional
+   - Milestones con mega-premios
+
+4. **Participa en grupos**
+   - +100 coins por deal compartido
+   - +50 si otros lo usan
+   - Leaderboard interno
+
+#### 🏆 Maximiza Tu Tier
+
+**De Bronze a Silver** (500 puntos):
+- 50 búsquedas
+- 10 chollos encontrados
+- 3 referidos activos
+
+**De Silver a Gold** (2000 puntos):
+- 200 búsquedas
+- 50 chollos encontrados
+- 10 referidos activos
+- 30 días de streak
+
+**De Gold a Diamond** (10000 puntos):
+- 1000 búsquedas
+- 200 chollos encontrados
+- 50 referidos activos
+- 100 días de streak
+- Top 10 en algún leaderboard
 
 ---
 
@@ -128,13 +1035,6 @@ https://t.me/VuelosRobot?start=deal_{short_code}
 | Primeros 3 shares | +100 | Bonus inicial |
 | 5+ conversiones | +500 | Viral bonus |
 
-### Analytics de Sharing
-
-- **Click-through rate** - % de clicks vs shares
-- **Conversion rate** - % de signups vs clicks
-- **Viral reach** - Total usuarios alcanzados
-- **Platform performance** - Métricas por red social
-
 ---
 
 ## 👥 Caza Grupal
@@ -160,14 +1060,6 @@ https://t.me/VuelosRobot?start=deal_{short_code}
 - **🛡️ Admin** - Administrador
 - **🎯 Hunter** - Miembro activo
 - **👁️ Observer** - Solo observa
-
-### Features
-
-- ✅ Notificaciones instantáneas a todos los miembros
-- ✅ Leaderboard interno por grupo
-- ✅ Filtros por ruta y precio máximo
-- ✅ Umbral mínimo de ahorro configurable
-- ✅ Analytics de contribuciones
 
 ---
 
@@ -202,52 +1094,6 @@ https://t.me/VuelosRobot?start=deal_{short_code}
 
 ---
 
-## 📈 KPIs Viral Growth (IT5)
-
-### Objetivos de Viralidad
-
-| Métrica | Baseline | Target IT5 | Mejora |
-|---------|----------|------------|--------|
-| **Viral Coefficient (K)** | 0.0 | **1.2** | Viral 🚀 |
-| **Referral Rate** | 0% | **15%** | +15pp ✨ |
-| **Share Rate** | 0% | **20%** | +20pp 🔥 |
-| **Group Formation** | 0 | **50+** | 50 grupos |
-| **Avg Referrals/User** | 0 | **2.5** | 2.5x 📈 |
-| **Click-Through Rate** | N/A | **>30%** | ✅ |
-| **Conversion Rate** | N/A | **>10%** | ✅ |
-| **Season Participation** | N/A | **>40%** | ✅ |
-
-### Cálculo del Viral Coefficient
-
-```
-K = Avg Referrals per User × Conversion Rate
-
-Ejemplo:
-K = 2.5 referrals × 0.40 (40% conversion) = 1.0
-
-K > 1.0 = Crecimiento viral exponencial 🚀
-```
-
----
-
-## ⏩ Quick Actions Bar
-
-### Acceso Rápido 1-Tap
-
-Barra de acciones rápidas siempre visible:
-
-```
-[🔍 Scan] [💰 Deals] [⭐ Watchlist]
-[📈 Perfil] [🔥 Daily] [⚙️ Config]
-```
-
-**Mejoras**:
-- Reduce clicks: **3→1** (≢70% menos fricción)
-- Aumenta engagement: **+50%**
-- Session length: **+30%**
-
----
-
 ## 💾 Instalación
 
 ### Requisitos
@@ -278,275 +1124,28 @@ python cazador_supremo_enterprise.py
 
 ---
 
-## 🤖 Comandos Disponibles
-
-### Core Commands
-```
-/start        - Iniciar bot
-/scan         - Escanear todas las rutas
-/route        - Búsqueda personalizada (MAD BCN 2026-02-15)
-/deals        - Ver chollos disponibles
-/trends       - Análisis de tendencias (MAD-MIA)
-/clearcache   - Limpiar caché
-/status       - Estado del sistema
-/help         - Ayuda
-```
-
-### Retention Commands
-```
-/daily        - Reclama reward diario (50-200 coins)
-/watchlist    - Gestiona tu watchlist personal
-/profile      - Ver perfil completo y stats
-/shop         - Tienda virtual de FlightCoins
-```
-
-### Viral Growth Commands **🆕 NEW**
-```
-/refer        - Obtén tu código de referido
-/myref        - Ver stats de tus referidos
-/groups       - Explorar grupos de caza
-/creategroup  - Crear grupo de caza
-/joingroup    - Unirse a un grupo
-/leaderboard  - Ver rankings globales
-/season       - Info de temporada actual
-```
-
----
-
 ## 📋 Release Notes
 
-### v13.2.0 - IT5 ENHANCED: AUTO-SHARE & IMPROVED TRACKING (2026-01-16) **🆕 LATEST**
+### v13.2.0 - IT5 ENHANCED (2026-01-16) **🆕 LATEST**
 
 #### ✨ Nuevas Features
-
-**Auto-Share en Deals**:
-- ✅ Botones de compartir automáticos en cada chollo
-- ✅ Generación de link único instantánea
-- ✅ Sin necesidad de acción manual del usuario
-- ✅ Mejora share rate en ~35%
-
-**Enhanced Viral Tracking**:
-- ✅ Tracking mejorado de referidos desde /start
-- ✅ Deep link support completo (ref_ y deal_)
-- ✅ Notificaciones automáticas a referrer y referee
-- ✅ Mejor conversion tracking por fuente
-
-**Deal Class Enhancement**:
-- ✅ Método `to_shareable_dict()` para IT5
-- ✅ Integración nativa con DealSharingManager
-- ✅ Formato optimizado para sharing viral
-
-**Bot Integration**:
-- ✅ Método `_add_share_buttons_to_deal()` en auto-scan
-- ✅ Método `_process_referral()` mejorado
-- ✅ Mejor handling de deep links en cmd_start
+- ✅ Auto-share automático en cada deal
+- ✅ Enhanced viral tracking
+- ✅ Deep link support completo
+- ✅ Mejor conversion tracking
 
 #### 📈 Impacto en KPIs
-
-| Métrica | Antes v13.1 | Después v13.2 | Mejora |
-|---------|-------------|----------------|--------|
+| Métrica | v13.1 | v13.2 | Mejora |
+|---------|-------|-------|--------|
 | Share Rate | 15% | **25%** | +10pp |
-| Avg Time to Share | 45s | **0s (auto)** | Instant |
+| Time to Share | 45s | **0s** | Instant |
 | Deal Conversion | 8% | **12%** | +50% |
-| Referral Tracking | 85% | **98%** | +13pp |
-
-#### 📝 Cambios en Archivos
-
-**Modificados**:
-- `cazador_supremo_enterprise.py` (49.6 KB)
-  - Version bumped to 13.2.0
-  - `_add_share_buttons_to_deal()` method
-  - `_process_referral()` enhanced
-  - Auto-share in `auto_scan_loop()`
-  - Better deep link handling
-
-**Features v13.2**:
-- Deal class con `to_shareable_dict()`
-- Auto-share buttons en /deals
-- Enhanced status command con más analytics
-
-#### ✅ Testing
-
-- ✅ Referral tracking desde /start
-- ✅ Deal sharing automático
-- ✅ Deep links (ref_ y deal_)
-- ✅ Notificaciones bidireccionales
-- ✅ Analytics actualizados
-
-**Commits**:
-- [984994b](https://github.com/juankaspain/vuelosrobot/commit/984994b) - feat: Enhance IT5 integration with auto-share deals and improved viral tracking
-
----
-
-### v13.1.0 - IT5: VIRAL GROWTH LOOPS (2026-01-15) **✅ COMPLETADO**
-
-#### 📅 DAY 1/5 - Sistema de Referidos
-**Archivos**: `viral_growth_system.py` (19.4 KB)
-
-**Features**:
-- ✅ ReferralManager class
-- ✅ Códigos únicos por usuario
-- ✅ Recompensas tier-based
-- ✅ Anti-fraude completo
-- ✅ Milestones system
-- ✅ Viral coefficient tracking
-
-#### 📅 DAY 2/5 - Compartir Chollos
-**Archivos**: `deal_sharing_system.py` (20.6 KB)
-
-**Features**:
-- ✅ DealSharingManager class
-- ✅ Botones multi-platform
-- ✅ Links únicos rastreables
-- ✅ Deep links de Telegram
-- ✅ Analytics de viralidad
-- ✅ Recompensas por compartir
-
-#### 📅 DAY 3/5 - Caza Grupal
-**Archivos**: `group_hunting.py` (13.1 KB)
-
-**Features**:
-- ✅ GroupHuntingManager class
-- ✅ 4 tipos de grupos
-- ✅ Sistema de puntos
-- ✅ Roles y permisos
-- ✅ Leaderboard interno
-- ✅ Notificaciones grupales
-
-#### 📅 DAY 4/5 - Leaderboards Competitivos
-**Archivos**: `competitive_leaderboards.py` (13.0 KB)
-
-**Features**:
-- ✅ CompetitiveLeaderboardManager class
-- ✅ 7 categorías de competición
-- ✅ 4 tipos de temporadas
-- ✅ Sistema de premios automático
-- ✅ Distribución de recompensas
-- ✅ Rankings tier-based
-
-#### 📅 DAY 5/5 - Social Sharing Engine
-**Archivos**: `social_sharing.py` (16.5 KB)
-
-**Features**:
-- ✅ SocialSharingManager class
-- ✅ Message templates A/B tested
-- ✅ Social proof integration
-- ✅ Share incentives
-- ✅ Platform performance analytics
-- ✅ Viral mechanics optimizadas
-
-**Stats IT5 FINAL**:
-- 📁 **5 archivos Python** (82.6 KB código)
-- 💻 **7 comandos nuevos**
-- 👥 **Sistema de referidos completo**
-- 🔗 **Sharing viral integrado**
-- 👥 **Grupos colaborativos**
-- 🏆 **Leaderboards competitivos**
-- 📈 **K-factor tracking**
-
-**Progreso**: **✅ 100%** (5/5 días completados)
-**Status**: **🚀 PRODUCTION READY**
-
----
-
-### v13.0.0 - IT4: RETENTION HOOKS (2026-01-14) **✅ COMPLETADO**
-
-**Stats IT4**:
-- 📁 **7 archivos Python** (135+ KB código)
-- 💻 **9 comandos nuevos**
-- 🎮 **Gamificación completa**
-- 🔔 **Notificaciones inteligentes**
-- ⏰ **5 background tasks**
-- 🎉 **Onboarding interactivo**
-- ⚡ **Quick Actions Bar**
-
----
-
-## 💾 Arquitectura de Archivos
-
-```
-vuelosrobot/
-├── cazador_supremo_enterprise.py     # Bot principal v13.2 🆕
-├── retention_system.py              # Sistema de retención (IT4)
-├── bot_commands_retention.py        # Comandos retención (IT4)
-├── smart_notifications.py           # Notificaciones IA (IT4)
-├── background_tasks.py              # Tareas background (IT4)
-├── onboarding_flow.py               # Onboarding (IT4)
-├── quick_actions.py                 # Quick Actions (IT4)
-├── viral_growth_system.py           # Referidos (IT5)
-├── deal_sharing_system.py           # Sharing (IT5)
-├── group_hunting.py                 # Grupos (IT5)
-├── competitive_leaderboards.py      # Leaderboards (IT5)
-├── social_sharing.py                # Social (IT5)
-├── bot_commands_viral.py            # Handler viral (IT5)
-├── config.json                      # Configuración
-├── user_profiles.json               # Perfiles usuarios
-├── referral_codes.json              # Códigos referido
-├── referral_relationships.json      # Relaciones
-├── shared_deals.json                # Deals compartidos
-├── share_links.json                 # Links de share
-├── hunting_groups.json              # Grupos de caza
-├── leaderboards.json                # Rankings
-├── seasons.json                     # Temporadas
-├── README.md                        # Este archivo
-├── README_IT5.md                    # Docs IT5 detalladas
-└── requirements.txt                 # Dependencias
-```
-
-**Total**: 13 archivos Python (217+ KB código) + 10 archivos JSON + 2 docs
-
----
-
-## 🚀 Roadmap
-
-### ✅ IT4/11 - RETENTION HOOKS (COMPLETADO)
-**Features**:
-- ✅ Hook Model completo
-- ✅ Gamificación
-- ✅ Smart notifications
-- ✅ Background automation
-- ✅ Interactive onboarding
-- ✅ Quick Actions Bar
-
-### ✅ IT5/11 - VIRAL GROWTH LOOPS (COMPLETADO + ENHANCED)
-**Features**:
-- ✅ Two-sided referral system
-- ✅ Share deal button con links
-- ✅ Group deal hunting
-- ✅ Leaderboard con prizes
-- ✅ Social sharing engine
-- 🆕 Auto-share deals (v13.2)
-- 🆕 Enhanced tracking (v13.2)
-
-### 🔮 IT6/11 - FREEMIUM CONVERSION (SIGUIENTE)
-**Features planeadas**:
-- Smart paywalls
-- In-app premium trial
-- Value metrics dashboard
-- Smart upgrade prompts
-- Flexible pricing
-- Feature gating
-- Premium analytics
-
-### 🔮 IT7/11 - ADVANCED ANALYTICS
-**Features planeadas**:
-- User cohort analysis
-- Funnel optimization
-- A/B testing framework
-- Predictive churn modeling
-- Revenue forecasting
 
 ---
 
 ## 🤝 Contribuir
 
-Este es un proyecto privado en desarrollo activo. Contactar a [@Juanka_Spain](https://github.com/juankaspain) para colaboraciones.
-
----
-
-## 📍d Licencia
-
-MIT License - Ver LICENSE file
+Proyecto privado en desarrollo. Contacto: [@Juanka_Spain](https://github.com/juankaspain)
 
 ---
 
@@ -558,4 +1157,4 @@ MIT License - Ver LICENSE file
 
 ---
 
-🎉 **Hecho con ❤️ para maximizar ahorro en vuelos, retención y crecimiento viral exponencial**
+🎉 **Hecho con ❤️ para maximizar ahorro en vuelos y crecimiento viral exponencial**
