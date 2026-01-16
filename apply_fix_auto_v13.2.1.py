@@ -5,8 +5,11 @@
 
 Ejecuta este script y se aplicarán TODOS los cambios automáticamente.
 
-USO:
+USO (Git Bash Windows / Linux / macOS):
     python apply_fix_auto_v13.2.1.py
+    
+O también:
+    python3 apply_fix_auto_v13.2.1.py
 
 QUÉ HACE:
 1. Crea backup automático del archivo original
@@ -19,72 +22,107 @@ QUÉ HACE:
 
 RESULTADO:
     cazador_supremo_enterprise.py actualizado a v13.2.1 ✅
-    cazador_supremo_enterprise.py.backup_v13.2.0 (backup) 📦
+    cazador_supremo_enterprise.py.backup_v13.2.0_YYYYMMDD_HHMMSS (backup) 📦
 """
 
 import re
 import shutil
+import sys
+import os
 from datetime import datetime
 from pathlib import Path
 
 FILE_TO_UPDATE = 'cazador_supremo_enterprise.py'
 
-print("═" * 80)
-print("   🤖 APLICADOR AUTOMÁTICO FIX v13.2.1 - ONBOARDING INTERACTIVO")
-print("═" * 80)
-print()
+# Configurar encoding para Windows
+if sys.platform == 'win32':
+    try:
+        import codecs
+        sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+        sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
+    except:
+        pass
 
-# Verificar que existe el archivo
-if not Path(FILE_TO_UPDATE).exists():
-    print(f"❌ ERROR: No se encuentra {FILE_TO_UPDATE}")
-    print("   Asegúrate de ejecutar este script en el directorio del repositorio.")
-    exit(1)
+def print_separator():
+    """Imprime línea separadora compatible con todos los terminales."""
+    print("=" * 80)
 
-print(f"✅ Archivo encontrado: {FILE_TO_UPDATE}")
-print()
+def print_header():
+    """Imprime el header del script."""
+    print_separator()
+    print("   APLICADOR AUTOMATICO FIX v13.2.1 - ONBOARDING INTERACTIVO")
+    print_separator()
+    print()
 
-# Crear backup
-backup_name = f"{FILE_TO_UPDATE}.backup_v13.2.0_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-print(f"📦 Creando backup: {backup_name}...")
-shutil.copy2(FILE_TO_UPDATE, backup_name)
-print(f"✅ Backup creado")
-print()
-
-# Leer contenido
-print("📜 Leyendo archivo...")
-with open(FILE_TO_UPDATE, 'r', encoding='utf-8') as f:
-    content = f.read()
-original_lines = len(content.split('\n'))
-print(f"✅ {original_lines} líneas leídas")
-print()
-
-# PASO 1: Actualizar VERSION
-print("🔨 [1/5] Actualizando VERSION...")
-old_version = 'VERSION = "13.2.0 Enterprise"'
-new_version = 'VERSION = "13.2.1 Enterprise"'
-if old_version in content:
-    content = content.replace(old_version, new_version)
-    print("   ✅ VERSION actualizada: 13.2.0 → 13.2.1")
-else:
-    print("   ⚠️  VERSION ya estaba actualizada o no encontrada")
-
-# PASO 2: Actualizar header docstring
-print("🔨 [2/5] Actualizando header...")
-content = content.replace('🏷️ v13.2.0 Enterprise', '🏷️ v13.2.1 Enterprise')
-if '✅ Onboarding Fix 🔥 v13.2.1' not in content:
-    content = content.replace(
-        '✅ Enhanced Notifications 🔥',
-        '✅ Enhanced Notifications 🔥   ✅ Onboarding Fix 🔥 v13.2.1'
-    )
-    print("   ✅ Header actualizado")
-else:
-    print("   ⚠️  Header ya estaba actualizado")
-
-# PASO 3: Preparar los nuevos métodos
-print("🔨 [3/5] Preparando nuevos métodos...")
-
-# Método start_command actualizado
-start_command_new = '''    async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+def main():
+    print_header()
+    
+    # Verificar que existe el archivo
+    if not Path(FILE_TO_UPDATE).exists():
+        print(f"ERROR: No se encuentra {FILE_TO_UPDATE}")
+        print("   Asegurate de ejecutar este script en el directorio del repositorio.")
+        print()
+        print("DIRECTORIO ACTUAL:")
+        print(f"   {os.getcwd()}")
+        print()
+        print("ARCHIVOS EN ESTE DIRECTORIO:")
+        for f in os.listdir('.'):
+            print(f"   - {f}")
+        sys.exit(1)
+    
+    print(f"OK Archivo encontrado: {FILE_TO_UPDATE}")
+    print()
+    
+    # Crear backup
+    backup_name = f"{FILE_TO_UPDATE}.backup_v13.2.0_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    print(f"Creando backup: {backup_name}...")
+    try:
+        shutil.copy2(FILE_TO_UPDATE, backup_name)
+        print(f"OK Backup creado")
+    except Exception as e:
+        print(f"ERROR al crear backup: {e}")
+        sys.exit(1)
+    print()
+    
+    # Leer contenido
+    print("Leyendo archivo...")
+    try:
+        with open(FILE_TO_UPDATE, 'r', encoding='utf-8') as f:
+            content = f.read()
+        original_lines = len(content.split('\n'))
+        print(f"OK {original_lines} lineas leidas")
+    except Exception as e:
+        print(f"ERROR al leer archivo: {e}")
+        sys.exit(1)
+    print()
+    
+    # PASO 1: Actualizar VERSION
+    print("[1/5] Actualizando VERSION...")
+    old_version = 'VERSION = "13.2.0 Enterprise"'
+    new_version = 'VERSION = "13.2.1 Enterprise"'
+    if old_version in content:
+        content = content.replace(old_version, new_version)
+        print("   OK VERSION actualizada: 13.2.0 -> 13.2.1")
+    else:
+        print("   ADVERTENCIA: VERSION ya estaba actualizada o no encontrada")
+    
+    # PASO 2: Actualizar header docstring
+    print("[2/5] Actualizando header...")
+    content = content.replace('v13.2.0 Enterprise', 'v13.2.1 Enterprise')
+    if 'Onboarding Fix' not in content:
+        content = content.replace(
+            'Enhanced Notifications',
+            'Enhanced Notifications   Onboarding Fix v13.2.1'
+        )
+        print("   OK Header actualizado")
+    else:
+        print("   ADVERTENCIA: Header ya estaba actualizado")
+    
+    # PASO 3: Preparar los nuevos métodos
+    print("[3/5] Preparando nuevos metodos...")
+    
+    # Método start_command actualizado
+    start_command_new = '''    async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Comando /start con onboarding y deep links."""
         user = update.effective_user
         args = context.args
@@ -150,9 +188,9 @@ start_command_new = '''    async def start_command(self, update: Update, context
             reply_markup=InlineKeyboardMarkup(keyboard) if keyboard else None
         )
 '''
-
-# Método handle_callback nuevo
-handle_callback_new = '''    async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    
+    # Método handle_callback nuevo
+    handle_callback_new = '''    async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Maneja todos los callbacks de botones inline."""
         query = update.callback_query
         await query.answer()
@@ -175,9 +213,9 @@ handle_callback_new = '''    async def handle_callback(self, update: Update, con
             await self.viral_handler.handle_callback(update, context)
             return
 '''
-
-# Método _handle_onboarding_callback nuevo
-handle_onboarding_callback_new = '''    async def _handle_onboarding_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    
+    # Método _handle_onboarding_callback nuevo
+    handle_onboarding_callback_new = '''    async def _handle_onboarding_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Maneja los callbacks del flujo de onboarding."""
         query = update.callback_query
         user = update.effective_user
@@ -210,7 +248,7 @@ handle_onboarding_callback_new = '''    async def _handle_onboarding_callback(se
             budget_str = data.replace("onb_budget_", "")
             budget = BudgetRange(budget_str)
             self.onboarding_mgr.set_budget_range(user.id, budget)
-            await query.edit_message_text("🔍 *Buscando tus primeros chollos...*\\n\\nEsto tomará solo unos segundos ⏱️", parse_mode='Markdown')
+            await query.edit_message_text("🔍 *Buscando tus primeros chollos...*\\n\\nEsto tomará solo unos segundos", parse_mode='Markdown')
             
             routes = self.onboarding_mgr.get_recommended_routes(user.id)
             found_deals = []
@@ -234,65 +272,80 @@ handle_onboarding_callback_new = '''    async def _handle_onboarding_callback(se
             if found_deals:
                 deals_msg = f"✈️ *Tus primeros {len(found_deals)} vuelos en watchlist:*\\n\\n"
                 for i, fp in enumerate(found_deals[:3], 1):
-                    deals_msg += f"{i}️⃣ {fp.name}: {fp.format_price()}\\n"
+                    deals_msg += f"{i} {fp.name}: {fp.format_price()}\\n"
                 await context.bot.send_message(chat_id=query.message.chat_id, text=deals_msg, parse_mode='Markdown')
 '''
+    
+    print("   OK Metodos preparados")
+    print()
+    
+    # PASO 4: Reemplazar start_command
+    print("[4/5] Reemplazando start_command()...")
+    start_pattern = r'    async def start_command\(self, update: Update, context: ContextTypes\.DEFAULT_TYPE\):.*?(?=\n    async def |\n    def \w)'
+    match = re.search(start_pattern, content, re.DOTALL)
+    if match:
+        content = content[:match.start()] + start_command_new + '\n' + content[match.end():]
+        print("   OK start_command() reemplazado")
+    else:
+        print("   ADVERTENCIA: No se encontro start_command() para reemplazar")
+    
+    # PASO 5: Insertar handle_callback y _handle_onboarding_callback
+    print("[5/5] Insertando nuevos metodos...")
+    
+    # Buscar dónde insertar (después de start_command)
+    insert_pattern = r'(    async def start_command\(self.*?(?=\n    async def |\n    def \w))'
+    match = re.search(insert_pattern, content, re.DOTALL)
+    if match:
+        insert_pos = match.end()
+        content = content[:insert_pos] + '\n' + handle_callback_new + '\n' + handle_onboarding_callback_new + '\n' + content[insert_pos:]
+        print("   OK handle_callback() insertado")
+        print("   OK _handle_onboarding_callback() insertado")
+    else:
+        print("   ADVERTENCIA: No se pudo encontrar la ubicacion de insercion")
+    
+    # Guardar archivo actualizado
+    print()
+    print("Guardando archivo actualizado...")
+    try:
+        with open(FILE_TO_UPDATE, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        new_lines = len(content.split('\n'))
+        print(f"OK Archivo guardado ({new_lines} lineas, +{new_lines - original_lines})")
+    except Exception as e:
+        print(f"ERROR al guardar archivo: {e}")
+        sys.exit(1)
+    print()
+    
+    # Resumen final
+    print_separator()
+    print("   FIX v13.2.1 APLICADO CORRECTAMENTE")
+    print_separator()
+    print()
+    print("CAMBIOS REALIZADOS:")
+    print("   OK VERSION actualizada a 13.2.1")
+    print("   OK Header docstring actualizado")
+    print("   OK start_command() reemplazado con onboarding")
+    print("   OK handle_callback() insertado")
+    print("   OK _handle_onboarding_callback() insertado")
+    print()
+    print(f"BACKUP: {backup_name}")
+    print()
+    print("PROXIMOS PASOS:")
+    print("   1. Ejecutar: python cazador_supremo_enterprise.py")
+    print("   2. Probar: /start con un nuevo usuario de Telegram")
+    print("   3. Verificar: Flujo de onboarding completo (3 pasos)")
+    print()
+    print_separator()
 
-print("✅ Métodos preparados")
-print()
-
-# PASO 4: Reemplazar start_command
-print("🔨 [4/5] Reemplazando start_command()...")
-start_pattern = r'    async def start_command\(self, update: Update, context: ContextTypes\.DEFAULT_TYPE\):.*?(?=\n    async def |\n    def \w)'
-match = re.search(start_pattern, content, re.DOTALL)
-if match:
-    content = content[:match.start()] + start_command_new + '\n' + content[match.end():]
-    print("✅ start_command() reemplazado")
-else:
-    print("❌ No se encontró start_command() para reemplazar")
-    print("   Se añadirá al final de la clase")
-
-# PASO 5: Insertar handle_callback y _handle_onboarding_callback
-print("🔨 [5/5] Insertando nuevos métodos...")
-
-# Buscar dónde insertar (después de start_command)
-insert_pattern = r'(    async def start_command\(self.*?(?=\n    async def |\n    def \w))'
-match = re.search(insert_pattern, content, re.DOTALL)
-if match:
-    insert_pos = match.end()
-    content = content[:insert_pos] + '\n' + handle_callback_new + '\n' + handle_onboarding_callback_new + '\n' + content[insert_pos:]
-    print("✅ handle_callback() insertado")
-    print("✅ _handle_onboarding_callback() insertado")
-else:
-    print("❌ No se pudo encontrar la ubicación de inserción")
-
-# Guardar archivo actualizado
-print()
-print("💾 Guardando archivo actualizado...")
-with open(FILE_TO_UPDATE, 'w', encoding='utf-8') as f:
-    f.write(content)
-
-new_lines = len(content.split('\n'))
-print(f"✅ Archivo guardado ({new_lines} líneas, +{new_lines - original_lines})")
-print()
-
-# Resumen final
-print("═" * 80)
-print("   ✅ FIX v13.2.1 APLICADO CORRECTAMENTE")
-print("═" * 80)
-print()
-print("🎉 CAMBIOS REALIZADOS:")
-print("   ✅ VERSION actualizada a 13.2.1")
-print("   ✅ Header docstring actualizado")
-print("   ✅ start_command() reemplazado con onboarding")
-print("   ✅ handle_callback() insertado")
-print("   ✅ _handle_onboarding_callback() insertado")
-print()
-print(f"📦 BACKUP: {backup_name}")
-print()
-print("🚀 PRÓXIMOS PASOS:")
-print("   1. Ejecutar: python cazador_supremo_enterprise.py")
-print("   2. Probar: /start con un nuevo usuario de Telegram")
-print("   3. Verificar: Flujo de onboarding completo (3 pasos)")
-print()
-print("═" * 80)
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n\nScript interrumpido por el usuario.")
+        sys.exit(0)
+    except Exception as e:
+        print(f"\n\nERROR INESPERADO: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
