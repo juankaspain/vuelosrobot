@@ -1,0 +1,8 @@
+v13.2.1 Enterprise - Onboarding Fix
+2026-01-16 02:03 CET
+
+✅ Onboarding interactivo 100% funcional
+✅ Flujo de 3 pasos con botones
+✅ TTFV <90s achievement
+✅ Auto-watchlist setup
+✅ 200 FlightCoins welcome bonus
