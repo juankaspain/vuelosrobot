@@ -2,19 +2,20 @@
 # -*- coding: utf-8 -*-
 """
 ═════════════════════════════════════════════════════════════════════════════
-║       🎆 CAZADOR SUPREMO v13.1 ENTERPRISE EDITION 🎆                    ║
+║       🎆 CAZADOR SUPREMO v13.2 ENTERPRISE EDITION 🎆                    ║
 ║   🚀 Sistema Profesional de Monitorización + Retention + Viral 2026 🚀  ║
 ═════════════════════════════════════════════════════════════════════════════
 
-👨‍💻 Autor: @Juanka_Spain | 🏷️ v13.1.0 Enterprise | 📅 2026-01-16 | 📋 MIT License
+👨‍💻 Autor: @Juanka_Spain | 🏷️ v13.2.0 Enterprise | 📅 2026-01-16 | 📋 MIT License
 
-🌟 ENTERPRISE FEATURES V13.1 - IT4 + IT5 COMPLETE:
+🌟 ENTERPRISE FEATURES V13.2 - IT4 + IT5 COMPLETE:
 ✅ Hook Model Completo               ✅ FlightCoins Economy           ✅ Tier System (4 niveles)
 ✅ Achievement System (9 tipos)      ✅ Daily Rewards + Streaks       ✅ Personal Watchlist
 ✅ Smart Notifications IA            ✅ Background Tasks (5)          ✅ Interactive Onboarding
 ✅ Quick Actions Bar                 ✅ Referral System 🔥 NEW       ✅ Deal Sharing 🔥 NEW
 ✅ Group Hunting 🔥 NEW             ✅ Leaderboards 🔥 NEW          ✅ Social Sharing 🔥 NEW
 ✅ K-factor Tracking 🔥 NEW         ✅ Viral Mechanics 🔥 NEW       ✅ Season System 🔥 NEW
+✅ Auto Deal Sharing 🔥 v13.2       ✅ Improved Viral Tracking 🔥   ✅ Enhanced Notifications 🔥
 
 🎯 TARGET ACHIEVED: K-factor > 1.2 (Exponential Viral Growth) 🚀
 
@@ -76,7 +77,7 @@ if sys.platform == 'win32':
     except: pass
 
 # CONFIG
-VERSION = "13.1.0 Enterprise"
+VERSION = "13.2.0 Enterprise"
 APP_NAME = "Cazador Supremo"
 BOT_USERNAME = "VuelosRobot"  # Cambiar por tu username real
 CONFIG_FILE, LOG_FILE, CSV_FILE = "config.json", "cazador_supremo.log", "deals_history.csv"
@@ -175,6 +176,19 @@ class Deal:
         msg += f"🔗 *Escalas:* {fp.stops}\n"
         msg += f"{fp.get_confidence_emoji()} *Confianza:* {fp.confidence:.0%}"
         return msg
+    
+    def to_shareable_dict(self) -> Dict:
+        """Convierte el deal a formato compartible para IT5."""
+        return {
+            'route': self.flight_price.route,
+            'name': self.flight_price.name,
+            'price': self.flight_price.price,
+            'currency': self.flight_price.currency,
+            'savings_pct': self.savings_pct,
+            'departure_date': self.flight_price.departure_date,
+            'airline': self.flight_price.airline,
+            'detected_at': self.detected_at.isoformat()
+        }
 
 class ColorizedLogger:
     LOG_COLORS = {'DEBUG': Fore.CYAN, 'INFO': Fore.GREEN, 'WARNING': Fore.YELLOW, 'ERROR': Fore.RED, 'CRITICAL': Fore.RED + Style.BRIGHT}
@@ -572,6 +586,7 @@ class TelegramBotManager:
             await self.app.shutdown()
     
     async def auto_scan_loop(self):
+        """Auto-scan con notificación viral de deals."""
         while self.running:
             await asyncio.sleep(AUTO_SCAN_INTERVAL)
             routes = [FlightRoute(**f) for f in self.config.flights]
@@ -582,12 +597,50 @@ class TelegramBotManager:
                 for deal in deals:
                     if self.deals_mgr.should_notify(deal):
                         try:
-                            await self.app.bot.send_message(
+                            # Enviar mensaje del deal
+                            sent_msg = await self.app.bot.send_message(
                                 chat_id=self.config.chat_id,
                                 text=deal.get_message(),
                                 parse_mode='Markdown'
                             )
-                        except: pass
+                            
+                            # Añadir botones de compartir automáticamente (IT5)
+                            if VIRAL_ENABLED:
+                                await self._add_share_buttons_to_deal(
+                                    chat_id=self.config.chat_id,
+                                    message_id=sent_msg.message_id,
+                                    deal=deal
+                                )
+                        except Exception as e:
+                            logger.error(f"❌ Error enviando notificación de deal: {e}")
+    
+    async def _add_share_buttons_to_deal(self, chat_id: int, message_id: int, deal: Deal):
+        """Añade botones de compartir a un mensaje de deal."""
+        if not VIRAL_ENABLED:
+            return
+        
+        try:
+            # Crear deal compartible
+            shareable_deal = self.viral_cmds.deal_sharing_mgr.create_shareable_deal(
+                user_id=0,  # System generated
+                **deal.to_shareable_dict()
+            )
+            
+            if shareable_deal:
+                # Obtener botones de compartir
+                share_buttons = self.viral_cmds.deal_sharing_mgr.get_share_buttons(
+                    shareable_deal.short_code,
+                    BOT_USERNAME
+                )
+                
+                # Editar mensaje para añadir botones
+                await self.app.bot.edit_message_reply_markup(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    reply_markup=share_buttons
+                )
+        except Exception as e:
+            logger.error(f"❌ Error añadiendo botones de compartir: {e}")
     
     async def _process_referral(self, user_id: int, ref_code: str):
         """Procesa un referido desde el parámetro start."""
@@ -617,6 +670,8 @@ class TelegramBotManager:
                         text=f"🎉 ¡Nuevo referido! Ganaste coins. Usa /myref para ver tus stats.",
                         parse_mode='Markdown'
                     )
+            else:
+                logger.warning(f"⚠️ Referral no procesado: {message}")
         except Exception as e:
             logger.error(f"❌ Error procesando referido: {e}")
     
@@ -627,7 +682,7 @@ class TelegramBotManager:
         
         await context.bot.send_chat_action(chat_id=msg.chat_id, action=ChatAction.TYPING)
         
-        # Check si viene desde referido (IT5)
+        # Check si viene desde referido o deal compartido (IT5)
         if context.args and len(context.args) > 0:
             start_param = context.args[0]
             
@@ -641,9 +696,10 @@ class TelegramBotManager:
                 if success and deal:
                     await msg.reply_text(
                         f"🔥 *¡Chollo compartido!*\n\n"
-                        f"Ruta: {deal.route}\n"
-                        f"Precio: {deal.price}{deal.currency}\n"
-                        f"Ahorro: {deal.savings_pct:.0f}%",
+                        f"✈️ Ruta: {deal.name}\n"
+                        f"💰 Precio: {deal.price}{deal.currency}\n"
+                        f"📉 Ahorro: {deal.savings_pct:.0f}%\n\n"
+                        f"_Haz /deals para ver más chollos_",
                         parse_mode='Markdown'
                     )
         
@@ -785,11 +841,31 @@ class TelegramBotManager:
                     )
             
             for deal in deals[:3]:
-                await msg.reply_text(deal.get_message(), parse_mode='Markdown')
+                # Enviar mensaje del deal
+                sent_msg = await msg.reply_text(deal.get_message(), parse_mode='Markdown')
                 
                 # Añadir botones de compartir (IT5)
                 if VIRAL_ENABLED:
-                    await self.viral_cmds.handle_share_deal(update, context, deal)
+                    try:
+                        # Crear deal compartible
+                        shareable_deal = self.viral_cmds.deal_sharing_mgr.create_shareable_deal(
+                            user_id=user.id,
+                            **deal.to_shareable_dict()
+                        )
+                        
+                        if shareable_deal:
+                            share_buttons = self.viral_cmds.deal_sharing_mgr.get_share_buttons(
+                                shareable_deal.short_code,
+                                BOT_USERNAME
+                            )
+                            
+                            await msg.reply_text(
+                                "📤 *Comparte este chollo:*",
+                                parse_mode='Markdown',
+                                reply_markup=share_buttons
+                            )
+                    except Exception as e:
+                        logger.error(f"❌ Error creando botones de compartir: {e}")
         else:
             await msg.reply_text("🙁 No hay chollos disponibles ahora")
     
@@ -849,6 +925,11 @@ class TelegramBotManager:
             analytics = self.viral_cmds.referral_mgr.get_global_analytics()
             msg_text += f"\n🔥 K-factor: {analytics.get('viral_coefficient', 0):.2f}"
             msg_text += f"\n🎯 Referidos activos: {analytics.get('active_referrals', 0)}"
+            
+            # Analytics de grupos
+            group_analytics = self.viral_cmds.group_mgr.get_global_analytics()
+            msg_text += f"\n🎯 Grupos activos: {group_analytics.get('total_groups', 0)}"
+            msg_text += f"\n👥 Miembros totales: {group_analytics.get('total_members', 0)}"
         
         await msg.reply_text(msg_text, parse_mode='Markdown')
     
