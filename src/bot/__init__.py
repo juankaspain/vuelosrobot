@@ -1,1 +1,1 @@
-"""Bot package."""
+"""Bot Layer - Main bot implementation"""

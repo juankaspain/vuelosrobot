@@ -1,1 +1,1 @@
-"""Utilities package."""
+"""Utils Layer - Shared utilities"""

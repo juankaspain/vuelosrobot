@@ -1,1 +1,1 @@
-"""Features package."""
+"""Features Layer - Modular functionalities"""
