@@ -2,7 +2,7 @@
 
 **Bot de Telegram para búsqueda de vuelos - Arquitectura Profesional Enterprise**
 
-![Version](https://img.shields.io/badge/version-15.0.2-blue)
+![Version](https://img.shields.io/badge/version-15.0.5-blue)
 ![Python](https://img.shields.io/badge/python-3.9+-green)
 ![License](https://img.shields.io/badge/license-MIT-orange)
 ![Status](https://img.shields.io/badge/status-production--ready-brightgreen)
@@ -11,6 +11,50 @@
 ---
 
 ## 🎉 ¿Qué hay de nuevo?
+
+### v15.0.5 (2026-01-17) - 🐛 DEFINITIVO: Setup Wizard Exit Fix
+
+**🎯 Solución Definitiva al Cuelgue del Setup Wizard**
+
+✅ **Fixed: Bot hanging when declining setup** - Cambiado de `os._exit()` a `sys.exit()`  
+✅ **Fixed: Buffer flush on Windows** - Añadido `time.sleep(0.1)` antes de exit  
+✅ **Improved: Clean termination** - Permite flush natural de buffers antes de terminar  
+✅ **Enhanced: Exit handling** - Mantiene `os._exit()` solo para errores fatales iniciales  
+
+**Technical Changes:**
+
+```python
+# ANTES (v15.0.4) - Se quedaba colgado
+if response != 's':
+    print("❌ Bot no configurado. Saliendo...")
+    print("💡 Para configurar...")
+    sys.stdout.flush()
+    os._exit(1)  # ❌ Termina abruptamente, buffer puede no limpiarse
+
+# DESPUÉS (v15.0.5) - Termina limpiamente
+if response != 's':
+    print("❌ Bot no configurado. Saliendo...")
+    print("💡 Para configurar el bot, ejecuta de nuevo y responde 's'\n")
+    time.sleep(0.1)  # ✅ Da tiempo al flush en Windows
+    sys.exit(1)      # ✅ Permite flush natural de buffers
+```
+
+**Diferencias clave:**
+- **`os._exit()`**: Terminación inmediata y abrupta del proceso, puede no limpiar buffers
+- **`sys.exit()`**: Terminación limpia, permite que Python haga cleanup incluyendo flush de buffers  
+- **`time.sleep(0.1)`**: 100ms extra para que Windows escriba todo al console
+
+**Commit:** [22a0a9c](https://github.com/juankaspain/vuelosrobot/commit/22a0a9c2170fd98de8d50d7ffec8793c3184a381)
+
+**How to Update:**
+
+```bash
+git pull origin main
+python vuelos_bot_unified.py
+# Al presionar 'n' ahora termina limpiamente sin colgarse
+```
+
+---
 
 ### v15.0.2 (2026-01-17) - 🐛 HOTFIX: Setup Wizard Exit
 
@@ -170,7 +214,7 @@ Cuando ejecutes el bot por primera vez:
 $ python vuelos_bot_unified.py
 
 ======================================================================
-                     🛫 VuelosBot Unified v15.0.2
+                     🛫 VuelosBot Unified v15.0.5
 ======================================================================
 
 ⚠️ Bot sin token de Telegram configurado
@@ -336,6 +380,34 @@ export KIWI_API_KEY="your_api_key"
 ---
 
 ## 📆 Release Notes Completas
+
+### v15.0.5 (2026-01-17) - 🐛 DEFINITIVO FIX
+
+**Solución definitiva al cuelgue del setup wizard:**
+- Cambio de `os._exit()` a `sys.exit()` para terminación limpia
+- Añadido `time.sleep(0.1)` para flush de buffers en Windows
+- Permite que Python haga cleanup natural antes de terminar
+- Mantiene `os._exit()` solo para errores fatales iniciales
+
+**Files Changed:**
+- `vuelos_bot_unified.py` (VERSION = "15.0.5")
+
+**Exit Behavior:**
+- Presionar 'n' en setup wizard → Exit limpio inmediato sin colgarse
+- Mensajes se muestran correctamente
+- Proceso termina limpiamente
+
+**Technical Details:**
+```python
+# v15.0.4 (broken)
+os._exit(1)  # Termina abruptamente
+
+# v15.0.5 (fixed)  
+time.sleep(0.1)  # Da tiempo al buffer flush
+sys.exit(1)      # Termina limpiamente
+```
+
+---
 
 ### v15.0.2 (2026-01-17) - 🐛 HOTFIX
 
@@ -508,13 +580,18 @@ MIT License - Ver [LICENSE](LICENSE) para detalles
 
 ### Bot se queda "colgado" al rechazar setup wizard
 
-**Solución:** Actualiza a v15.0.2+
+**Solución:** Actualiza a v15.0.5+ (solución definitiva)
 
 ```bash
 git pull origin main
 python vuelos_bot_unified.py
 # Ahora termina correctamente cuando presionas 'n'
 ```
+
+**Versiones con fix:**
+- ✅ v15.0.5 - Fix definitivo con `sys.exit()` + `time.sleep()`
+- ⚠️ v15.0.2 - Mejora parcial
+- ❌ v15.0.1 - Sin fix
 
 ### Error: 'ConfigManager' object has no attribute 'config'
 
@@ -585,7 +662,7 @@ Incluye:
 
 **Hecho con ❤️ en España**
 
-v15.0.2 | 2026-01-17 | 🐛 Hotfix Edition
+v15.0.5 | 2026-01-17 | 🐛 Definitive Fix Edition
 
 [🐛 Report Bug](https://github.com/juankaspain/vuelosrobot/issues) | [✨ Request Feature](https://github.com/juankaspain/vuelosrobot/issues)
 
