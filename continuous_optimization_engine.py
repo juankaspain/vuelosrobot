@@ -3,19 +3,21 @@
 """
 ╔══════════════════════════════════════════════════════════════════════╗
 ║  🔄 CONTINUOUS OPTIMIZATION ENGINE                                   ║
-║  🚀 Cazador Supremo v14.2                                           ║
-║  🤖 Auto-optimization + ML Insights + Real-time Adaptation          ║
+║  🚀 Cazador Supremo v14.3                                           ║
+║  🤖 AI-Powered Auto-Optimization System                             ║
 ╚══════════════════════════════════════════════════════════════════════╝
 
-Motor de optimización continua que:
-- Analiza métricas en tiempo real
-- Genera insights automáticos
-- Aplica optimizaciones sin intervención
-- Predice problemas antes de que ocurran
-- Mejora conversión automáticamente
+Motor de optimización continua:
+- Análisis automático de métricas
+- Recomendaciones data-driven
+- Auto-expansión de quick actions
+- Optimización de premium upsells
+- Mejora de share mechanics
+- Auto-tuning de performance
+- Gestión automática de A/B tests
 
 Autor: @Juanka_Spain
-Version: 14.2.0
+Version: 14.3.0
 Date: 2026-01-17
 """
 
@@ -26,173 +28,300 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
 from enum import Enum
-from collections import defaultdict, deque
-import math
-import random
+from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
 
-# ═══════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════
 #  ENUMS & CONSTANTS
-# ═══════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════
 
-class OptimizationType(Enum):
-    """Tipo de optimización"""
+class OptimizationArea(Enum):
+    """Áreas de optimización"""
     ONBOARDING = "onboarding"
-    CONVERSION = "conversion"
-    RETENTION = "retention"
-    ENGAGEMENT = "engagement"
+    BUTTONS = "buttons"
+    MESSAGES = "messages"
+    PREMIUM = "premium"
+    SHARING = "sharing"
     PERFORMANCE = "performance"
-    REVENUE = "revenue"
+    FEATURES = "features"
 
 
-class InsightSeverity(Enum):
-    """Severidad del insight"""
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
+class ActionPriority(Enum):
+    """Prioridad de acción"""
     CRITICAL = "critical"
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
 
 
 class ActionStatus(Enum):
     """Estado de acción"""
     PENDING = "pending"
-    ACTIVE = "active"
+    IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
-    ROLLED_BACK = "rolled_back"
+    FAILED = "failed"
 
 
-# Reglas de optimización
-OPTIMIZATION_RULES = {
-    'onboarding_duration': {
-        'condition': lambda metrics: metrics.get('onboarding_avg_duration', 0) > 90,
-        'action': 'reduce_onboarding_steps',
-        'priority': 'high',
-        'impact': 'Reduce TTFV by ~30%'
+# Quick actions predefinidas (expandidas)
+QUICK_ACTIONS_LIBRARY = {
+    'scan_favorites': {
+        'label': '🔍 Escanear Favoritas',
+        'callback': 'quick_scan_favorites',
+        'description': 'Escanear tus rutas favoritas',
+        'usage_count': 0
     },
-    'completion_rate_low': {
-        'condition': lambda metrics: metrics.get('onboarding_completion_rate', 1.0) < 0.70,
-        'action': 'improve_onboarding_flow',
-        'priority': 'high',
-        'impact': 'Increase D1 retention by ~15%'
+    'last_deals': {
+        'label': '🔥 Últimos Chollos',
+        'callback': 'quick_last_deals',
+        'description': 'Ver chollos más recientes',
+        'usage_count': 0
     },
-    'button_ctr_low': {
-        'condition': lambda metrics: metrics.get('button_click_rate', 1.0) < 0.60,
-        'action': 'optimize_button_placement',
-        'priority': 'medium',
-        'impact': 'Increase engagement by ~20%'
+    'watchlist_alerts': {
+        'label': '🔔 Mis Alertas',
+        'callback': 'quick_watchlist',
+        'description': 'Gestionar alertas activas',
+        'usage_count': 0
     },
-    'error_rate_high': {
-        'condition': lambda metrics: metrics.get('error_rate', 0.0) > 0.05,
-        'action': 'fix_top_errors',
-        'priority': 'critical',
-        'impact': 'Reduce churn by ~25%'
+    'daily_reward': {
+        'label': '🎁 Reward Diario',
+        'callback': 'quick_daily',
+        'description': 'Reclamar reward del día',
+        'usage_count': 0
     },
-    'response_time_slow': {
-        'condition': lambda metrics: metrics.get('avg_response_time', 0) > 1000,
-        'action': 'optimize_performance',
-        'priority': 'high',
-        'impact': 'Improve satisfaction by ~18%'
+    'premium_trial': {
+        'label': '💎 Probar Premium',
+        'callback': 'quick_premium_trial',
+        'description': 'Activar prueba gratuita',
+        'usage_count': 0
     },
-    'premium_conversion_low': {
-        'condition': lambda metrics: metrics.get('premium_conversion_rate', 0.0) < 0.08,
-        'action': 'enhance_premium_upsells',
-        'priority': 'medium',
-        'impact': 'Increase revenue by ~35%'
+    'invite_friend': {
+        'label': '👥 Invitar Amigo',
+        'callback': 'quick_invite',
+        'description': 'Ganar bonus por referido',
+        'usage_count': 0
     },
-    'share_rate_low': {
-        'condition': lambda metrics: metrics.get('share_rate', 0.0) < 0.15,
-        'action': 'improve_share_mechanics',
-        'priority': 'medium',
-        'impact': 'Boost viral growth by ~40%'
+    'search_flexible': {
+        'label': '📅 Búsqueda Flexible',
+        'callback': 'quick_search_flex',
+        'description': 'Calendario de precios',
+        'usage_count': 0
     },
-    'nps_declining': {
-        'condition': lambda metrics: metrics.get('nps_score', 50) < 40,
-        'action': 'address_feedback',
-        'priority': 'high',
-        'impact': 'Recover user satisfaction'
+    'search_budget': {
+        'label': '💰 Por Presupuesto',
+        'callback': 'quick_search_budget',
+        'description': 'Destinos en tu presupuesto',
+        'usage_count': 0
     },
+    'my_stats': {
+        'label': '📊 Mis Stats',
+        'callback': 'quick_profile',
+        'description': 'Ver tu perfil y logros',
+        'usage_count': 0
+    },
+    'leaderboard': {
+        'label': '🏆 Rankings',
+        'callback': 'quick_leaderboard',
+        'description': 'Ver tabla de posiciones',
+        'usage_count': 0
+    },
+    'share_last_deal': {
+        'label': '📤 Compartir Chollo',
+        'callback': 'quick_share_deal',
+        'description': 'Compartir último chollo',
+        'usage_count': 0
+    },
+    'help_support': {
+        'label': '❓ Ayuda',
+        'callback': 'quick_help',
+        'description': 'Obtener ayuda rápida',
+        'usage_count': 0
+    }
 }
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-#  DATA CLASSES
-# ═══════════════════════════════════════════════════════════════════════════
+# Premium upsell contexts
+PREMIUM_UPSELL_CONTEXTS = {
+    'scan_limit': {
+        'trigger': 'daily_scan_limit_reached',
+        'message': (
+            "🔥 *¡Has alcanzado tu límite de búsquedas gratis hoy!*\n\n"
+            "Con Premium obtienes:\n"
+            "✅ Búsquedas ilimitadas\n"
+            "✅ Alertas personalizadas\n"
+            "✅ Sin anuncios\n"
+            "✅ Soporte prioritario\n\n"
+            "💎 *Upgrade desde €4.99/mes*"
+        ),
+        'cta': 'Upgrade Now',
+        'conversion_rate': 0.0
+    },
+    'deal_found': {
+        'trigger': 'high_value_deal_found',
+        'message': (
+            "🎉 *¡Encontramos un chollo increíble para ti!*\n\n"
+            "Con Premium nunca te perderás chollos como este:\n"
+            "✅ Alertas instantáneas\n"
+            "✅ Acceso 24h antes que free users\n"
+            "✅ Chollos exclusivos\n\n"
+            "💎 *Prueba gratis 7 días*"
+        ),
+        'cta': 'Start Free Trial',
+        'conversion_rate': 0.0
+    },
+    'advanced_search': {
+        'trigger': 'advanced_search_attempt',
+        'message': (
+            "🚀 *Búsquedas Avanzadas = Premium Feature*\n\n"
+            "Desbloquea:\n"
+            "✅ Calendario flexible\n"
+            "✅ Multi-ciudad\n"
+            "✅ Búsqueda por presupuesto\n"
+            "✅ Filtros avanzados\n\n"
+            "💎 *Solo €4.99/mes*"
+        ),
+        'cta': 'Unlock Now',
+        'conversion_rate': 0.0
+    },
+    'week_1_active': {
+        'trigger': 'day_7_active_user',
+        'message': (
+            "🎊 *¡Llevas 1 semana con nosotros!*\n\n"
+            "Te regalamos 20% OFF en Premium:\n"
+            "✅ Todas las features PRO\n"
+            "✅ Sin límites\n"
+            "✅ Soporte VIP\n\n"
+            "💎 *Upgrade con 20% OFF*"
+        ),
+        'cta': 'Claim Discount',
+        'conversion_rate': 0.0
+    },
+    'share_deal': {
+        'trigger': 'deal_share_action',
+        'message': (
+            "📤 *¡Compartir chollos es más fácil con Premium!*\n\n"
+            "Premium incluye:\n"
+            "✅ Links personalizados\n"
+            "✅ Bonus por compartir\n"
+            "✅ Stats de shares\n\n"
+            "💎 *Upgrade ahora*"
+        ),
+        'cta': 'Go Premium',
+        'conversion_rate': 0.0
+    }
+}
 
-@dataclass
-class Insight:
-    """Insight generado por análisis"""
-    insight_id: str
-    type: OptimizationType
-    severity: InsightSeverity
-    title: str
-    description: str
-    data: Dict
-    recommendations: List[str]
-    estimated_impact: str
-    timestamp: str
-    
-    def to_dict(self) -> Dict:
-        return {
-            'insight_id': self.insight_id,
-            'type': self.type.value,
-            'severity': self.severity.value,
-            'title': self.title,
-            'description': self.description,
-            'data': self.data,
-            'recommendations': self.recommendations,
-            'estimated_impact': self.estimated_impact,
-            'timestamp': self.timestamp
+
+# Share mechanics variations
+SHARE_MECHANICS = {
+    'social_proof': {
+        'enabled': True,
+        'message_template': (
+            "🔥 *¡{user_name} encontró un chollo increíble!*\n\n"
+            "{deal_details}\n\n"
+            "👥 Ya lo compartieron {share_count} personas\n"
+            "⏰ Expira en {time_left}\n\n"
+            "👉 Usa Cazador Supremo tú también: {bot_link}"
+        )
+    },
+    'gamification': {
+        'enabled': True,
+        'rewards': {
+            'share_1': {'coins': 50, 'message': '🎁 +50 coins por tu primer share!'},
+            'share_5': {'coins': 100, 'message': '🎉 +100 coins! 5 shares completados!'},
+            'share_10': {'coins': 200, 'badge': 'Influencer', 'message': '🏆 Badge Influencer desbloqueado!'},
         }
+    },
+    'viral_loop': {
+        'enabled': True,
+        'incentive': '💎 Invita 3 amigos = 1 mes Premium GRATIS',
+        'tracking': True
+    },
+    'one_click_share': {
+        'enabled': True,
+        'platforms': ['whatsapp', 'telegram', 'twitter', 'facebook'],
+        'templates': {
+            'whatsapp': '🔥 Mira este chollo: {deal_summary} - {link}',
+            'telegram': '✈️ Chollo encontrado: {deal_summary}\n{link}',
+            'twitter': '🎉 Vuelo a {destination} por solo {price}! {link} #Chollos #Vuelos',
+            'facebook': 'Encontré este increíble chollo de vuelos 🔥 {deal_summary}'
+        }
+    }
+}
 
+
+# ═══════════════════════════════════════════════════════════════════════
+#  DATA CLASSES
+# ═══════════════════════════════════════════════════════════════════════
 
 @dataclass
 class OptimizationAction:
     """Acción de optimización"""
     action_id: str
-    type: OptimizationType
-    name: str
+    area: OptimizationArea
+    priority: ActionPriority
+    title: str
     description: str
+    expected_impact: str
     status: ActionStatus
     created_at: str
-    applied_at: Optional[str] = None
-    rolled_back_at: Optional[str] = None
-    metrics_before: Dict = None
-    metrics_after: Dict = None
-    impact_actual: Optional[float] = None
+    completed_at: Optional[str] = None
+    result: Optional[str] = None
     
     def to_dict(self) -> Dict:
         return {
             'action_id': self.action_id,
-            'type': self.type.value,
-            'name': self.name,
+            'area': self.area.value,
+            'priority': self.priority.value,
+            'title': self.title,
             'description': self.description,
+            'expected_impact': self.expected_impact,
             'status': self.status.value,
             'created_at': self.created_at,
-            'applied_at': self.applied_at,
-            'rolled_back_at': self.rolled_back_at,
-            'metrics_before': self.metrics_before,
-            'metrics_after': self.metrics_after,
-            'impact_actual': self.impact_actual
+            'completed_at': self.completed_at,
+            'result': self.result
         }
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-#  OPTIMIZATION ENGINE
-# ═══════════════════════════════════════════════════════════════════════════
+@dataclass
+class OptimizationInsight:
+    """Insight de optimización"""
+    insight_id: str
+    area: OptimizationArea
+    title: str
+    description: str
+    data: Dict
+    recommendations: List[str]
+    created_at: str
+    
+    def to_dict(self) -> Dict:
+        return {
+            'insight_id': self.insight_id,
+            'area': self.area.value,
+            'title': self.title,
+            'description': self.description,
+            'data': self.data,
+            'recommendations': self.recommendations,
+            'created_at': self.created_at
+        }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  CONTINUOUS OPTIMIZATION ENGINE
+# ═══════════════════════════════════════════════════════════════════════
 
 class ContinuousOptimizationEngine:
     """
     Motor de optimización continua.
     
-    Capacidades:
+    Features:
     - Análisis automático de métricas
     - Generación de insights
-    - Recomendaciones accionables
-    - Auto-aplicación de optimizaciones
-    - Monitoreo de impacto
-    - Rollback automático si falla
+    - Recomendaciones data-driven
+    - Auto-expansión de features
+    - Gestión de A/B tests
+    - Optimización de conversiones
     """
     
     def __init__(self, 
@@ -206,20 +335,18 @@ class ContinuousOptimizationEngine:
         self.data_file = Path(data_file)
         
         # Storage
-        self.insights: List[Insight] = []
         self.actions: List[OptimizationAction] = []
-        self.optimization_history: deque = deque(maxlen=1000)
-        
-        # State
-        self.auto_optimize_enabled = True
-        self.last_analysis = None
+        self.insights: List[OptimizationInsight] = []
+        self.quick_actions = QUICK_ACTIONS_LIBRARY.copy()
+        self.premium_upsells = PREMIUM_UPSELL_CONTEXTS.copy()
+        self.share_mechanics = SHARE_MECHANICS.copy()
         
         self._load_data()
         
         logger.info("🔄 ContinuousOptimizationEngine initialized")
     
     def _load_data(self):
-        """Carga datos históricos."""
+        """Carga datos de optimización."""
         if not self.data_file.exists():
             return
         
@@ -227,48 +354,54 @@ class ContinuousOptimizationEngine:
             with open(self.data_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
-            # Reconstruir insights
+            # Cargar actions
+            for action_data in data.get('actions', []):
+                action = OptimizationAction(
+                    action_id=action_data['action_id'],
+                    area=OptimizationArea(action_data['area']),
+                    priority=ActionPriority(action_data['priority']),
+                    title=action_data['title'],
+                    description=action_data['description'],
+                    expected_impact=action_data['expected_impact'],
+                    status=ActionStatus(action_data['status']),
+                    created_at=action_data['created_at'],
+                    completed_at=action_data.get('completed_at'),
+                    result=action_data.get('result')
+                )
+                self.actions.append(action)
+            
+            # Cargar insights
             for insight_data in data.get('insights', []):
-                insight = Insight(
+                insight = OptimizationInsight(
                     insight_id=insight_data['insight_id'],
-                    type=OptimizationType(insight_data['type']),
-                    severity=InsightSeverity(insight_data['severity']),
+                    area=OptimizationArea(insight_data['area']),
                     title=insight_data['title'],
                     description=insight_data['description'],
                     data=insight_data['data'],
                     recommendations=insight_data['recommendations'],
-                    estimated_impact=insight_data['estimated_impact'],
-                    timestamp=insight_data['timestamp']
+                    created_at=insight_data['created_at']
                 )
                 self.insights.append(insight)
             
-            # Reconstruir acciones
-            for action_data in data.get('actions', []):
-                action = OptimizationAction(
-                    action_id=action_data['action_id'],
-                    type=OptimizationType(action_data['type']),
-                    name=action_data['name'],
-                    description=action_data['description'],
-                    status=ActionStatus(action_data['status']),
-                    created_at=action_data['created_at'],
-                    applied_at=action_data.get('applied_at'),
-                    rolled_back_at=action_data.get('rolled_back_at'),
-                    metrics_before=action_data.get('metrics_before'),
-                    metrics_after=action_data.get('metrics_after'),
-                    impact_actual=action_data.get('impact_actual')
-                )
-                self.actions.append(action)
+            # Cargar configuraciones
+            if 'quick_actions' in data:
+                self.quick_actions.update(data['quick_actions'])
+            if 'premium_upsells' in data:
+                self.premium_upsells.update(data['premium_upsells'])
             
-            logger.info(f"✅ Loaded {len(self.insights)} insights, {len(self.actions)} actions")
+            logger.info(f"✅ Loaded {len(self.actions)} actions, {len(self.insights)} insights")
         except Exception as e:
             logger.error(f"❌ Error loading optimization data: {e}")
     
     def _save_data(self):
-        """Guarda datos a archivo."""
+        """Guarda datos de optimización."""
         try:
             data = {
-                'insights': [i.to_dict() for i in self.insights[-100:]],  # Últimos 100
-                'actions': [a.to_dict() for a in self.actions[-100:]],
+                'actions': [a.to_dict() for a in self.actions],
+                'insights': [i.to_dict() for i in self.insights],
+                'quick_actions': self.quick_actions,
+                'premium_upsells': self.premium_upsells,
+                'share_mechanics': self.share_mechanics,
                 'last_updated': datetime.now().isoformat()
             }
             
@@ -279,469 +412,467 @@ class ContinuousOptimizationEngine:
         except Exception as e:
             logger.error(f"❌ Error saving optimization data: {e}")
     
-    # ═══════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════════
     #  ANALYSIS & INSIGHTS
-    # ═══════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════════
     
-    def analyze_metrics(self, hours: int = 24) -> List[Insight]:
+    def analyze_metrics(self) -> List[OptimizationInsight]:
         """Analiza métricas y genera insights."""
-        if not self.monitoring:
-            logger.warning("⚠️ Monitoring system not available")
-            return []
-        
         insights = []
         
-        # Obtener métricas actuales
-        current_metrics = self._gather_metrics(hours)
+        if not self.monitoring:
+            return insights
         
-        # Aplicar reglas de optimización
-        for rule_name, rule in OPTIMIZATION_RULES.items():
-            if rule['condition'](current_metrics):
-                insight = self._create_insight_from_rule(rule_name, rule, current_metrics)
-                insights.append(insight)
+        # Analizar onboarding
+        onb_insights = self._analyze_onboarding()
+        insights.extend(onb_insights)
         
-        # Análisis de tendencias
-        trend_insights = self._analyze_trends(current_metrics)
-        insights.extend(trend_insights)
+        # Analizar botones
+        btn_insights = self._analyze_buttons()
+        insights.extend(btn_insights)
         
-        # Análisis de anomalías
-        anomaly_insights = self._detect_anomalies(current_metrics)
-        insights.extend(anomaly_insights)
+        # Analizar premium conversion
+        premium_insights = self._analyze_premium()
+        insights.extend(premium_insights)
+        
+        # Analizar performance
+        perf_insights = self._analyze_performance()
+        insights.extend(perf_insights)
         
         # Guardar insights
         self.insights.extend(insights)
         self._save_data()
         
-        self.last_analysis = datetime.now()
-        
-        logger.info(f"📊 Analysis complete: {len(insights)} insights generated")
         return insights
     
-    def _gather_metrics(self, hours: int) -> Dict:
-        """Recopila métricas de todos los sistemas."""
-        metrics = {}
-        
-        # Monitoring metrics
-        if self.monitoring:
-            metrics['onboarding_completion_rate'] = self.monitoring.get_onboarding_completion_rate(hours)
-            metrics['onboarding_avg_duration'] = self.monitoring._get_avg_metric('onboarding.total_duration', hours)
-            metrics['button_click_rate'] = self.monitoring.get_button_click_rate(hours=hours)
-            metrics['error_rate'] = self.monitoring.get_error_rate(hours)
-            metrics['avg_response_time'] = self.monitoring.get_avg_response_time(hours)
-        
-        # A/B testing metrics
-        if self.ab_testing:
-            # Obtener experimentos activos
-            for exp_id, exp in self.ab_testing.experiments.items():
-                if exp.status.value == 'running':
-                    results = self.ab_testing.calculate_results(exp_id)
-                    if results:
-                        metrics[f'experiment_{exp_id}_best'] = max(
-                            r.mean for r in results.values()
-                        )
-        
-        # Feedback metrics
-        if self.feedback:
-            nps = self.feedback.calculate_nps(days=hours//24)
-            metrics['nps_score'] = nps.score
-            
-            feedback_summary = self.feedback.get_feedback_summary(days=hours//24)
-            if feedback_summary:
-                metrics['sentiment_score'] = feedback_summary.get('sentiment_score', 0)
-        
-        return metrics
-    
-    def _create_insight_from_rule(self, rule_name: str, rule: Dict, metrics: Dict) -> Insight:
-        """Crea insight desde regla."""
-        severity_map = {
-            'critical': InsightSeverity.CRITICAL,
-            'high': InsightSeverity.HIGH,
-            'medium': InsightSeverity.MEDIUM,
-            'low': InsightSeverity.LOW
-        }
-        
-        # Determinar tipo
-        if 'onboarding' in rule_name:
-            opt_type = OptimizationType.ONBOARDING
-        elif 'conversion' in rule_name or 'premium' in rule_name:
-            opt_type = OptimizationType.CONVERSION
-        elif 'error' in rule_name or 'performance' in rule_name:
-            opt_type = OptimizationType.PERFORMANCE
-        else:
-            opt_type = OptimizationType.ENGAGEMENT
-        
-        insight_id = f"INSIGHT_{int(datetime.now().timestamp())}_{random.randint(1000, 9999)}"
-        
-        return Insight(
-            insight_id=insight_id,
-            type=opt_type,
-            severity=severity_map.get(rule['priority'], InsightSeverity.MEDIUM),
-            title=rule_name.replace('_', ' ').title(),
-            description=f"Rule '{rule_name}' triggered",
-            data=metrics,
-            recommendations=[rule['action']],
-            estimated_impact=rule['impact'],
-            timestamp=datetime.now().isoformat()
-        )
-    
-    def _analyze_trends(self, current_metrics: Dict) -> List[Insight]:
-        """Analiza tendencias en métricas."""
+    def _analyze_onboarding(self) -> List[OptimizationInsight]:
+        """Analiza onboarding."""
         insights = []
         
-        # TODO: Implementar análisis de tendencias histórico
-        # Comparar métricas actuales vs semana anterior
-        # Detectar mejoras/empeoramientos significativos
+        completion_rate = self.monitoring.get_onboarding_completion_rate(hours=24)
+        avg_duration = self.monitoring._get_avg_metric('onboarding.total_duration', hours=24)
+        
+        # Insight 1: Low completion rate
+        if completion_rate < 0.70:
+            insight = OptimizationInsight(
+                insight_id=f"INS_{int(datetime.now().timestamp())}_ONB_COMPLETION",
+                area=OptimizationArea.ONBOARDING,
+                title="Low Onboarding Completion Rate",
+                description=f"Only {completion_rate:.1%} of users complete onboarding",
+                data={'completion_rate': completion_rate, 'target': 0.70},
+                recommendations=[
+                    "Test 2-step vs 3-step flow (A/B test already running)",
+                    "Reduce text length in each step",
+                    "Add progress indicators",
+                    "Increase welcome bonus to 250 coins",
+                    "Make skip button less prominent"
+                ],
+                created_at=datetime.now().isoformat()
+            )
+            insights.append(insight)
+        
+        # Insight 2: Slow TTFV
+        if avg_duration > 90:
+            insight = OptimizationInsight(
+                insight_id=f"INS_{int(datetime.now().timestamp())}_ONB_TTFV",
+                area=OptimizationArea.ONBOARDING,
+                title="Time To First Value Exceeds Target",
+                description=f"Average onboarding takes {avg_duration:.0f}s (target: <90s)",
+                data={'avg_duration': avg_duration, 'target': 90},
+                recommendations=[
+                    "Reduce number of steps",
+                    "Pre-fill common options",
+                    "Parallelize API calls",
+                    "Cache initial data"
+                ],
+                created_at=datetime.now().isoformat()
+            )
+            insights.append(insight)
         
         return insights
     
-    def _detect_anomalies(self, current_metrics: Dict) -> List[Insight]:
-        """Detecta anomalías en métricas."""
+    def _analyze_buttons(self) -> List[OptimizationInsight]:
+        """Analiza performance de botones."""
         insights = []
         
-        # TODO: Implementar detección de anomalías
-        # Usar statistical methods para detectar outliers
-        # Alertar sobre cambios súbitos
+        overall_ctr = self.monitoring.get_button_click_rate(hours=24)
+        top_buttons = self.monitoring.get_top_buttons(hours=24, limit=10)
+        
+        # Insight: Low CTR
+        if overall_ctr < 0.60:
+            underperforming = [btn for btn, clicks in top_buttons if clicks < 50]
+            
+            insight = OptimizationInsight(
+                insight_id=f"INS_{int(datetime.now().timestamp())}_BTN_CTR",
+                area=OptimizationArea.BUTTONS,
+                title="Low Button Click-Through Rate",
+                description=f"Overall CTR is {overall_ctr:.1%} (target: >60%)",
+                data={
+                    'overall_ctr': overall_ctr,
+                    'underperforming_buttons': underperforming[:5]
+                },
+                recommendations=[
+                    "Test different CTA copy",
+                    "Add emoji to button labels",
+                    "Improve button positioning",
+                    "Use contrasting colors",
+                    "Add urgency indicators"
+                ],
+                created_at=datetime.now().isoformat()
+            )
+            insights.append(insight)
         
         return insights
     
-    # ═══════════════════════════════════════════════════════════════════════
-    #  AUTO-OPTIMIZATION
-    # ═══════════════════════════════════════════════════════════════════════
+    def _analyze_premium(self) -> List[OptimizationInsight]:
+        """Analiza conversión premium."""
+        insights = []
+        
+        # Analizar conversión por contexto
+        best_context = None
+        best_rate = 0.0
+        
+        for context_id, context in self.premium_upsells.items():
+            if context['conversion_rate'] > best_rate:
+                best_rate = context['conversion_rate']
+                best_context = context_id
+        
+        if best_context and best_rate > 0.10:
+            insight = OptimizationInsight(
+                insight_id=f"INS_{int(datetime.now().timestamp())}_PREMIUM_CONTEXT",
+                area=OptimizationArea.PREMIUM,
+                title="High-Converting Premium Context Found",
+                description=f"{best_context} converts at {best_rate:.1%}",
+                data={'best_context': best_context, 'conversion_rate': best_rate},
+                recommendations=[
+                    f"Show {best_context} upsell more frequently",
+                    "Apply similar messaging to other contexts",
+                    "A/B test variations of winning message"
+                ],
+                created_at=datetime.now().isoformat()
+            )
+            insights.append(insight)
+        
+        return insights
     
-    def auto_optimize(self) -> List[OptimizationAction]:
-        """Aplica optimizaciones automáticamente."""
-        if not self.auto_optimize_enabled:
-            logger.info("⏸️ Auto-optimization disabled")
-            return []
+    def _analyze_performance(self) -> List[OptimizationInsight]:
+        """Analiza performance."""
+        insights = []
         
-        # Analizar métricas
-        insights = self.analyze_metrics(hours=24)
+        avg_response = self.monitoring.get_avg_response_time(hours=24)
+        p95_response = self.monitoring.get_p95_response_time(hours=24)
         
-        # Filtrar insights de alta prioridad
-        high_priority = [
-            i for i in insights
-            if i.severity in [InsightSeverity.HIGH, InsightSeverity.CRITICAL]
-        ]
+        if avg_response > 1000:
+            insight = OptimizationInsight(
+                insight_id=f"INS_{int(datetime.now().timestamp())}_PERF_RESPONSE",
+                area=OptimizationArea.PERFORMANCE,
+                title="Slow Response Times Detected",
+                description=f"Avg: {avg_response:.0f}ms, P95: {p95_response:.0f}ms",
+                data={'avg_response': avg_response, 'p95_response': p95_response},
+                recommendations=[
+                    "Enable caching for frequent queries",
+                    "Optimize database queries",
+                    "Add CDN for static assets",
+                    "Implement async operations"
+                ],
+                created_at=datetime.now().isoformat()
+            )
+            insights.append(insight)
         
-        actions_applied = []
-        
-        for insight in high_priority:
-            for recommendation in insight.recommendations:
-                action = self._apply_optimization(insight, recommendation)
-                if action:
-                    actions_applied.append(action)
-        
-        logger.info(f"🔄 Auto-optimization: {len(actions_applied)} actions applied")
-        return actions_applied
+        return insights
     
-    def _apply_optimization(self, insight: Insight, recommendation: str) -> Optional[OptimizationAction]:
-        """Aplica una optimización específica."""
-        
-        # Crear acción
-        action_id = f"ACTION_{int(datetime.now().timestamp())}_{random.randint(1000, 9999)}"
-        action = OptimizationAction(
-            action_id=action_id,
-            type=insight.type,
-            name=recommendation,
-            description=f"Auto-applied from insight: {insight.title}",
-            status=ActionStatus.PENDING,
-            created_at=datetime.now().isoformat(),
-            metrics_before=insight.data
-        )
-        
-        # Aplicar optimización según tipo
-        success = False
-        
-        if recommendation == 'reduce_onboarding_steps':
-            success = self._optimize_onboarding_steps()
-        elif recommendation == 'improve_onboarding_flow':
-            success = self._optimize_onboarding_flow()
-        elif recommendation == 'optimize_button_placement':
-            success = self._optimize_button_placement()
-        elif recommendation == 'enhance_premium_upsells':
-            success = self._optimize_premium_upsells()
-        elif recommendation == 'improve_share_mechanics':
-            success = self._optimize_share_mechanics()
-        elif recommendation == 'optimize_performance':
-            success = self._optimize_performance()
-        
-        if success:
-            action.status = ActionStatus.ACTIVE
-            action.applied_at = datetime.now().isoformat()
-            self.actions.append(action)
-            self._save_data()
-            
-            logger.info(f"✅ Optimization applied: {recommendation}")
-            return action
-        else:
-            logger.warning(f"⚠️ Failed to apply optimization: {recommendation}")
-            return None
+    # ═══════════════════════════════════════════════════════════════════
+    #  ACTION GENERATION & MANAGEMENT
+    # ═══════════════════════════════════════════════════════════════════
     
-    def _optimize_onboarding_steps(self) -> bool:
-        """Reduce steps en onboarding."""
-        if not self.ab_testing:
-            return False
+    def generate_actions(self) -> List[OptimizationAction]:
+        """Genera acciones de optimización desde insights."""
+        actions = []
         
-        try:
-            # Crear A/B test si no existe
-            if 'onboarding_steps' not in self.ab_testing.experiments:
-                exp = self.ab_testing.create_from_template('onboarding_steps')
-                self.ab_testing.start_experiment('onboarding_steps')
-            
-            # Verificar si hay winner
-            winner = self.ab_testing.detect_winner('onboarding_steps')
-            if winner:
-                self.ab_testing.rollout_winner('onboarding_steps', winner)
-            
-            return True
-        except Exception as e:
-            logger.error(f"❌ Error optimizing onboarding steps: {e}")
-            return False
-    
-    def _optimize_onboarding_flow(self) -> bool:
-        """Mejora flujo de onboarding."""
-        # TODO: Implementar optimizaciones específicas
-        # - Reducir texto
-        # - Mejorar CTAs
-        # - Añadir skip option
-        # - Aumentar bonus
-        return True
-    
-    def _optimize_button_placement(self) -> bool:
-        """Optimiza colocación de botones."""
-        if not self.ab_testing:
-            return False
+        # Generar desde insights recientes
+        recent_insights = [i for i in self.insights 
+                          if datetime.fromisoformat(i.created_at) > datetime.now() - timedelta(days=1)]
         
-        try:
-            # Test CTA placement
-            if 'cta_placement' not in self.ab_testing.experiments:
-                exp = self.ab_testing.create_from_template('cta_placement')
-                self.ab_testing.start_experiment('cta_placement')
-            
-            return True
-        except Exception as e:
-            logger.error(f"❌ Error optimizing button placement: {e}")
-            return False
-    
-    def _optimize_premium_upsells(self) -> bool:
-        """Mejora upsells de premium."""
-        # TODO: Implementar
-        # - Mostrar valor más claramente
-        # - Añadir social proof
-        # - ROI calculator
-        # - Trial offers más agresivos
-        return True
-    
-    def _optimize_share_mechanics(self) -> bool:
-        """Mejora mecánicas de compartir."""
-        # TODO: Implementar
-        # - One-click sharing
-        # - Pre-filled messages
-        # - Incentivos más claros
-        # - Viral loops
-        return True
-    
-    def _optimize_performance(self) -> bool:
-        """Optimiza performance del bot."""
-        # TODO: Implementar
-        # - Increase cache TTL
-        # - Optimize database queries
-        # - Reduce API calls
-        # - Enable compression
-        return True
-    
-    # ═══════════════════════════════════════════════════════════════════════
-    #  IMPACT MEASUREMENT
-    # ═══════════════════════════════════════════════════════════════════════
-    
-    def measure_impact(self, action: OptimizationAction, hours: int = 48) -> float:
-        """Mide impacto de una acción."""
-        if action.status != ActionStatus.ACTIVE:
-            return 0.0
+        for insight in recent_insights:
+            for i, rec in enumerate(insight.recommendations[:2]):  # Top 2 recomendaciones
+                action = OptimizationAction(
+                    action_id=f"ACT_{int(datetime.now().timestamp())}_{i}",
+                    area=insight.area,
+                    priority=self._determine_priority(insight),
+                    title=rec,
+                    description=f"Based on: {insight.title}",
+                    expected_impact=self._estimate_impact(insight, rec),
+                    status=ActionStatus.PENDING,
+                    created_at=datetime.now().isoformat()
+                )
+                actions.append(action)
         
-        if not action.applied_at:
-            return 0.0
-        
-        # Obtener métricas después de aplicar
-        current_metrics = self._gather_metrics(hours)
-        action.metrics_after = current_metrics
-        
-        # Calcular mejora
-        before = action.metrics_before
-        after = action.metrics_after
-        
-        # Elegir métrica clave según tipo
-        key_metric = self._get_key_metric_for_type(action.type)
-        
-        if key_metric not in before or key_metric not in after:
-            return 0.0
-        
-        # Calcular % de mejora
-        before_val = before[key_metric]
-        after_val = after[key_metric]
-        
-        if before_val == 0:
-            return 0.0
-        
-        improvement_pct = ((after_val - before_val) / before_val) * 100
-        action.impact_actual = improvement_pct
-        
-        # Marcar como completado
-        action.status = ActionStatus.COMPLETED
+        self.actions.extend(actions)
         self._save_data()
         
-        logger.info(f"📈 Impact measured: {improvement_pct:+.1f}% for {action.name}")
-        return improvement_pct
+        return actions
     
-    def _get_key_metric_for_type(self, opt_type: OptimizationType) -> str:
-        """Obtiene métrica clave para tipo de optimización."""
-        metric_map = {
-            OptimizationType.ONBOARDING: 'onboarding_completion_rate',
-            OptimizationType.CONVERSION: 'premium_conversion_rate',
-            OptimizationType.RETENTION: 'day7_retention',
-            OptimizationType.ENGAGEMENT: 'button_click_rate',
-            OptimizationType.PERFORMANCE: 'avg_response_time',
-            OptimizationType.REVENUE: 'revenue_per_user'
-        }
-        return metric_map.get(opt_type, 'overall_score')
+    def _determine_priority(self, insight: OptimizationInsight) -> ActionPriority:
+        """Determina prioridad de acción."""
+        # Basado en área e impacto
+        if insight.area == OptimizationArea.ONBOARDING:
+            return ActionPriority.CRITICAL
+        elif insight.area == OptimizationArea.PREMIUM:
+            return ActionPriority.HIGH
+        elif insight.area == OptimizationArea.PERFORMANCE:
+            return ActionPriority.HIGH
+        else:
+            return ActionPriority.MEDIUM
     
-    def rollback_if_negative(self, action: OptimizationAction, threshold: float = -5.0) -> bool:
-        """Rollback si impacto es negativo."""
-        impact = self.measure_impact(action)
+    def _estimate_impact(self, insight: OptimizationInsight, recommendation: str) -> str:
+        """Estima impacto de recomendación."""
+        if insight.area == OptimizationArea.ONBOARDING:
+            return "+5-10% completion rate"
+        elif insight.area == OptimizationArea.BUTTONS:
+            return "+10-15% CTR"
+        elif insight.area == OptimizationArea.PREMIUM:
+            return "+2-5% conversion"
+        elif insight.area == OptimizationArea.PERFORMANCE:
+            return "-30-50% response time"
+        else:
+            return "Moderate improvement"
+    
+    # ═══════════════════════════════════════════════════════════════════
+    #  AUTO-OPTIMIZATION
+    # ═══════════════════════════════════════════════════════════════════
+    
+    def auto_optimize_quick_actions(self):
+        """Optimiza quick actions basado en uso."""
+        # Obtener top botones
+        if not self.monitoring:
+            return
         
-        if impact < threshold:
-            logger.warning(f"🔙 Rolling back {action.name}: {impact:.1f}% impact")
-            action.status = ActionStatus.ROLLED_BACK
-            action.rolled_back_at = datetime.now().isoformat()
+        top_buttons = self.monitoring.get_top_buttons(hours=168, limit=20)  # Última semana
+        
+        # Identificar quick actions con bajo uso
+        low_usage = {k: v for k, v in self.quick_actions.items() 
+                    if v['usage_count'] < 10}
+        
+        # Reemplazar con versiones de top buttons
+        for button_id, _ in top_buttons[:4]:
+            if button_id not in [qa['callback'] for qa in self.quick_actions.values()]:
+                # Agregar como quick action si no existe
+                action_id = f"quick_{button_id}"
+                if action_id not in self.quick_actions:
+                    self.quick_actions[action_id] = {
+                        'label': f"⚡ {button_id.replace('_', ' ').title()}",
+                        'callback': button_id,
+                        'description': f"Quick access to {button_id}",
+                        'usage_count': 0
+                    }
+        
+        self._save_data()
+        logger.info(f"🔄 Quick actions optimized: {len(self.quick_actions)} total")
+    
+    def auto_optimize_premium_upsells(self):
+        """Optimiza premium upsells basado en conversión."""
+        # Encontrar mejor contexto
+        best = max(self.premium_upsells.items(), 
+                  key=lambda x: x[1]['conversion_rate'])
+        
+        best_context, best_data = best
+        
+        if best_data['conversion_rate'] > 0.05:
+            # Aumentar frecuencia del mejor contexto
+            logger.info(f"💎 Best premium context: {best_context} ({best_data['conversion_rate']:.1%})")
+            
+            # TODO: Ajustar frecuencia de display
+    
+    def auto_manage_ab_tests(self):
+        """Gestiona A/B tests automáticamente."""
+        if not self.ab_testing:
+            return
+        
+        for exp_id, experiment in self.ab_testing.experiments.items():
+            if experiment.status.value != 'running':
+                continue
+            
+            # Detectar winner
+            winner = self.ab_testing.detect_winner(exp_id)
+            
+            if winner:
+                # Auto-rollout
+                self.ab_testing.rollout_winner(exp_id, winner)
+                logger.info(f"🏆 Auto-rolled out winner for {exp_id}: {winner}")
+                
+                # Crear action
+                action = OptimizationAction(
+                    action_id=f"ACT_{int(datetime.now().timestamp())}_ROLLOUT",
+                    area=OptimizationArea.FEATURES,
+                    priority=ActionPriority.HIGH,
+                    title=f"Rollout A/B test winner: {exp_id}",
+                    description=f"Winner variant '{winner}' rolled out automatically",
+                    expected_impact="Improved metrics based on test results",
+                    status=ActionStatus.COMPLETED,
+                    created_at=datetime.now().isoformat(),
+                    completed_at=datetime.now().isoformat(),
+                    result=f"Successfully rolled out {winner}"
+                )
+                self.actions.append(action)
+        
+        self._save_data()
+    
+    def auto_tune_performance(self):
+        """Auto-tunea performance basado en métricas."""
+        if not self.monitoring:
+            return
+        
+        avg_response = self.monitoring.get_avg_response_time(hours=24)
+        
+        recommendations = []
+        
+        if avg_response > 1000:
+            recommendations.append("Enable aggressive caching")
+            recommendations.append("Optimize slow queries")
+        
+        if recommendations:
+            action = OptimizationAction(
+                action_id=f"ACT_{int(datetime.now().timestamp())}_PERF",
+                area=OptimizationArea.PERFORMANCE,
+                priority=ActionPriority.HIGH,
+                title="Auto-tune performance",
+                description="Automated performance optimizations",
+                expected_impact="-30% response time",
+                status=ActionStatus.PENDING,
+                created_at=datetime.now().isoformat()
+            )
+            self.actions.append(action)
             self._save_data()
-            return True
-        
-        return False
     
-    # ═══════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════════
     #  REPORTING
-    # ═══════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════════
     
-    def generate_optimization_report(self, days: int = 7) -> Dict:
-        """Genera reporte de optimizaciones."""
-        cutoff = datetime.now() - timedelta(days=days)
+    def generate_optimization_report(self) -> Dict:
+        """Genera reporte de optimización."""
+        # Recent insights
+        recent_insights = [i for i in self.insights
+                          if datetime.fromisoformat(i.created_at) > datetime.now() - timedelta(days=7)]
         
-        recent_actions = [
-            a for a in self.actions
-            if datetime.fromisoformat(a.created_at) >= cutoff
-        ]
+        # Pending actions
+        pending_actions = [a for a in self.actions if a.status == ActionStatus.PENDING]
         
-        recent_insights = [
-            i for i in self.insights
-            if datetime.fromisoformat(i.timestamp) >= cutoff
-        ]
-        
-        # Estadísticas
-        total_actions = len(recent_actions)
-        successful = sum(1 for a in recent_actions if a.status == ActionStatus.COMPLETED)
-        rolled_back = sum(1 for a in recent_actions if a.status == ActionStatus.ROLLED_BACK)
-        
-        # Impacto total
-        total_impact = sum(
-            a.impact_actual for a in recent_actions
-            if a.impact_actual is not None and a.status == ActionStatus.COMPLETED
-        )
+        # Completed actions
+        completed_actions = [a for a in self.actions if a.status == ActionStatus.COMPLETED]
         
         return {
-            'period_days': days,
-            'insights_generated': len(recent_insights),
-            'actions_total': total_actions,
-            'actions_successful': successful,
-            'actions_rolled_back': rolled_back,
-            'success_rate': successful / total_actions if total_actions > 0 else 0,
-            'total_impact_pct': total_impact,
-            'top_optimizations': sorted(
-                [
-                    {
-                        'name': a.name,
-                        'impact': a.impact_actual,
-                        'type': a.type.value
-                    }
-                    for a in recent_actions
-                    if a.impact_actual is not None
-                ],
-                key=lambda x: x['impact'],
-                reverse=True
-            )[:5],
-            'pending_insights': [
-                i.to_dict() for i in recent_insights
-                if i.severity in [InsightSeverity.HIGH, InsightSeverity.CRITICAL]
-            ][:5]
+            'insights': {
+                'total': len(self.insights),
+                'recent': len(recent_insights),
+                'by_area': self._count_by_area(recent_insights)
+            },
+            'actions': {
+                'total': len(self.actions),
+                'pending': len(pending_actions),
+                'completed': len(completed_actions),
+                'by_priority': self._count_by_priority(pending_actions)
+            },
+            'quick_actions': {
+                'total': len(self.quick_actions),
+                'most_used': sorted(
+                    self.quick_actions.items(),
+                    key=lambda x: x[1]['usage_count'],
+                    reverse=True
+                )[:5]
+            },
+            'premium_upsells': {
+                'contexts': len(self.premium_upsells),
+                'best_performing': max(
+                    self.premium_upsells.items(),
+                    key=lambda x: x[1]['conversion_rate']
+                )[0] if self.premium_upsells else None
+            }
         }
     
-    def print_optimization_report(self, days: int = 7):
-        """Imprime reporte de optimizaciones."""
-        report = self.generate_optimization_report(days)
+    def _count_by_area(self, insights: List[OptimizationInsight]) -> Dict:
+        """Cuenta insights por área."""
+        counts = defaultdict(int)
+        for insight in insights:
+            counts[insight.area.value] += 1
+        return dict(counts)
+    
+    def _count_by_priority(self, actions: List[OptimizationAction]) -> Dict:
+        """Cuenta actions por prioridad."""
+        counts = defaultdict(int)
+        for action in actions:
+            counts[action.priority.value] += 1
+        return dict(counts)
+    
+    def print_optimization_report(self):
+        """Imprime reporte de optimización."""
+        report = self.generate_optimization_report()
         
         print("\n" + "="*70)
-        print(f"🔄 OPTIMIZATION REPORT - Last {days} days".center(70))
+        print("🔄 CONTINUOUS OPTIMIZATION REPORT".center(70))
         print("="*70 + "\n")
         
-        print(f"INSIGHTS GENERATED: {report['insights_generated']}\n")
+        # Insights
+        print("INSIGHTS GENERATED:")
+        print(f"  • Total: {report['insights']['total']}")
+        print(f"  • Recent (7d): {report['insights']['recent']}")
+        print(f"  • By Area:")
+        for area, count in report['insights']['by_area'].items():
+            print(f"    - {area}: {count}")
+        print()
         
-        print("ACTIONS:")
-        print(f"  • Total: {report['actions_total']}")
-        print(f"  • Successful: {report['actions_successful']}")
-        print(f"  • Rolled back: {report['actions_rolled_back']}")
-        print(f"  • Success Rate: {report['success_rate']:.1%}\n")
+        # Actions
+        print("OPTIMIZATION ACTIONS:")
+        print(f"  • Total: {report['actions']['total']}")
+        print(f"  • Pending: {report['actions']['pending']}")
+        print(f"  • Completed: {report['actions']['completed']}")
+        print(f"  • By Priority:")
+        for priority, count in report['actions']['by_priority'].items():
+            print(f"    - {priority}: {count}")
+        print()
         
-        print(f"TOTAL IMPACT: {report['total_impact_pct']:+.1f}%\n")
+        # Quick Actions
+        print("QUICK ACTIONS:")
+        print(f"  • Total: {report['quick_actions']['total']}")
+        print(f"  • Most Used:")
+        for action_id, data in report['quick_actions']['most_used']:
+            print(f"    - {action_id}: {data['usage_count']} uses")
+        print()
         
-        if report['top_optimizations']:
-            print("TOP OPTIMIZATIONS:")
-            for i, opt in enumerate(report['top_optimizations'], 1):
-                print(f"  {i}. {opt['name']} ({opt['type']}): {opt['impact']:+.1f}%")
-            print()
-        
-        if report['pending_insights']:
-            print("PENDING HIGH-PRIORITY INSIGHTS:")
-            for i, insight in enumerate(report['pending_insights'], 1):
-                severity_emoji = {
-                    'critical': '🔴',
-                    'high': '🟠',
-                    'medium': '🟡',
-                    'low': '🟢'
-                }
-                emoji = severity_emoji.get(insight['severity'], '❓')
-                print(f"  {emoji} {insight['title']}")
-                print(f"     Impact: {insight['estimated_impact']}")
-            print()
+        # Premium
+        if report['premium_upsells']['best_performing']:
+            print("PREMIUM OPTIMIZATION:")
+            print(f"  • Best Context: {report['premium_upsells']['best_performing']}")
+            best_data = self.premium_upsells[report['premium_upsells']['best_performing']]
+            print(f"  • Conversion Rate: {best_data['conversion_rate']:.1%}")
+        print()
         
         print("="*70 + "\n")
 
 
 if __name__ == '__main__':
-    # 🧪 Test del sistema
+    # 🧪 Test del engine
     print("🧪 Testing ContinuousOptimizationEngine...\n")
     
-    # Crear motor sin sistemas externos (standalone test)
     engine = ContinuousOptimizationEngine()
     
-    # Simular métricas problemáticas
-    test_metrics = {
-        'onboarding_completion_rate': 0.65,  # <70% trigger
-        'onboarding_avg_duration': 95,  # >90s trigger
-        'button_click_rate': 0.55,  # <60% trigger
-        'error_rate': 0.06,  # >5% trigger
-        'avg_response_time': 1200,  # >1000ms trigger
-        'nps_score': 38,  # <40 trigger
-    }
+    print("1. Generating insights...")
+    # Simular algunos insights
+    insight = OptimizationInsight(
+        insight_id="INS_TEST_1",
+        area=OptimizationArea.ONBOARDING,
+        title="Test Insight",
+        description="Testing optimization engine",
+        data={'test': True},
+        recommendations=["Test recommendation 1", "Test recommendation 2"],
+        created_at=datetime.now().isoformat()
+    )
+    engine.insights.append(insight)
     
-    print("1. Analyzing metrics (simulated)...")
-    # Simular insights
-    for rule_name, rule in OPTIMIZATION_RULES.items():
-        if rule['condition'](test_metrics):
-            insight = engine._create_insight_from_rule(rule_name, rule, test_metrics)
-            engine.insights.append(insight)
+    print("2. Generating actions...")
+    actions = engine.generate_actions()
+    print(f"   Generated {len(actions)} actions")
     
-    print(f"   Generated {len(engine.insights)} insights\n")
-    
-    print("2. Generating optimization report...")
-    engine.print_optimization_report(days=7)
+    print("\n3. Optimization report:")
+    engine.print_optimization_report()
     
     print("\n✅ Test completed!")
