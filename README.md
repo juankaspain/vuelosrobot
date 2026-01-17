@@ -2,7 +2,7 @@
 
 **Bot de Telegram para búsqueda de vuelos - Arquitectura Profesional Enterprise**
 
-![Version](https://img.shields.io/badge/version-15.0.0-blue)
+![Version](https://img.shields.io/badge/version-15.0.1-blue)
 ![Python](https://img.shields.io/badge/python-3.9+-green)
 ![License](https://img.shields.io/badge/license-MIT-orange)
 ![Status](https://img.shields.io/badge/status-production--ready-brightgreen)
@@ -10,9 +10,30 @@
 
 ---
 
-## 🎉 ¿Qué hay de nuevo en v15.0?
+## 🎉 ¿Qué hay de nuevo?
 
-### 📊 **FULL REPOSITORY CLEANUP COMPLETADO**
+### v15.0.1 (2026-01-17) - 🐛 BUGFIX RELEASE
+
+**Critical Fixes:**
+
+✅ **Fixed ConfigManager initialization** - Resolved `AttributeError: 'ConfigManager' object has no attribute 'config'`  
+✅ **Fixed Windows console encoding** - Resolved `UnicodeEncodeError` with UTF-8 auto-configuration  
+✅ **Demo mode improvements** - Bot can now run without real Telegram token for testing  
+✅ **Better error handling** - Improved JSON decoding and config loading errors  
+✅ **Setup wizard required** - Token from @BotFather now properly required  
+
+**Changes:**
+- ConfigManager now assigns `self.config` before calling `save()` in `_load_config()`
+- Windows console automatically reconfigured to UTF-8 encoding
+- Added `has_real_token` property to distinguish demo vs real token
+- Better user prompts for setup wizard
+- Enhanced logging for configuration issues
+
+**Migration:** No migration needed, just pull latest changes and run setup wizard if you haven't configured a token yet.
+
+### v15.0.0 (2026-01-17) - 🎆 MAJOR REFACTOR
+
+**🎯 Full Repository Cleanup & Professional Structure**
 
 ✅ **Estructura Profesional 4-Tier** - Organización enterprise-grade  
 ✅ **80+ Archivos Reorganizados** - Root limpio y estructurado  
@@ -291,6 +312,61 @@ export KIWI_API_KEY="your_api_key"
 
 ## 📆 Release Notes
 
+### v15.0.1 (2026-01-17) - 🐛 CRITICAL BUGFIX
+
+**🚨 Critical Fixes:**
+
+#### Fixed: ConfigManager Initialization Error
+- **Issue:** `AttributeError: 'ConfigManager' object has no attribute 'config'`
+- **Root cause:** `save()` was called before `self.config` was assigned in `_load_config()`
+- **Solution:** Assign `self.config` before calling `save()` method
+- **Impact:** Bot could not start on fresh installations
+
+#### Fixed: Windows Console Encoding Error
+- **Issue:** `UnicodeEncodeError: 'charmap' codec can't encode characters`
+- **Root cause:** Windows console uses cp1252 by default, can't display Unicode chars
+- **Solution:** Auto-reconfigure console to UTF-8 on Windows
+- **Impact:** Bot crashed on startup on Windows systems
+
+#### Fixed: Demo Mode Token Requirement
+- **Issue:** `You must pass the token you received from https://t.me/Botfather!`
+- **Root cause:** Bot required real token even in demo mode
+- **Solution:** Allow bot to run with setup wizard if token missing
+- **Impact:** Demo mode was unusable
+
+**🔧 Technical Changes:**
+
+```python
+# ConfigManager fix
+def _load_config(self) -> Dict:
+    if not self.config_file.exists():
+        # OLD (broken): Called save() without self.config
+        # NEW (fixed): Assign before save
+        config = self.DEFAULT_CONFIG.copy()
+        self.config = config  # ✅ Fixed!
+        self.save()
+        return config
+
+# Windows encoding fix  
+if sys.platform == "win32":
+    if sys.stdout.encoding != 'utf-8':
+        sys.stdout.reconfigure(encoding='utf-8')  # ✅ Fixed!
+```
+
+**📋 Affected Files:**
+- `vuelos_bot_unified.py` (main bot file)
+- Version bumped: 15.0.0 → 15.0.1
+
+**🎯 How to Update:**
+
+```bash
+git pull origin main
+python vuelos_bot_unified.py
+# If no token configured, setup wizard will run
+```
+
+---
+
 ### v15.0.0 (2026-01-17) - 🎆 MAJOR REFACTOR
 
 **🎯 Full Repository Cleanup & Professional Structure**
@@ -406,6 +482,26 @@ MIT License - Ver [LICENSE](LICENSE) para detalles
 
 ## 🛡️ Troubleshooting
 
+### Error: 'ConfigManager' object has no attribute 'config'
+
+**Solución:** Actualiza a v15.0.1+
+
+```bash
+git pull origin main
+python vuelos_bot_unified.py
+```
+
+### Error: UnicodeEncodeError on Windows
+
+**Solución:** Actualiza a v15.0.1+ (incluye fix automático)
+
+O manualmente:
+```bash
+# En PowerShell:
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+python vuelos_bot_unified.py
+```
+
 ### El bot no arranca después de la migración
 
 ```bash
@@ -428,7 +524,7 @@ Contiene la lista completa de archivos y su nueva ubicación.
 
 **Hecho con ❤️ en España**
 
-v15.0.0 | 2026-01-17 | 🏗️ Full Cleanup Edition
+v15.0.1 | 2026-01-17 | 🐛 Bugfix Edition
 
 [🐛 Report Bug](https://github.com/juankaspain/vuelosrobot/issues) | [✨ Request Feature](https://github.com/juankaspain/vuelosrobot/issues)
 
