@@ -1,0 +1,13 @@
+# Data Directory
+
+This directory contains:
+- Configuration files (JSON)
+- User state data
+- Analytics data
+- Cache files
+
+## Files:
+- `feature_usage.json` - Feature usage statistics
+- `paywall_events.json` - Paywall interaction events
+- `pricing_config.json` - Pricing configuration
+- `translations.json` - i18n translations
