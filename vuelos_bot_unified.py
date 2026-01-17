@@ -33,7 +33,6 @@ import logging
 import asyncio
 import random
 import time
-import signal
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
@@ -77,7 +76,7 @@ except ImportError:
 #  CONFIGURATION & CONSTANTS
 # ===============================================================================
 
-VERSION = "15.0.8"
+VERSION = "15.0.9"
 APP_NAME = "🛫 VuelosBot Unified"
 AUTHOR = "@Juanka_Spain"
 RELEASE_DATE = "2026-01-17"
@@ -112,27 +111,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ===============================================================================
-#  NUCLEAR EXIT FUNCTION
-# ===============================================================================
-
-def nuclear_exit(code=1):
-    """🔥 SALIDA NUCLEAR - Mata el proceso SIN PIEDAD."""
-    sys.stdout.flush()
-    sys.stderr.flush()
-    
-    try:
-        # Mata el proceso actual con SIGTERM
-        os.kill(os.getpid(), signal.SIGTERM)
-    except:
-        try:
-            # Si SIGTERM falla, usa SIGKILL (más agresivo)
-            os.kill(os.getpid(), signal.SIGKILL)
-        except:
-            # Último recurso: os._exit
-            os._exit(code)
-
-# ===============================================================================
-#  DATA MODELS (SIMPLIFICADO PARA FIX)
+#  DATA MODELS (SIMPLIFICADO)
 # ===============================================================================
 
 class SearchMode(Enum):
@@ -420,6 +399,7 @@ class VuelosBotUnified:
 # ===============================================================================
 
 def run_setup_wizard():
+    """Asistente de configuración inicial."""
     print("\n" + "="*70)
     print(f"{APP_NAME} v{VERSION} - Setup Wizard".center(70))
     print("="*70 + "\n")
@@ -438,7 +418,7 @@ def run_setup_wizard():
         print("   ✅ Token guardado")
     else:
         print("   ❌ Token requerido")
-        return
+        sys.exit(1)
     
     print("\n2️⃣ API Keys (opcional)\n")
     use_apis = input("   ¿Configurar APIs? (s/n): ").lower() == 's'
@@ -453,87 +433,83 @@ def run_setup_wizard():
         print("   ⚠️ Modo DEMO activado")
     
     config.save()
-    print("\n✅ Configuración completada!\n")
+    print("\n✅ Configuración completada!")
+    print("\n🚀 Ahora ejecuta: python vuelos_bot_unified.py\n")
 
 # ===============================================================================
-#  MAIN - NUCLEAR VERSION
+#  MAIN - VERSIÓN SIN INPUT INTERACTIVO
 # ===============================================================================
+
+def show_help():
+    """Muestra ayuda de uso."""
+    print("\n" + "="*70)
+    print(f"{APP_NAME} v{VERSION}".center(70))
+    print(f"by {AUTHOR} | {RELEASE_DATE}".center(70))
+    print("="*70)
+    print("\n📋 USO:\n")
+    print("   python vuelos_bot_unified.py        # Inicia el bot")
+    print("   python vuelos_bot_unified.py setup  # Configuración inicial")
+    print("\n❌ ERROR: Bot no configurado")
+    print("\n💡 SOLUCIÓN:")
+    print("   1. Ejecuta: python vuelos_bot_unified.py setup")
+    print("   2. Ingresa tu token de Telegram de @BotFather")
+    print("   3. Ejecuta: python vuelos_bot_unified.py\n")
+    print(f"📁 Archivo de config: {CONFIG_FILE}\n")
 
 def main():
-    """🔥 Función principal - VERSIÓN NUCLEAR."""
+    """🎯 Función principal - SIN INPUT INTERACTIVO."""
+    
+    # Check for setup command
+    if len(sys.argv) > 1 and sys.argv[1] == 'setup':
+        run_setup_wizard()
+        sys.exit(0)
     
     print("\n" + "="*70)
     print(f"{APP_NAME} v{VERSION}".center(70))
     print(f"by {AUTHOR} | {RELEASE_DATE}".center(70))
     print("="*70 + "\n")
-    sys.stdout.flush()
     
     if not TELEGRAM_AVAILABLE:
         print("❌ python-telegram-bot no instalado")
         print("   Instala con: pip install python-telegram-bot\n")
-        sys.stdout.flush()
-        nuclear_exit(1)
+        sys.exit(1)
     
     config = ConfigManager()
     
+    # CHECK AUTOMÁTICO - SIN PREGUNTAR
     if not config.has_real_token:
-        print("⚠️ Bot sin token de Telegram configurado")
-        sys.stdout.flush()
-        
-        try:
-            response = input("\n¿Deseas ejecutar el setup wizard? (s/n): ").strip().lower()
-        except (KeyboardInterrupt, EOFError):
-            print("\n❌ Cancelado\n")
-            sys.stdout.flush()
-            nuclear_exit(1)
-        
-        if response == 's':
-            run_setup_wizard()
-            print("\n✅ Setup completado. Ejecuta el bot de nuevo.\n")
-            sys.stdout.flush()
-            nuclear_exit(0)
-        else:
-            # 🔥 NUCLEAR EXIT - INMEDIATO
-            print("\n❌ Bot no configurado. Saliendo...")
-            sys.stdout.flush()
-            print("💡 Para configurar, ejecuta de nuevo y responde 's'\n")
-            sys.stdout.flush()
-            # MATA EL PROCESO INMEDIATAMENTE
-            nuclear_exit(1)
+        show_help()
+        sys.exit(1)
     
+    # Si llegamos aquí, tenemos config válida
     print("✅ Configuración cargada")
     print(f"   Token: ✅")
     print(f"   Búsqueda: {'🎮 DEMO' if config.demo_mode else '🌐 REAL'}")
     print()
-    sys.stdout.flush()
     
     try:
         asyncio.run(async_main())
     except KeyboardInterrupt:
         print("\n✅ Programa terminado\n")
-        sys.stdout.flush()
-        nuclear_exit(0)
+        sys.exit(0)
     except Exception as e:
         print(f"\n❌ Error: {e}\n")
-        sys.stdout.flush()
-        nuclear_exit(1)
+        sys.exit(1)
 
 async def async_main():
+    """Main async function."""
     bot = VuelosBotUnified()
     try:
         print("🚀 Iniciando bot...\n")
-        sys.stdout.flush()
         await bot.start_bot()
     except KeyboardInterrupt:
         print("\n⏹️ Deteniendo...")
-        sys.stdout.flush()
     except Exception as e:
         logger.error(f"❌ Error: {e}")
         raise
     finally:
         await bot.stop_bot()
         print("\n✅ Bot detenido\n")
-        sys.stdout.flush()
 
 if __name__ == "__main__":
     main()
