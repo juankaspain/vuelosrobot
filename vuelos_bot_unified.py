@@ -78,7 +78,7 @@ except ImportError:
 #  CONFIGURATION & CONSTANTS
 # ===============================================================================
 
-VERSION = "15.0.4"
+VERSION = "15.0.5"
 APP_NAME = "🛫 VuelosBot Unified"
 AUTHOR = "@Juanka_Spain"
 RELEASE_DATE = "2026-01-17"
@@ -1481,26 +1481,19 @@ def main():
         try:
             response = input("\n¿Deseas ejecutar el setup wizard? (s/n): ").strip().lower()
         except (EOFError, KeyboardInterrupt):
-            print("\n\n❌ Operación cancelada\n", flush=True)
-            sys.stdout.flush()
-            sys.stderr.flush()
-            os._exit(1)
+            print("\n\n❌ Operación cancelada\n")
+            sys.exit(1)
         
         if response == 's':
             run_setup_wizard()
-            print("\n✅ Setup completado. Ejecuta el bot de nuevo para iniciar.\n", flush=True)
-            sys.stdout.flush()
-            sys.stderr.flush()
-            os._exit(0)
+            print("\n✅ Setup completado. Ejecuta el bot de nuevo para iniciar.\n")
+            sys.exit(0)
         else:
-            # Force immediate output before exit
-            print("\n❌ Bot no configurado. Saliendo...\n", flush=True)
-            print("💡 Para configurar el bot, ejecuta de nuevo y responde 's'\n", flush=True)
-            # Flush all streams to ensure output is written
-            sys.stdout.flush()
-            sys.stderr.flush()
-            # Hard exit - terminates immediately
-            os._exit(1)
+            # Use sys.exit() instead of os._exit() to allow buffer flush
+            print("\n❌ Bot no configurado. Saliendo...\n")
+            print("💡 Para configurar el bot, ejecuta de nuevo y responde 's'\n")
+            time.sleep(0.1)  # Give time for buffer flush on Windows
+            sys.exit(1)
     
     # Show config status
     print("✅ Configuración cargada")
@@ -1514,15 +1507,13 @@ def main():
         asyncio.run(async_main())
     except KeyboardInterrupt:
         print("\n✅ Programa terminado por el usuario\n")
-        sys.stdout.flush()
-        os._exit(0)
+        sys.exit(0)
     except Exception as e:
         print(f"\n❌ Error: {e}\n")
-        sys.stdout.flush()
-        os._exit(1)
+        sys.exit(1)
 
 async def async_main():
-    """Main asyn function."""
+    """Main async function."""
     # Initialize bot
     bot = VuelosBotUnified()
     
