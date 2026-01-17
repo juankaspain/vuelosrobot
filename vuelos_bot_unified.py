@@ -78,7 +78,7 @@ except ImportError:
 #  CONFIGURATION & CONSTANTS
 # ===============================================================================
 
-VERSION = "15.0.0"
+VERSION = "15.0.1"
 APP_NAME = "🛫 VuelosBot Unified"
 AUTHOR = "@Juanka_Spain"
 RELEASE_DATE = "2026-01-17"
@@ -283,17 +283,23 @@ class ConfigManager:
         """Carga configuración desde archivo o crea default."""
         if self.config_file.exists():
             try:
-                with open(self.config_file, 'r', encoding='utf-8') as f:
-                    config = json.load(f)
-                logger.info("✅ Configuración cargada")
-                return {**self.DEFAULT_CONFIG, **config}
+                with open(self.config_file, 'r', encoding='utf-8') as f:                    data = json.load(f)
+                logger.info("✅ Configuración cargada desde archivo")
+                return {**self.DEFAULT_CONFIG, **data}
+            except json.JSONDecodeError as e:
+                logger.error(f"❌ Error decodificando JSON: {e}")
+                logger.warning("⚠️ Usando configuración por defecto")
+                return self.DEFAULT_CONFIG.copy()
             except Exception as e:
                 logger.error(f"❌ Error cargando config: {e}")
                 return self.DEFAULT_CONFIG.copy()
         else:
-            logger.warning("⚠️ Config no existe, usando defaults")
+            logger.warning("⚠️ Config no existe, creando defaults")
+            # Assign config first before calling save()
+            config = self.DEFAULT_CONFIG.copy()
+            self.config = config
             self.save()
-            return self.DEFAULT_CONFIG.copy()
+            return config
     
     def save(self):
         """Guarda configuración."""
@@ -328,7 +334,12 @@ class ConfigManager:
     
     @property
     def bot_token(self) -> str:
-        return self.get('telegram.token', '')
+        """Obtiene el token del bot (o dummy token para demo)."""
+        token = self.get('telegram.token', '')
+        # En modo demo, si no hay token, usar uno dummy (NO FUNCIONARÁ con Telegram real)
+        if not token and self.demo_mode:
+            return "DEMO_MODE_NO_TOKEN"
+        return token
     
     @property
     def demo_mode(self) -> bool:
@@ -337,7 +348,14 @@ class ConfigManager:
     @property
     def is_configured(self) -> bool:
         """Verifica si el bot está configurado."""
-        return bool(self.bot_token) or self.demo_mode
+        real_token = self.get('telegram.token', '')
+        return bool(real_token) or self.demo_mode
+    
+    @property
+    def has_real_token(self) -> bool:
+        """Verifica si tiene un token real de Telegram."""
+        token = self.get('telegram.token', '')
+        return bool(token) and token != "DEMO_MODE_NO_TOKEN"
 
 # ===============================================================================
 #  DATA PERSISTENCE MANAGER
@@ -381,8 +399,11 @@ class DataManager:
         data = self._load_json(DEALS_FILE, {})
         deals = {}
         for k, v in data.items():
-            v['flight'] = Flight(**v['flight'])
-            deals[k] = Deal(**v)
+            try:
+                v['flight'] = Flight(**v['flight'])
+                deals[k] = Deal(**v)
+            except Exception as e:
+                logger.error(f"❌ Error loading deal {k}: {e}")
         return deals
     
     def _load_alerts(self) -> Dict[str, PriceAlert]:
@@ -658,8 +679,11 @@ class VuelosBotUnified:
     async def start_bot(self):
         """Inicia el bot de Telegram."""
         
-        if not self.config.is_configured:
-            logger.error("❌ Bot no configurado. Ejecuta el setup wizard primero.")
+        if not self.config.has_real_token:
+            logger.error("❌ Bot necesita un token real de Telegram.")
+            logger.info("💡 Ejecuta el setup wizard para configurar el token")
+            print("\n⚠️ MODO DEMO: No se puede iniciar bot sin token real")
+            print("   Para configurar, ejecuta el setup wizard al inicio\n")
             return
         
         # Build application
@@ -793,7 +817,7 @@ class VuelosBotUnified:
             logger.error(f"❌ Error enviando notificación: {e}")
     
     # ===============================================================
-    #  COMMAND HANDLERS
+    #  COMMAND HANDLERS  
     # ===============================================================
     
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1389,27 +1413,36 @@ def run_setup_wizard():
     # Bot token
     print("1️⃣ Token de Telegram")
     print("   Obtén tu token de @BotFather en Telegram")
-    token = input("   Token (o Enter para modo demo): ").strip()
+    print("   Necesario para que el bot funcione\n")
+    token = input("   Token: ").strip()
     
     if token:
         config.set('telegram.token', token)
-        config.set('features.demo_mode', False)
+        config.set('features.demo_mode', True)  # Keep demo mode for flight search
         print("   ✅ Token guardado")
     else:
-        config.set('features.demo_mode', True)
-        print("   ⚠️ Modo DEMO activado (sin API real)")
+        print("   ❌ Token requerido para ejecutar el bot")
+        return
     
     # API Keys (opcional)
-    print("\n2️⃣ API Keys (opcional para modo real)")
-    print("   Deja en blanco para modo demo")
+    print("\n2️⃣ API Keys (opcional - para búsqueda real de vuelos)")
+    print("   Deja en blanco para usar modo demo de búsqueda\n")
     
-    skyscanner_key = input("   Skyscanner API Key: ").strip()
-    if skyscanner_key:
-        config.set('api_keys.skyscanner', skyscanner_key)
+    use_real_apis = input("   ¿Configurar APIs reales? (s/n): ").lower() == 's'
     
-    kiwi_key = input("   Kiwi API Key: ").strip()
-    if kiwi_key:
-        config.set('api_keys.kiwi', kiwi_key)
+    if use_real_apis:
+        skyscanner_key = input("   Skyscanner API Key: ").strip()
+        if skyscanner_key:
+            config.set('api_keys.skyscanner', skyscanner_key)
+        
+        kiwi_key = input("   Kiwi API Key: ").strip()
+        if kiwi_key:
+            config.set('api_keys.kiwi', kiwi_key)
+        
+        config.set('features.demo_mode', False)
+        print("   ✅ APIs configuradas - Modo REAL activado")
+    else:
+        print("   ⚠️ Modo DEMO de búsqueda activado")
     
     # Save config
     config.save()
@@ -1439,20 +1472,21 @@ async def main():
     # Check config
     config = ConfigManager()
     
-    if not config.is_configured:
-        print("⚠️ Bot no configurado")
+    if not config.has_real_token:
+        print("⚠️ Bot sin token de Telegram configurado")
         print("\n¿Deseas ejecutar el setup wizard? (s/n): ", end="")
         if input().lower() == 's':
             run_setup_wizard()
             return
         else:
             print("\n❌ Configura el bot antes de ejecutarlo")
+            print("   Necesitas un token de @BotFather para iniciar\n")
             return
     
     # Show config status
     print("✅ Configuración cargada")
-    print(f"   Modo: {'🎮 DEMO' if config.demo_mode else '🌐 REAL'}")
-    print(f"   Token: {'✅ Configurado' if config.bot_token else '❌ No configurado'}")
+    print(f"   Token: ✅ Configurado")
+    print(f"   Búsqueda: {'🎮 DEMO' if config.demo_mode else '🌐 REAL'}")
     print()
     
     # Initialize bot
