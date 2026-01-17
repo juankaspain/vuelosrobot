@@ -76,7 +76,7 @@ except ImportError:
 #  CONFIGURATION & CONSTANTS
 # ===============================================================================
 
-VERSION = "15.0.9"
+VERSION = "15.0.10"
 APP_NAME = "🛫 VuelosBot Unified"
 AUTHOR = "@Juanka_Spain"
 RELEASE_DATE = "2026-01-17"
@@ -395,46 +395,85 @@ class VuelosBotUnified:
         logger.info("✅ Bot detenido")
 
 # ===============================================================================
-#  SETUP WIZARD
+#  SETUP WIZARD - CON FLUSH AGRESIVO
 # ===============================================================================
 
 def run_setup_wizard():
-    """Asistente de configuración inicial."""
+    """Asistente de configuración inicial con flush agresivo."""
     print("\n" + "="*70)
+    sys.stdout.flush()
     print(f"{APP_NAME} v{VERSION} - Setup Wizard".center(70))
+    sys.stdout.flush()
     print("="*70 + "\n")
+    sys.stdout.flush()
     
     config = ConfigManager()
     
+    # PASO 1: TOKEN
     print("🔧 Configuración del Bot\n")
+    sys.stdout.flush()
     print("1️⃣ Token de Telegram")
+    sys.stdout.flush()
     print("   Obtén tu token de @BotFather\n")
+    sys.stdout.flush()
     
+    # Input con flush inmediato después
     token = input("   Token: ").strip()
+    sys.stdout.flush()
+    print()  # Línea vacía
+    sys.stdout.flush()
     
     if token:
         config.set('telegram.token', token)
         config.set('features.demo_mode', True)
-        print("   ✅ Token guardado")
+        print("   ✅ Token guardado correctamente")
+        sys.stdout.flush()
     else:
-        print("   ❌ Token requerido")
+        print("   ❌ Token requerido - Configuración cancelada")
+        sys.stdout.flush()
         sys.exit(1)
     
-    print("\n2️⃣ API Keys (opcional)\n")
-    use_apis = input("   ¿Configurar APIs? (s/n): ").lower() == 's'
+    # PASO 2: API KEYS
+    print("\n2️⃣ API Keys (opcional - presiona Enter para saltar)\n")
+    sys.stdout.flush()
     
-    if use_apis:
-        sk = input("   Skyscanner Key: ").strip()
+    # Input con flush inmediato después
+    use_apis = input("   ¿Configurar APIs de búsqueda? (s/n): ").strip().lower()
+    sys.stdout.flush()
+    print()  # Línea vacía
+    sys.stdout.flush()
+    
+    if use_apis == 's':
+        print("   Configurando APIs...\n")
+        sys.stdout.flush()
+        
+        sk = input("   Skyscanner API Key (o Enter para saltar): ").strip()
+        sys.stdout.flush()
+        print()  # Línea vacía
+        sys.stdout.flush()
+        
         if sk:
             config.set('api_keys.skyscanner', sk)
-        config.set('features.demo_mode', False)
-        print("   ✅ APIs configuradas")
+            print("   ✅ Skyscanner configurado")
+            sys.stdout.flush()
+        
+        config.set('features.demo_mode', not bool(sk))
+        print("\n   ✅ APIs configuradas")
+        sys.stdout.flush()
     else:
-        print("   ⚠️ Modo DEMO activado")
+        print("   ⚠️ Modo DEMO activado (sin APIs reales)")
+        sys.stdout.flush()
     
+    # FINALIZACIÓN
     config.save()
-    print("\n✅ Configuración completada!")
+    print("\n" + "="*70)
+    sys.stdout.flush()
+    print("✅ Configuración completada exitosamente!".center(70))
+    sys.stdout.flush()
+    print("="*70)
+    sys.stdout.flush()
     print("\n🚀 Ahora ejecuta: python vuelos_bot_unified.py\n")
+    sys.stdout.flush()
 
 # ===============================================================================
 #  MAIN - VERSIÓN SIN INPUT INTERACTIVO
