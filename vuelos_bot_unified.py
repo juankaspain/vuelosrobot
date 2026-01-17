@@ -78,7 +78,7 @@ except ImportError:
 #  CONFIGURATION & CONSTANTS
 # ===============================================================================
 
-VERSION = "15.0.2"
+VERSION = "15.0.3"
 APP_NAME = "🛫 VuelosBot Unified"
 AUTHOR = "@Juanka_Spain"
 RELEASE_DATE = "2026-01-17"
@@ -1456,7 +1456,7 @@ def run_setup_wizard():
 #  MAIN
 # ===============================================================================
 
-async def main():
+def main():
     """🚀 Función principal."""
     
     print("\n" + "="*70)
@@ -1468,54 +1468,77 @@ async def main():
     if not TELEGRAM_AVAILABLE:
         print("❌ python-telegram-bot no instalado")
         print("   Instala con: pip install python-telegram-bot")
-        sys.exit(1)
+        sys.stdout.flush()
+        os._exit(1)
     
     # Check config
     config = ConfigManager()
     
     if not config.has_real_token:
         print("⚠️ Bot sin token de Telegram configurado")
-        response = input("\n¿Deseas ejecutar el setup wizard? (s/n): ").lower()
+        sys.stdout.flush()
+        
+        try:
+            response = input("\n¿Deseas ejecutar el setup wizard? (s/n): ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("\n\n❌ Operación cancelada\n")
+            sys.stdout.flush()
+            os._exit(1)
         
         if response == 's':
             run_setup_wizard()
             print("\n✅ Setup completado. Ejecuta el bot de nuevo para iniciar.\n")
-            sys.exit(0)
+            sys.stdout.flush()
+            os._exit(0)
         else:
             print("\n❌ Bot no configurado. Saliendo...\n")
             print("💡 Para configurar el bot, ejecuta de nuevo y responde 's'\n")
-            sys.exit(1)
+            sys.stdout.flush()
+            os._exit(1)
     
     # Show config status
     print("✅ Configuración cargada")
     print(f"   Token: ✅ Configurado")
     print(f"   Búsqueda: {'🎮 DEMO' if config.demo_mode else '🌐 REAL'}")
     print()
+    sys.stdout.flush()
     
+    # Run async main
+    try:
+        asyncio.run(async_main())
+    except KeyboardInterrupt:
+        print("\n✅ Programa terminado por el usuario\n")
+        sys.stdout.flush()
+        os._exit(0)
+    except Exception as e:
+        print(f"\n❌ Error: {e}\n")
+        sys.stdout.flush()
+        os._exit(1)
+
+async def async_main():
+    """Main asyn function."""
     # Initialize bot
     bot = VuelosBotUnified()
     
     try:
         print("🚀 Iniciando bot...\n")
+        sys.stdout.flush()
         await bot.start_bot()
     
     except KeyboardInterrupt:
         print("\n⏹️ Deteniendo bot...")
+        sys.stdout.flush()
     
     except Exception as e:
         logger.error(f"❌ Error fatal: {e}")
         print(f"\n❌ Error fatal: {e}")
-        sys.exit(1)
+        sys.stdout.flush()
+        raise
     
     finally:
         await bot.stop_bot()
         print("\n✅ Bot detenido correctamente\n")
+        sys.stdout.flush()
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\n✅ Programa terminado por el usuario\n")
-    except Exception as e:
-        print(f"\n❌ Error: {e}\n")
-        sys.exit(1)
+    main()
