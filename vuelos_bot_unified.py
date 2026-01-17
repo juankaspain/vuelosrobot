@@ -78,7 +78,7 @@ except ImportError:
 #  CONFIGURATION & CONSTANTS
 # ===============================================================================
 
-VERSION = "15.0.1"
+VERSION = "15.0.2"
 APP_NAME = "🛫 VuelosBot Unified"
 AUTHOR = "@Juanka_Spain"
 RELEASE_DATE = "2026-01-17"
@@ -283,7 +283,8 @@ class ConfigManager:
         """Carga configuración desde archivo o crea default."""
         if self.config_file.exists():
             try:
-                with open(self.config_file, 'r', encoding='utf-8') as f:                    data = json.load(f)
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
                 logger.info("✅ Configuración cargada desde archivo")
                 return {**self.DEFAULT_CONFIG, **data}
             except json.JSONDecodeError as e:
@@ -1467,21 +1468,23 @@ async def main():
     if not TELEGRAM_AVAILABLE:
         print("❌ python-telegram-bot no instalado")
         print("   Instala con: pip install python-telegram-bot")
-        return
+        sys.exit(1)
     
     # Check config
     config = ConfigManager()
     
     if not config.has_real_token:
         print("⚠️ Bot sin token de Telegram configurado")
-        print("\n¿Deseas ejecutar el setup wizard? (s/n): ", end="")
-        if input().lower() == 's':
+        response = input("\n¿Deseas ejecutar el setup wizard? (s/n): ").lower()
+        
+        if response == 's':
             run_setup_wizard()
-            return
+            print("\n✅ Setup completado. Ejecuta el bot de nuevo para iniciar.\n")
+            sys.exit(0)
         else:
-            print("\n❌ Configura el bot antes de ejecutarlo")
-            print("   Necesitas un token de @BotFather para iniciar\n")
-            return
+            print("\n❌ Bot no configurado. Saliendo...\n")
+            print("💡 Para configurar el bot, ejecuta de nuevo y responde 's'\n")
+            sys.exit(1)
     
     # Show config status
     print("✅ Configuración cargada")
@@ -1502,6 +1505,7 @@ async def main():
     except Exception as e:
         logger.error(f"❌ Error fatal: {e}")
         print(f"\n❌ Error fatal: {e}")
+        sys.exit(1)
     
     finally:
         await bot.stop_bot()
@@ -1512,3 +1516,6 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\n✅ Programa terminado por el usuario\n")
+    except Exception as e:
+        print(f"\n❌ Error: {e}\n")
+        sys.exit(1)
