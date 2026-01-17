@@ -1,171 +1,68 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Search Analytics System - Advanced Search Methods
-Cazador Supremo v14.0 - Phase 3
+Search Analytics System - Cazador Supremo v14.0 Phase 3
 
-Comprehensive analytics for search methods:
+Comprehensive analytics for advanced search methods:
 - Usage tracking per method
 - Conversion funnel analysis
 - A/B testing framework
-- Performance monitoring
-- User behavior heatmaps
-- Export capabilities
+- Heatmap generation
+- Performance metrics
+- User behavior analysis
 
 Author: @Juanka_Spain
-Version: 14.0.0
+Version: 14.0.3
 Date: 2026-01-17
 """
 
 import json
+import time
 import logging
+from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
 from collections import defaultdict, Counter
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 import threading
-from enum import Enum
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# ENUMS
-# ============================================================================
-
-class SearchMethod(Enum):
-    """Search method types"""
-    FLEXIBLE_DATES = "flexible_dates"
-    MULTI_CITY = "multi_city"
-    BUDGET = "budget"
-    AIRLINE_SPECIFIC = "airline_specific"
-    NONSTOP_ONLY = "nonstop_only"
-    REDEYE = "redeye"
-    NEARBY_AIRPORTS = "nearby_airports"
-    LASTMINUTE = "lastminute"
-    SEASONAL_TRENDS = "seasonal_trends"
-    GROUP_BOOKING = "group_booking"
-
-
-class EventType(Enum):
-    """Analytics event types"""
-    SEARCH_STARTED = "search_started"
-    SEARCH_COMPLETED = "search_completed"
-    SEARCH_FAILED = "search_failed"
-    RESULTS_VIEWED = "results_viewed"
-    RESULT_CLICKED = "result_clicked"
-    BOOKING_INITIATED = "booking_initiated"
-    BOOKING_COMPLETED = "booking_completed"
-    SHARED = "shared"
-    SAVED = "saved"
-
-
-# ============================================================================
-# DATA CLASSES
+# DATA MODELS
 # ============================================================================
 
 @dataclass
-class AnalyticsEvent:
-    """Single analytics event"""
+class SearchEvent:
+    """Single search event"""
+    timestamp: datetime
     user_id: int
     method: str
-    event_type: str
-    timestamp: float
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    session_id: Optional[str] = None
+    params: Dict[str, Any]
+    duration_ms: float
+    result_count: int
+    cached: bool = False
+    variant: Optional[str] = None  # For A/B testing
     
     def to_dict(self) -> Dict:
-        return {
-            'user_id': self.user_id,
-            'method': self.method,
-            'event_type': self.event_type,
-            'timestamp': datetime.fromtimestamp(self.timestamp).isoformat(),
-            'metadata': self.metadata,
-            'session_id': self.session_id
-        }
-
+        d = asdict(self)
+        d['timestamp'] = self.timestamp.isoformat()
+        return d
 
 @dataclass
-class SearchMetrics:
-    """Metrics for a search method"""
-    method: str
-    total_searches: int = 0
-    successful_searches: int = 0
-    failed_searches: int = 0
-    total_results_viewed: int = 0
-    total_clicks: int = 0
-    total_bookings: int = 0
-    total_shares: int = 0
-    total_saves: int = 0
-    avg_response_time_ms: float = 0.0
-    unique_users: int = 0
-    
-    @property
-    def success_rate(self) -> float:
-        if self.total_searches == 0:
-            return 0.0
-        return (self.successful_searches / self.total_searches) * 100
-    
-    @property
-    def click_through_rate(self) -> float:
-        if self.total_results_viewed == 0:
-            return 0.0
-        return (self.total_clicks / self.total_results_viewed) * 100
-    
-    @property
-    def conversion_rate(self) -> float:
-        if self.total_searches == 0:
-            return 0.0
-        return (self.total_bookings / self.total_searches) * 100
+class ConversionEvent:
+    """Conversion event (click, booking, share, etc.)"""
+    timestamp: datetime
+    user_id: int
+    search_method: str
+    action: str  # 'view_details', 'book', 'share', 'save'
+    value: Optional[float] = None  # Booking value
     
     def to_dict(self) -> Dict:
-        return {
-            'method': self.method,
-            'total_searches': self.total_searches,
-            'successful_searches': self.successful_searches,
-            'failed_searches': self.failed_searches,
-            'success_rate': f"{self.success_rate:.2f}%",
-            'total_results_viewed': self.total_results_viewed,
-            'total_clicks': self.total_clicks,
-            'click_through_rate': f"{self.click_through_rate:.2f}%",
-            'total_bookings': self.total_bookings,
-            'conversion_rate': f"{self.conversion_rate:.2f}%",
-            'total_shares': self.total_shares,
-            'total_saves': self.total_saves,
-            'avg_response_time_ms': round(self.avg_response_time_ms, 2),
-            'unique_users': self.unique_users
-        }
-
-
-@dataclass
-class FunnelStage:
-    """Funnel stage metrics"""
-    stage_name: str
-    users_entered: int = 0
-    users_completed: int = 0
-    drop_off_count: int = 0
-    
-    @property
-    def conversion_rate(self) -> float:
-        if self.users_entered == 0:
-            return 0.0
-        return (self.users_completed / self.users_entered) * 100
-    
-    @property
-    def drop_off_rate(self) -> float:
-        if self.users_entered == 0:
-            return 0.0
-        return (self.drop_off_count / self.users_entered) * 100
-    
-    def to_dict(self) -> Dict:
-        return {
-            'stage': self.stage_name,
-            'entered': self.users_entered,
-            'completed': self.users_completed,
-            'dropped': self.drop_off_count,
-            'conversion_rate': f"{self.conversion_rate:.2f}%",
-            'drop_off_rate': f"{self.drop_off_rate:.2f}%"
-        }
+        d = asdict(self)
+        d['timestamp'] = self.timestamp.isoformat()
+        return d
 
 
 # ============================================================================
@@ -174,333 +71,376 @@ class FunnelStage:
 
 class SearchAnalyticsTracker:
     """
-    Main analytics tracker for search methods
-    
-    Features:
-    - Event tracking
-    - Metrics aggregation
-    - Funnel analysis
-    - Performance monitoring
-    - User segmentation
+    Tracks and analyzes search usage patterns
     """
     
-    def __init__(self):
-        self.events: List[AnalyticsEvent] = []
-        self.metrics: Dict[str, SearchMetrics] = {}
-        self.user_sessions: Dict[int, List[str]] = defaultdict(list)
+    def __init__(self, storage_file: str = "search_analytics.json"):
+        self.storage_file = Path(storage_file)
+        self.events: List[SearchEvent] = []
+        self.conversions: List[ConversionEvent] = []
         self.lock = threading.RLock()
         
-        # Initialize metrics for all methods
-        for method in SearchMethod:
-            self.metrics[method.value] = SearchMetrics(method=method.value)
+        # A/B test configurations
+        self.ab_tests: Dict[str, Dict] = {}
         
-        logger.info("SearchAnalyticsTracker initialized")
+        # Load existing data
+        self._load_data()
+        
+        # Start auto-save thread
+        self._start_autosave()
     
-    def track_event(self, user_id: int, method: str, event_type: str, 
-                   metadata: Dict = None, session_id: str = None):
-        """
-        Track analytics event
+    def track_search(self, user_id: int, method: str, params: Dict,
+                    duration_ms: float, result_count: int, 
+                    cached: bool = False, variant: Optional[str] = None):
+        """Track a search event"""
+        event = SearchEvent(
+            timestamp=datetime.now(),
+            user_id=user_id,
+            method=method,
+            params=params,
+            duration_ms=duration_ms,
+            result_count=result_count,
+            cached=cached,
+            variant=variant
+        )
         
-        Args:
-            user_id: User ID
-            method: Search method
-            event_type: Event type
-            metadata: Additional data
-            session_id: Session identifier
-        """
         with self.lock:
-            event = AnalyticsEvent(
-                user_id=user_id,
-                method=method,
-                event_type=event_type,
-                timestamp=datetime.now().timestamp(),
-                metadata=metadata or {},
-                session_id=session_id
-            )
-            
             self.events.append(event)
-            self._update_metrics(event)
-            
-            logger.debug(f"Event tracked: {event_type} by user {user_id} for {method}")
-    
-    def _update_metrics(self, event: AnalyticsEvent):
-        """Update metrics based on event"""
-        method = event.method
-        if method not in self.metrics:
-            self.metrics[method] = SearchMetrics(method=method)
         
-        metrics = self.metrics[method]
-        event_type = event.event_type
+        logger.debug(f"Tracked search: {method} by user {user_id}")
+    
+    def track_conversion(self, user_id: int, search_method: str, 
+                        action: str, value: Optional[float] = None):
+        """Track a conversion event"""
+        event = ConversionEvent(
+            timestamp=datetime.now(),
+            user_id=user_id,
+            search_method=search_method,
+            action=action,
+            value=value
+        )
         
-        if event_type == EventType.SEARCH_STARTED.value:
-            metrics.total_searches += 1
-        elif event_type == EventType.SEARCH_COMPLETED.value:
-            metrics.successful_searches += 1
-            # Track response time if available
-            if 'response_time_ms' in event.metadata:
-                rt = event.metadata['response_time_ms']
-                metrics.avg_response_time_ms = (
-                    (metrics.avg_response_time_ms * (metrics.successful_searches - 1) + rt) /
-                    metrics.successful_searches
-                )
-        elif event_type == EventType.SEARCH_FAILED.value:
-            metrics.failed_searches += 1
-        elif event_type == EventType.RESULTS_VIEWED.value:
-            metrics.total_results_viewed += 1
-        elif event_type == EventType.RESULT_CLICKED.value:
-            metrics.total_clicks += 1
-        elif event_type == EventType.BOOKING_COMPLETED.value:
-            metrics.total_bookings += 1
-        elif event_type == EventType.SHARED.value:
-            metrics.total_shares += 1
-        elif event_type == EventType.SAVED.value:
-            metrics.total_saves += 1
-    
-    def get_method_metrics(self, method: str) -> Dict:
-        """Get metrics for specific method"""
         with self.lock:
-            if method in self.metrics:
-                return self.metrics[method].to_dict()
-            return {}
-    
-    def get_all_metrics(self) -> Dict[str, Dict]:
-        """Get metrics for all methods"""
-        with self.lock:
-            return {
-                method: metrics.to_dict()
-                for method, metrics in self.metrics.items()
-            }
-    
-    def get_top_methods(self, n: int = 5) -> List[Dict]:
-        """Get top N methods by usage"""
-        with self.lock:
-            sorted_methods = sorted(
-                self.metrics.values(),
-                key=lambda m: m.total_searches,
-                reverse=True
-            )
-            return [m.to_dict() for m in sorted_methods[:n]]
-    
-    def analyze_funnel(self, method: str) -> List[Dict]:
-        """
-        Analyze conversion funnel for a method
+            self.conversions.append(event)
         
-        Funnel stages:
-        1. Search started
-        2. Results viewed
-        3. Result clicked
-        4. Booking initiated
-        5. Booking completed
-        """
-        with self.lock:
-            # Count events by type
-            events_by_type = defaultdict(set)
-            for event in self.events:
-                if event.method == method:
-                    events_by_type[event.event_type].add(event.user_id)
-            
-            # Build funnel
-            started = events_by_type[EventType.SEARCH_STARTED.value]
-            viewed = events_by_type[EventType.RESULTS_VIEWED.value]
-            clicked = events_by_type[EventType.RESULT_CLICKED.value]
-            booking_init = events_by_type[EventType.BOOKING_INITIATED.value]
-            booking_done = events_by_type[EventType.BOOKING_COMPLETED.value]
-            
-            stages = [
-                FunnelStage(
-                    stage_name="Search Started",
-                    users_entered=len(started),
-                    users_completed=len(viewed),
-                    drop_off_count=len(started - viewed)
-                ),
-                FunnelStage(
-                    stage_name="Results Viewed",
-                    users_entered=len(viewed),
-                    users_completed=len(clicked),
-                    drop_off_count=len(viewed - clicked)
-                ),
-                FunnelStage(
-                    stage_name="Result Clicked",
-                    users_entered=len(clicked),
-                    users_completed=len(booking_init),
-                    drop_off_count=len(clicked - booking_init)
-                ),
-                FunnelStage(
-                    stage_name="Booking Initiated",
-                    users_entered=len(booking_init),
-                    users_completed=len(booking_done),
-                    drop_off_count=len(booking_init - booking_done)
-                )
-            ]
-            
-            return [stage.to_dict() for stage in stages]
+        logger.debug(f"Tracked conversion: {action} for {search_method}")
     
-    def get_user_behavior(self, user_id: int, days: int = 7) -> Dict:
-        """Get user behavior analysis"""
-        with self.lock:
-            cutoff = datetime.now() - timedelta(days=days)
-            cutoff_ts = cutoff.timestamp()
-            
-            user_events = [
-                e for e in self.events
-                if e.user_id == user_id and e.timestamp >= cutoff_ts
-            ]
-            
-            # Aggregate
-            methods_used = Counter(e.method for e in user_events)
-            event_types = Counter(e.event_type for e in user_events)
-            
-            return {
-                'user_id': user_id,
-                'period_days': days,
-                'total_events': len(user_events),
-                'methods_used': dict(methods_used),
-                'event_breakdown': dict(event_types),
-                'most_used_method': methods_used.most_common(1)[0][0] if methods_used else None
-            }
+    # ========================================================================
+    # USAGE ANALYTICS
+    # ========================================================================
     
-    def export_data(self, filepath: str = "analytics_export.json"):
-        """Export analytics data to JSON"""
-        with self.lock:
-            data = {
-                'export_timestamp': datetime.now().isoformat(),
-                'total_events': len(self.events),
-                'metrics': self.get_all_metrics(),
-                'recent_events': [e.to_dict() for e in self.events[-100:]]
-            }
-            
-            with open(filepath, 'w') as f:
-                json.dump(data, f, indent=2)
-            
-            logger.info(f"Analytics exported to {filepath}")
-
-
-# ============================================================================
-# A/B TESTING FRAMEWORK
-# ============================================================================
-
-class ABTestManager:
-    """
-    A/B testing framework for search methods
-    
-    Features:
-    - Variant assignment
-    - Performance comparison
-    - Statistical significance
-    """
-    
-    def __init__(self):
-        self.tests: Dict[str, Dict] = {}
-        self.assignments: Dict[int, Dict[str, str]] = defaultdict(dict)
-        self.lock = threading.RLock()
+    def get_usage_by_method(self, days: int = 7) -> Dict[str, int]:
+        """Get search count by method for last N days"""
+        cutoff = datetime.now() - timedelta(days=days)
         
-        logger.info("ABTestManager initialized")
-    
-    def create_test(self, test_id: str, variants: List[str], 
-                   traffic_split: List[float] = None):
-        """
-        Create new A/B test
+        with self.lock:
+            recent_events = [e for e in self.events if e.timestamp >= cutoff]
+            counts = Counter(e.method for e in recent_events)
         
-        Args:
-            test_id: Test identifier
-            variants: List of variant names
-            traffic_split: Traffic percentage for each variant
-        """
-        with self.lock:
-            if traffic_split is None:
-                traffic_split = [1.0 / len(variants)] * len(variants)
-            
-            self.tests[test_id] = {
-                'variants': variants,
-                'traffic_split': traffic_split,
-                'created_at': datetime.now().isoformat(),
-                'results': {v: {'users': 0, 'conversions': 0} for v in variants}
-            }
-            
-            logger.info(f"A/B test created: {test_id} with variants {variants}")
+        return dict(counts)
     
-    def assign_variant(self, test_id: str, user_id: int) -> Optional[str]:
-        """
-        Assign user to a variant
+    def get_top_searches(self, limit: int = 10) -> List[Tuple[str, int]]:
+        """Get most popular search methods"""
+        usage = self.get_usage_by_method(days=30)
+        return sorted(usage.items(), key=lambda x: x[1], reverse=True)[:limit]
+    
+    def get_user_search_frequency(self, user_id: int, days: int = 30) -> int:
+        """Get search frequency for a specific user"""
+        cutoff = datetime.now() - timedelta(days=days)
         
-        Args:
-            test_id: Test identifier
-            user_id: User ID
-            
-        Returns:
-            Assigned variant name
-        """
         with self.lock:
-            # Check if already assigned
-            if test_id in self.assignments[user_id]:
-                return self.assignments[user_id][test_id]
-            
-            if test_id not in self.tests:
-                return None
-            
-            # Assign based on user_id hash
-            import hashlib
-            hash_val = int(hashlib.md5(str(user_id).encode()).hexdigest(), 16)
-            
-            test = self.tests[test_id]
-            cumulative = 0
-            normalized_hash = (hash_val % 100) / 100.0
-            
-            for variant, split in zip(test['variants'], test['traffic_split']):
-                cumulative += split
-                if normalized_hash <= cumulative:
-                    self.assignments[user_id][test_id] = variant
-                    test['results'][variant]['users'] += 1
-                    return variant
-            
-            # Fallback to first variant
-            variant = test['variants'][0]
-            self.assignments[user_id][test_id] = variant
-            return variant
+            count = sum(1 for e in self.events 
+                       if e.user_id == user_id and e.timestamp >= cutoff)
+        
+        return count
     
-    def record_conversion(self, test_id: str, user_id: int):
-        """Record conversion for user's variant"""
+    def get_power_users(self, min_searches: int = 10, days: int = 7) -> List[Tuple[int, int]]:
+        """Identify power users (high search frequency)"""
+        cutoff = datetime.now() - timedelta(days=days)
+        
         with self.lock:
-            if test_id not in self.tests:
-                return
-            
-            variant = self.assignments[user_id].get(test_id)
-            if variant:
-                self.tests[test_id]['results'][variant]['conversions'] += 1
+            recent_events = [e for e in self.events if e.timestamp >= cutoff]
+            user_counts = Counter(e.user_id for e in recent_events)
+        
+        power_users = [(uid, count) for uid, count in user_counts.items() 
+                      if count >= min_searches]
+        
+        return sorted(power_users, key=lambda x: x[1], reverse=True)
     
-    def get_test_results(self, test_id: str) -> Dict:
-        """Get A/B test results"""
+    # ========================================================================
+    # PERFORMANCE ANALYTICS
+    # ========================================================================
+    
+    def get_average_response_time(self, method: Optional[str] = None) -> float:
+        """Get average response time in ms"""
         with self.lock:
-            if test_id not in self.tests:
+            if method:
+                durations = [e.duration_ms for e in self.events if e.method == method]
+            else:
+                durations = [e.duration_ms for e in self.events]
+        
+        return sum(durations) / len(durations) if durations else 0
+    
+    def get_cache_hit_rate(self, method: Optional[str] = None, days: int = 7) -> float:
+        """Calculate cache hit rate"""
+        cutoff = datetime.now() - timedelta(days=days)
+        
+        with self.lock:
+            recent = [e for e in self.events if e.timestamp >= cutoff]
+            
+            if method:
+                recent = [e for e in recent if e.method == method]
+            
+            if not recent:
+                return 0.0
+            
+            cached_count = sum(1 for e in recent if e.cached)
+            return (cached_count / len(recent)) * 100
+    
+    def get_performance_metrics(self) -> Dict[str, Any]:
+        """Get comprehensive performance metrics"""
+        with self.lock:
+            if not self.events:
                 return {}
             
-            test = self.tests[test_id]
-            results = {}
-            
-            for variant, data in test['results'].items():
-                users = data['users']
-                conversions = data['conversions']
-                conversion_rate = (conversions / users * 100) if users > 0 else 0.0
-                
-                results[variant] = {
-                    'users': users,
-                    'conversions': conversions,
-                    'conversion_rate': f"{conversion_rate:.2f}%"
-                }
+            durations = [e.duration_ms for e in self.events]
+            cached_count = sum(1 for e in self.events if e.cached)
             
             return {
-                'test_id': test_id,
-                'created_at': test['created_at'],
-                'variants': results
+                'total_searches': len(self.events),
+                'avg_duration_ms': sum(durations) / len(durations),
+                'min_duration_ms': min(durations),
+                'max_duration_ms': max(durations),
+                'cache_hit_rate': (cached_count / len(self.events)) * 100,
+                'unique_users': len(set(e.user_id for e in self.events))
             }
-
-
-# ============================================================================
-# GLOBAL INSTANCES
-# ============================================================================
-
-analytics_tracker = SearchAnalyticsTracker()
-ab_test_manager = ABTestManager()
+    
+    # ========================================================================
+    # CONVERSION FUNNEL
+    # ========================================================================
+    
+    def get_conversion_funnel(self, method: str, days: int = 30) -> Dict[str, Any]:
+        """Analyze conversion funnel for a search method"""
+        cutoff = datetime.now() - timedelta(days=days)
+        
+        with self.lock:
+            # Get searches
+            searches = [e for e in self.events 
+                       if e.method == method and e.timestamp >= cutoff]
+            
+            # Get conversions
+            convs = [c for c in self.conversions 
+                    if c.search_method == method and c.timestamp >= cutoff]
+        
+        total_searches = len(searches)
+        if total_searches == 0:
+            return {}
+        
+        # Count actions
+        action_counts = Counter(c.action for c in convs)
+        
+        # Calculate conversion rates
+        funnel = {
+            'searches': total_searches,
+            'view_details': action_counts.get('view_details', 0),
+            'book': action_counts.get('book', 0),
+            'share': action_counts.get('share', 0),
+            'save': action_counts.get('save', 0)
+        }
+        
+        # Add rates
+        funnel['view_rate'] = (funnel['view_details'] / total_searches) * 100
+        funnel['book_rate'] = (funnel['book'] / total_searches) * 100
+        funnel['share_rate'] = (funnel['share'] / total_searches) * 100
+        funnel['overall_conversion'] = (
+            (funnel['book'] + funnel['share']) / total_searches
+        ) * 100
+        
+        return funnel
+    
+    def get_revenue_by_method(self, days: int = 30) -> Dict[str, float]:
+        """Calculate revenue generated by each search method"""
+        cutoff = datetime.now() - timedelta(days=days)
+        
+        with self.lock:
+            recent_convs = [c for c in self.conversions 
+                          if c.timestamp >= cutoff and c.action == 'book' and c.value]
+        
+        revenue_by_method = defaultdict(float)
+        for conv in recent_convs:
+            revenue_by_method[conv.search_method] += conv.value or 0
+        
+        return dict(revenue_by_method)
+    
+    # ========================================================================
+    # A/B TESTING
+    # ========================================================================
+    
+    def create_ab_test(self, test_name: str, method: str, 
+                      variants: List[str], metric: str = 'conversion'):
+        """Create a new A/B test"""
+        self.ab_tests[test_name] = {
+            'method': method,
+            'variants': variants,
+            'metric': metric,
+            'created_at': datetime.now().isoformat()
+        }
+        logger.info(f"Created A/B test: {test_name}")
+    
+    def get_ab_test_results(self, test_name: str, days: int = 7) -> Dict[str, Any]:
+        """Get results for an A/B test"""
+        if test_name not in self.ab_tests:
+            return {}
+        
+        test_config = self.ab_tests[test_name]
+        method = test_config['method']
+        variants = test_config['variants']
+        cutoff = datetime.now() - timedelta(days=days)
+        
+        with self.lock:
+            results = {}
+            
+            for variant in variants:
+                # Get searches for this variant
+                variant_searches = [
+                    e for e in self.events
+                    if e.method == method 
+                    and e.variant == variant 
+                    and e.timestamp >= cutoff
+                ]
+                
+                # Get conversions
+                variant_convs = [
+                    c for c in self.conversions
+                    if c.search_method == method
+                    and c.timestamp >= cutoff
+                ]
+                
+                total = len(variant_searches)
+                conversions = len([c for c in variant_convs 
+                                 if c.action in ['book', 'share']])
+                
+                results[variant] = {
+                    'searches': total,
+                    'conversions': conversions,
+                    'conversion_rate': (conversions / total * 100) if total > 0 else 0,
+                    'avg_duration': sum(e.duration_ms for e in variant_searches) / total if total > 0 else 0
+                }
+        
+        return results
+    
+    # ========================================================================
+    # HEATMAP GENERATION
+    # ========================================================================
+    
+    def generate_usage_heatmap(self, days: int = 30) -> Dict[str, Dict[int, int]]:
+        """Generate hourly usage heatmap by day of week"""
+        cutoff = datetime.now() - timedelta(days=days)
+        
+        with self.lock:
+            recent = [e for e in self.events if e.timestamp >= cutoff]
+        
+        # Initialize heatmap
+        heatmap = {
+            'Monday': defaultdict(int),
+            'Tuesday': defaultdict(int),
+            'Wednesday': defaultdict(int),
+            'Thursday': defaultdict(int),
+            'Friday': defaultdict(int),
+            'Saturday': defaultdict(int),
+            'Sunday': defaultdict(int)
+        }
+        
+        # Fill heatmap
+        day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        
+        for event in recent:
+            day_name = day_names[event.timestamp.weekday()]
+            hour = event.timestamp.hour
+            heatmap[day_name][hour] += 1
+        
+        # Convert to regular dict
+        return {day: dict(hours) for day, hours in heatmap.items()}
+    
+    # ========================================================================
+    # PERSISTENCE
+    # ========================================================================
+    
+    def _load_data(self):
+        """Load analytics data from file"""
+        if not self.storage_file.exists():
+            return
+        
+        try:
+            with open(self.storage_file, 'r') as f:
+                data = json.load(f)
+            
+            # Restore events
+            for e_dict in data.get('events', []):
+                e_dict['timestamp'] = datetime.fromisoformat(e_dict['timestamp'])
+                self.events.append(SearchEvent(**e_dict))
+            
+            # Restore conversions
+            for c_dict in data.get('conversions', []):
+                c_dict['timestamp'] = datetime.fromisoformat(c_dict['timestamp'])
+                self.conversions.append(ConversionEvent(**c_dict))
+            
+            # Restore A/B tests
+            self.ab_tests = data.get('ab_tests', {})
+            
+            logger.info(f"Loaded {len(self.events)} events and {len(self.conversions)} conversions")
+        
+        except Exception as e:
+            logger.error(f"Failed to load analytics data: {e}")
+    
+    def save_data(self):
+        """Save analytics data to file"""
+        with self.lock:
+            data = {
+                'events': [e.to_dict() for e in self.events[-10000:]],  # Keep last 10k
+                'conversions': [c.to_dict() for c in self.conversions[-10000:]],
+                'ab_tests': self.ab_tests,
+                'saved_at': datetime.now().isoformat()
+            }
+        
+        try:
+            with open(self.storage_file, 'w') as f:
+                json.dump(data, f, indent=2)
+            logger.debug("Analytics data saved")
+        except Exception as e:
+            logger.error(f"Failed to save analytics data: {e}")
+    
+    def _start_autosave(self, interval: int = 300):
+        """Start auto-save thread"""
+        def autosave_loop():
+            while True:
+                time.sleep(interval)
+                self.save_data()
+        
+        thread = threading.Thread(target=autosave_loop, daemon=True)
+        thread.start()
+        logger.info("Analytics auto-save started")
+    
+    # ========================================================================
+    # DASHBOARD DATA
+    # ========================================================================
+    
+    def get_dashboard_data(self, days: int = 7) -> Dict[str, Any]:
+        """Get comprehensive dashboard data"""
+        return {
+            'overview': {
+                'total_searches': len(self.events),
+                'total_conversions': len(self.conversions),
+                'unique_users': len(set(e.user_id for e in self.events)),
+                'time_range': f"Last {days} days"
+            },
+            'usage_by_method': self.get_usage_by_method(days),
+            'top_searches': dict(self.get_top_searches()),
+            'performance': self.get_performance_metrics(),
+            'cache_hit_rate': f"{self.get_cache_hit_rate(days=days):.1f}%",
+            'revenue_by_method': self.get_revenue_by_method(days),
+            'power_users_count': len(self.get_power_users(days=days))
+        }
 
 
 # ============================================================================
@@ -508,48 +448,72 @@ ab_test_manager = ABTestManager()
 # ============================================================================
 
 if __name__ == "__main__":
-    print("="*60)
-    print("Search Analytics System - Testing")
-    print("="*60)
+    print("=" * 70)
+    print("SEARCH ANALYTICS SYSTEM - TESTING")
+    print("=" * 70)
     
-    tracker = SearchAnalyticsTracker()
+    # Create tracker
+    tracker = SearchAnalyticsTracker(storage_file="test_analytics.json")
     
-    # Simulate events
-    print("\n1. Simulating user events...")
-    for i in range(10):
-        tracker.track_event(100 + i, 'flexible_dates', EventType.SEARCH_STARTED.value)
-        tracker.track_event(100 + i, 'flexible_dates', EventType.SEARCH_COMPLETED.value,
-                          {'response_time_ms': 50 + i*5})
-        if i < 7:
-            tracker.track_event(100 + i, 'flexible_dates', EventType.RESULTS_VIEWED.value)
-        if i < 5:
-            tracker.track_event(100 + i, 'flexible_dates', EventType.RESULT_CLICKED.value)
-        if i < 3:
-            tracker.track_event(100 + i, 'flexible_dates', EventType.BOOKING_COMPLETED.value)
+    # Simulate searches
+    print("\n1. Simulating searches...")
+    methods = ['flexible_dates', 'multi_city', 'budget']
     
-    # Get metrics
-    print("\n2. Method metrics:")
-    metrics = tracker.get_method_metrics('flexible_dates')
+    for i in range(50):
+        user_id = 1000 + (i % 10)
+        method = methods[i % 3]
+        tracker.track_search(
+            user_id=user_id,
+            method=method,
+            params={'origin': 'MAD', 'dest': 'BCN'},
+            duration_ms=50 + (i * 10),
+            result_count=10,
+            cached=(i % 3 == 0)
+        )
+    
+    print(f"  Tracked {len(tracker.events)} searches")
+    
+    # Simulate conversions
+    print("\n2. Simulating conversions...")
+    for i in range(20):
+        tracker.track_conversion(
+            user_id=1000 + (i % 10),
+            search_method=methods[i % 3],
+            action='book' if i % 3 == 0 else 'share',
+            value=500.0 if i % 3 == 0 else None
+        )
+    
+    print(f"  Tracked {len(tracker.conversions)} conversions")
+    
+    # Get analytics
+    print("\n3. Usage Analytics:")
+    usage = tracker.get_usage_by_method()
+    for method, count in usage.items():
+        print(f"  {method}: {count} searches")
+    
+    print("\n4. Performance Metrics:")
+    metrics = tracker.get_performance_metrics()
     for key, value in metrics.items():
-        print(f"   {key}: {value}")
+        print(f"  {key}: {value}")
     
-    # Analyze funnel
-    print("\n3. Conversion funnel:")
-    funnel = tracker.analyze_funnel('flexible_dates')
-    for stage in funnel:
-        print(f"   {stage['stage']}: {stage['conversion_rate']}")
+    print("\n5. Conversion Funnel (flexible_dates):")
+    funnel = tracker.get_conversion_funnel('flexible_dates')
+    for key, value in funnel.items():
+        print(f"  {key}: {value}")
     
-    # Test A/B framework
-    print("\n4. A/B Testing:")
-    ab = ABTestManager()
-    ab.create_test('search_ui_test', ['variant_a', 'variant_b'])
+    print("\n6. Power Users:")
+    power_users = tracker.get_power_users(min_searches=3)
+    for user_id, count in power_users[:5]:
+        print(f"  User {user_id}: {count} searches")
     
-    for user_id in range(100, 120):
-        variant = ab.assign_variant('search_ui_test', user_id)
-        if user_id % 2 == 0:  # 50% conversion for testing
-            ab.record_conversion('search_ui_test', user_id)
+    # Save data
+    print("\n7. Saving analytics data...")
+    tracker.save_data()
+    print("  ✅ Data saved")
     
-    results = ab.get_test_results('search_ui_test')
-    print(f"   Test results: {json.dumps(results, indent=2)}")
+    # Dashboard
+    print("\n8. Dashboard Data:")
+    dashboard = tracker.get_dashboard_data()
+    print(json.dumps(dashboard, indent=2))
     
-    print("\n✅ All analytics tests passed!")
+    print("\n✅ All analytics tests completed!")
