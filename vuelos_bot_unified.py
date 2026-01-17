@@ -78,7 +78,7 @@ except ImportError:
 #  CONFIGURATION & CONSTANTS
 # ===============================================================================
 
-VERSION = "15.0.3"
+VERSION = "15.0.4"
 APP_NAME = "🛫 VuelosBot Unified"
 AUTHOR = "@Juanka_Spain"
 RELEASE_DATE = "2026-01-17"
@@ -1481,19 +1481,25 @@ def main():
         try:
             response = input("\n¿Deseas ejecutar el setup wizard? (s/n): ").strip().lower()
         except (EOFError, KeyboardInterrupt):
-            print("\n\n❌ Operación cancelada\n")
+            print("\n\n❌ Operación cancelada\n", flush=True)
             sys.stdout.flush()
+            sys.stderr.flush()
             os._exit(1)
         
         if response == 's':
             run_setup_wizard()
-            print("\n✅ Setup completado. Ejecuta el bot de nuevo para iniciar.\n")
+            print("\n✅ Setup completado. Ejecuta el bot de nuevo para iniciar.\n", flush=True)
             sys.stdout.flush()
+            sys.stderr.flush()
             os._exit(0)
         else:
-            print("\n❌ Bot no configurado. Saliendo...\n")
-            print("💡 Para configurar el bot, ejecuta de nuevo y responde 's'\n")
+            # Force immediate output before exit
+            print("\n❌ Bot no configurado. Saliendo...\n", flush=True)
+            print("💡 Para configurar el bot, ejecuta de nuevo y responde 's'\n", flush=True)
+            # Flush all streams to ensure output is written
             sys.stdout.flush()
+            sys.stderr.flush()
+            # Hard exit - terminates immediately
             os._exit(1)
     
     # Show config status
