@@ -2,7 +2,7 @@
 
 **Bot de Telegram para búsqueda de vuelos - Arquitectura Profesional Enterprise**
 
-![Version](https://img.shields.io/badge/version-15.0.1-blue)
+![Version](https://img.shields.io/badge/version-15.0.2-blue)
 ![Python](https://img.shields.io/badge/python-3.9+-green)
 ![License](https://img.shields.io/badge/license-MIT-orange)
 ![Status](https://img.shields.io/badge/status-production--ready-brightgreen)
@@ -12,9 +12,48 @@
 
 ## 🎉 ¿Qué hay de nuevo?
 
-### v15.0.1 (2026-01-17) - 🐛 BUGFIX RELEASE
+### v15.0.2 (2026-01-17) - 🐛 HOTFIX: Setup Wizard Exit
 
-**Critical Fixes:**
+**Critical Fix:**
+
+✅ **Fixed setup wizard hanging** - Bot now terminates properly when user declines configuration  
+✅ **Improved exit handling** - Using `sys.exit()` instead of `return` for clean process termination  
+✅ **Better error messages** - Clearer feedback when setup is declined  
+✅ **Enhanced exception handling** - Proper exit codes for different scenarios  
+
+**Technical Changes:**
+
+```python
+# Before (v15.0.1) - Process would hang
+if not config.has_real_token:
+    if input().lower() != 's':
+        print("❌ Configure first")
+        return  # ❌ Didn't terminate properly
+
+# After (v15.0.2) - Clean termination
+if not config.has_real_token:
+    if input().lower() != 's':
+        print("❌ Bot no configurado. Saliendo...")
+        sys.exit(1)  # ✅ Terminates immediately
+```
+
+**Exit Codes:**
+- `0` → Setup completed successfully
+- `1` → Error or user declined setup
+
+**How to Update:**
+
+```bash
+git pull origin main
+python vuelos_bot_unified.py
+# Now properly exits when you press 'n'
+```
+
+---
+
+### v15.0.1 (2026-01-17) - 🐛 CRITICAL BUGFIX
+
+**🚨 Critical Fixes:**
 
 ✅ **Fixed ConfigManager initialization** - Resolved `AttributeError: 'ConfigManager' object has no attribute 'config'`  
 ✅ **Fixed Windows console encoding** - Resolved `UnicodeEncodeError` with UTF-8 auto-configuration  
@@ -30,6 +69,8 @@
 - Enhanced logging for configuration issues
 
 **Migration:** No migration needed, just pull latest changes and run setup wizard if you haven't configured a token yet.
+
+---
 
 ### v15.0.0 (2026-01-17) - 🎆 MAJOR REFACTOR
 
@@ -96,6 +137,7 @@ vuelosrobot/
 │   └── ISSUE_TEMPLATE/
 ├── 🚀 run.py                # Launcher conveniente
 ├── 📝 README.md             # Este archivo
+├── vuelos_bot_unified.py   # Bot unificado v15.0+
 ├── requirements.txt
 ├── config.json
 ├── .gitignore
@@ -106,72 +148,52 @@ vuelosrobot/
 
 ## 🚀 Inicio Rápido
 
-### Método 1: Usar el Launcher (Recomendado)
+### Instalación
 
 ```bash
-# Clona el repositorio
+# 1. Clona el repositorio
 git clone https://github.com/juankaspain/vuelosrobot.git
 cd vuelosrobot
 
-# Instala dependencias
+# 2. Instala dependencias
 pip install -r requirements.txt
 
-# Lanza el bot usando el launcher
-python run.py
+# 3. Ejecuta el bot
+python vuelos_bot_unified.py
 ```
 
-### Método 2: Ejecución Directa
+### Primera Configuración
+
+Cuando ejecutes el bot por primera vez:
 
 ```bash
-# Ejecuta el bot principal desde src/
-python -m src.bot.cazador_supremo_enterprise
+$ python vuelos_bot_unified.py
+
+======================================================================
+                     🛫 VuelosBot Unified v15.0.2
+======================================================================
+
+⚠️ Bot sin token de Telegram configurado
+
+¿Deseas ejecutar el setup wizard? (s/n): s  ← Responde 's'
+
+# Sigue las instrucciones del wizard:
+# 1. Pega tu token de @BotFather
+# 2. (Opcional) Configura APIs de búsqueda
+# 3. ¡Listo!
+
+🚀 Iniciando bot...
+🚀 Bot iniciado y escuchando...
 ```
 
----
+### Obtener Token de @BotFather
 
-## 📺 Migración a la Nueva Estructura
-
-### 🎯 Si ya tenías el repositorio clonado:
-
-**Ejecuta el script de migración automatizada:**
-
-```bash
-# 1. Haz pull de los últimos cambios
-git pull origin main
-
-# 2. Ejecuta la migración automática
-python scripts/migrate_to_new_structure.py
-
-# 3. El script moverá todos los archivos a su ubicación correcta
-# Output esperado:
-# 🚀 Starting migration...
-# ✅ Created directory: src/systems/
-# ✅ Created directory: src/features/
-# ...
-# ✅ Moved: monitoring_system.py → src/systems/
-# ...
-# 🎉 Migration complete!
-
-# 4. Prueba el bot
-python run.py
-
-# 5. Si todo funciona, commitea los cambios
-git add .
-git commit -m "🏗️ Complete structure migration to v15.0"
-git push origin main
-```
-
-### 📝 ¿Qué hace el script de migración?
-
-El script `migrate_to_new_structure.py`:
-
-✅ Crea todas las carpetas necesarias  
-✅ Mueve 70+ archivos a su ubicación correcta  
-✅ Organiza por categorías: systems, features, commands, utils  
-✅ Archiva versiones antiguas (v9, v10, v11, v12)  
-✅ Consolida documentación  
-✅ Es idempotente (puedes ejecutarlo múltiples veces)  
-✅ Hace backup automático antes de mover  
+1. Abre Telegram
+2. Busca **@BotFather**
+3. Envía `/newbot`
+4. Sigue las instrucciones
+5. Copia el **token** que te da
+6. Pégalo en el setup wizard
 
 ---
 
@@ -258,15 +280,18 @@ El script `migrate_to_new_structure.py`:
 
 ### 1. Configuración Básica
 
-Edita `config.json`:
+Edita `data/bot_config.json` (se crea automáticamente):
 
 ```json
 {
-  "telegram_token": "YOUR_BOT_TOKEN",
-  "admin_users": [],
-  "database": {
-    "type": "json",
-    "path": "data/"
+  "telegram": {
+    "token": "YOUR_BOT_TOKEN",
+    "admin_users": []
+  },
+  "api_keys": {
+    "skyscanner": "",
+    "kiwi": "",
+    "google_flights": ""
   },
   "features": {
     "demo_mode": true,
@@ -310,7 +335,25 @@ export KIWI_API_KEY="your_api_key"
 
 ---
 
-## 📆 Release Notes
+## 📆 Release Notes Completas
+
+### v15.0.2 (2026-01-17) - 🐛 HOTFIX
+
+**Bug Fixed:**
+- Setup wizard now exits cleanly when user declines configuration
+- Using `sys.exit()` for proper process termination
+- Better error messages and user feedback
+- Enhanced exception handling throughout main()
+
+**Files Changed:**
+- `vuelos_bot_unified.py`
+
+**Exit Behavior:**
+- Pressing 'n' on setup wizard → Immediate clean exit
+- Proper exit codes (0 for success, 1 for errors)
+- No more hanging processes
+
+---
 
 ### v15.0.1 (2026-01-17) - 🐛 CRITICAL BUGFIX
 
@@ -353,18 +396,6 @@ if sys.platform == "win32":
         sys.stdout.reconfigure(encoding='utf-8')  # ✅ Fixed!
 ```
 
-**📋 Affected Files:**
-- `vuelos_bot_unified.py` (main bot file)
-- Version bumped: 15.0.0 → 15.0.1
-
-**🎯 How to Update:**
-
-```bash
-git pull origin main
-python vuelos_bot_unified.py
-# If no token configured, setup wizard will run
-```
-
 ---
 
 ### v15.0.0 (2026-01-17) - 🎆 MAJOR REFACTOR
@@ -392,13 +423,6 @@ python vuelos_bot_unified.py
 - Removed 15+ obsolete patches
 - Organized documentation
 - Structured test files
-
-#### 📚 Documentation
-- New ARCHITECTURE.md
-- Updated README.md
-- Migration guide (MIGRATION_GUIDE.md)
-- Cleanup summary (CLEANUP_SUMMARY.md)
-- Complete status (CLEANUP_COMPLETE.md)
 
 <details>
 <summary><b>Ver versiones anteriores</b></summary>
@@ -482,6 +506,16 @@ MIT License - Ver [LICENSE](LICENSE) para detalles
 
 ## 🛡️ Troubleshooting
 
+### Bot se queda "colgado" al rechazar setup wizard
+
+**Solución:** Actualiza a v15.0.2+
+
+```bash
+git pull origin main
+python vuelos_bot_unified.py
+# Ahora termina correctamente cuando presionas 'n'
+```
+
 ### Error: 'ConfigManager' object has no attribute 'config'
 
 **Solución:** Actualiza a v15.0.1+
@@ -518,13 +552,40 @@ python scripts/migrate_to_new_structure.py
 
 Contiene la lista completa de archivos y su nueva ubicación.
 
+### El bot pide token pero ya lo configuré
+
+**Solución:** Verifica que el archivo `data/bot_config.json` existe y tiene el token:
+
+```bash
+cat data/bot_config.json
+# Debe mostrar tu configuración con el token
+```
+
+Si no existe, vuelve a ejecutar el setup wizard.
+
+---
+
+## 🐛 Reportar Bugs
+
+Si encuentras un bug:
+
+1. **Verifica** que estás en la última versión: `git pull origin main`
+2. **Revisa** la sección de Troubleshooting arriba
+3. **Reporta** en [GitHub Issues](https://github.com/juankaspain/vuelosrobot/issues)
+
+Incluye:
+- Versión del bot (aparece al iniciar)
+- Sistema operativo
+- Mensaje de error completo
+- Pasos para reproducir
+
 ---
 
 <div align="center">
 
 **Hecho con ❤️ en España**
 
-v15.0.1 | 2026-01-17 | 🐛 Bugfix Edition
+v15.0.2 | 2026-01-17 | 🐛 Hotfix Edition
 
 [🐛 Report Bug](https://github.com/juankaspain/vuelosrobot/issues) | [✨ Request Feature](https://github.com/juankaspain/vuelosrobot/issues)
 
