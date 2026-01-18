@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 """
 ===============================================================================
-   🚀 VUELOS BOT v16.0.1 - ULTRA PROFESSIONAL EDITION 🚀
+   🚀 VUELOS BOT v16.0.2 - ULTRA PROFESSIONAL EDITION 🚀
    Bot Premium de Telegram para Búsqueda de Vuelos
 ===============================================================================
 
-✨ CARACTERÍSTICAS v16.0.1:
+✨ CARACTERÍSTICAS v16.0.2:
 -------------------------------------------------------------------------------
 🎨 ULTRA PROFESSIONAL UI - Diseño visual impresionante
 ⚡ BÚSQUEDA INTERACTIVA - Paso a paso intuitivo
@@ -64,7 +64,7 @@ except ImportError:
 #  CONFIGURATION
 # ===============================================================================
 
-VERSION = "16.0.1"
+VERSION = "16.0.2"
 APP_NAME = "✈️ VuelosBot Ultra Pro"
 AUTHOR = "@Juanka_Spain"
 RELEASE_DATE = "2026-01-18"
@@ -532,33 +532,33 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🎯 **CÓMO FUNCIONA**
 ━━━━━━━━━━━━━━━━━━━━
 
-1️⃣ **Búsqueda Rápida**
+**Búsqueda Rápida**
    Usa /buscar y sigue los pasos
 
-2️⃣ **Ver Chollos**
+**Ver Chollos**
    Revisa las mejores ofertas del momento
 
-3️⃣ **Crear Alertas**
+**Crear Alertas**
    Te notificamos cuando hay buenos precios
 
-4️⃣ **Ganar Puntos**
+**Ganar Puntos**
    Sube de nivel y desbloquea logros
 
 ━━━━━━━━━━━━━━━━━━━━
 💡 **CONSEJOS PRO**
 ━━━━━━━━━━━━━━━━━━━━
 
-• Activa varias alertas para no perder chollos
-• Busca con fechas flexibles para mejores precios
-• Los martes y miércoles suelen ser más baratos
-• Reserva con 2-3 meses de antelación
+\- Activa varias alertas para no perder chollos
+\- Busca con fechas flexibles para mejores precios
+\- Los martes y miércoles suelen ser más baratos
+\- Reserva con 2\-3 meses de antelación
 
 ━━━━━━━━━━━━━━━━━━━━
 🎮 **MODO DEMO ACTIVO**
 ━━━━━━━━━━━━━━━━━━━━
 
-Estás usando el modo demo con datos simulados.
-Perfecto para probar todas las funciones.
+Estás usando el modo demo con datos simulados\.
+Perfecto para probar todas las funciones\.
 
 ━━━━━━━━━━━━━━━━━━━━
 
@@ -602,9 +602,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 Estoy preparando una experiencia de búsqueda increíble paso a paso.
 
 📝 **Por ahora, puedes:**
-• Ver los mejores chollos activos
-• Crear alertas personalizadas
-• Explorar destinos populares
+\- Ver los mejores chollos activos
+\- Crear alertas personalizadas
+\- Explorar destinos populares
 
 💡 Usa /chollos para ver las mejores ofertas
         """
