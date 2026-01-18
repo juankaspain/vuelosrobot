@@ -76,7 +76,7 @@ except ImportError:
 #  CONFIGURATION & CONSTANTS
 # ===============================================================================
 
-VERSION = "15.0.12"
+VERSION = "15.0.13"
 APP_NAME = "🛫 VuelosBot Unified"
 AUTHOR = "@Juanka_Spain"
 RELEASE_DATE = "2026-01-18"
@@ -379,7 +379,187 @@ class AlertManager:
         self.search_engine = search_engine
 
 # ===============================================================================
-#  BOT (SIMPLIFICADO)
+#  BOT HANDLERS
+# ===============================================================================
+
+async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler para /start - Menú principal."""
+    user = update.effective_user
+    
+    keyboard = [
+        [InlineKeyboardButton("✈️ Buscar Vuelos", callback_data="buscar")],
+        [InlineKeyboardButton("🔥 Ver Chollos", callback_data="chollos")],
+        [InlineKeyboardButton("🔔 Mis Alertas", callback_data="alertas")],
+        [InlineKeyboardButton("📊 Estadísticas", callback_data="stats")],
+        [InlineKeyboardButton("❓ Ayuda", callback_data="help")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    welcome_text = f"""
+🛫 **¡Bienvenido a VuelosBot!** v{VERSION}
+
+¡Hola {user.first_name}! 👋
+
+Soy tu asistente personal para encontrar los mejores vuelos y chollos.
+
+**¿Qué puedo hacer por ti?**
+✈️ Buscar vuelos baratos
+🔥 Detectar chollos automáticamente
+🔔 Crear alertas de precio
+📊 Ver estadísticas y análisis
+
+**Modo actual:** 🎮 DEMO
+_(Búsquedas simuladas sin APIs reales)_
+
+👇 Usa los botones de abajo para empezar:
+    """
+    
+    await update.message.reply_text(
+        welcome_text,
+        reply_markup=reply_markup,
+        parse_mode=ParseMode.MARKDOWN
+    )
+    logger.info(f"✅ /start - Usuario: {user.id} ({user.first_name})")
+
+async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler para /help."""
+    help_text = f"""
+📖 **Ayuda - VuelosBot** v{VERSION}
+
+**Comandos disponibles:**
+
+/start - Menú principal
+/buscar - Buscar vuelos
+/chollos - Ver chollos detectados
+/alertas - Gestionar alertas de precio
+/stats - Ver estadísticas
+/help - Esta ayuda
+
+**¿Cómo funciona?**
+
+1️⃣ **Buscar vuelos:** Usa /buscar o el botón del menú
+2️⃣ **Ver chollos:** Revisa los mejores chollos detectados
+3️⃣ **Crear alertas:** Te notificaré cuando haya buenos precios
+
+**Modo DEMO activo** 🎮
+_(Las búsquedas son simuladas)_
+
+💬 ¿Necesitas ayuda? Escríbeme!
+    """
+    
+    await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
+
+async def cmd_buscar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler para /buscar."""
+    search_text = """
+✈️ **Búsqueda de Vuelos**
+
+🎮 **Modo DEMO activo**
+
+Para buscar vuelos, necesito:
+• Origen (ej: MAD, BCN)
+• Destino (ej: NYC, LON)
+• Fecha de ida
+• Fecha de vuelta (opcional)
+
+📝 Ejemplo:
+`MAD-NYC 2026-03-15 2026-03-22`
+
+💡 Próximamente: Búsqueda interactiva completa
+    """
+    
+    await update.message.reply_text(search_text, parse_mode=ParseMode.MARKDOWN)
+
+async def cmd_chollos(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler para /chollos."""
+    chollos_text = """
+🔥 **Chollos Detectados**
+
+🎮 **Modo DEMO - Chollos de Ejemplo:**
+
+✈️ **Madrid → Barcelona**
+💰 Precio: 89€ (↓15% vs media)
+📅 Salida: Próximos 30 días
+✅ Vuelo directo
+
+✈️ **Madrid → Nueva York**
+💰 Precio: 485€ (↓22% vs media)
+📅 Salida: Próximos 60 días
+🔄 1 escala
+
+💡 Activa alertas para recibir chollos automáticamente: /alertas
+    """
+    
+    await update.message.reply_text(chollos_text, parse_mode=ParseMode.MARKDOWN)
+
+async def cmd_alertas(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler para /alertas."""
+    alertas_text = """
+🔔 **Alertas de Precio**
+
+📊 Tus alertas activas: 0
+
+**¿Cómo funcionan?**
+
+1️⃣ Define una ruta (ej: MAD-NYC)
+2️⃣ Establece un precio máximo
+3️⃣ Te notificaré cuando encuentre vuelos por debajo de ese precio
+
+💡 Próximamente: Sistema completo de alertas
+    """
+    
+    await update.message.reply_text(alertas_text, parse_mode=ParseMode.MARKDOWN)
+
+async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler para /stats."""
+    stats_text = f"""
+📊 **Estadísticas del Bot**
+
+🤖 **VuelosBot** v{VERSION}
+📅 En línea desde: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+
+👥 Usuarios totales: 1
+🔍 Búsquedas realizadas: 0
+🔥 Chollos detectados: 2
+🔔 Alertas activas: 0
+
+🎮 **Modo:** DEMO
+    """
+    
+    await update.message.reply_text(stats_text, parse_mode=ParseMode.MARKDOWN)
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler para botones inline."""
+    query = update.callback_query
+    await query.answer()
+    
+    data = query.data
+    
+    if data == "buscar":
+        await query.message.reply_text(
+            "✈️ Función de búsqueda - Usa /buscar para más info",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    elif data == "chollos":
+        await query.message.reply_text(
+            "🔥 Ver chollos - Usa /chollos para más info",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    elif data == "alertas":
+        await query.message.reply_text(
+            "🔔 Alertas - Usa /alertas para más info",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    elif data == "stats":
+        await cmd_stats(update, context)
+    elif data == "help":
+        await query.message.reply_text(
+            "❓ Ayuda - Usa /help para la lista completa de comandos",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+# ===============================================================================
+#  BOT (CON HANDLERS)
 # ===============================================================================
 
 class VuelosBotUnified:
@@ -399,11 +579,23 @@ class VuelosBotUnified:
             return
         
         self.app = Application.builder().token(self.config.bot_token).build()
+        
+        # Registrar handlers
+        self.app.add_handler(CommandHandler("start", cmd_start))
+        self.app.add_handler(CommandHandler("help", cmd_help))
+        self.app.add_handler(CommandHandler("buscar", cmd_buscar))
+        self.app.add_handler(CommandHandler("chollos", cmd_chollos))
+        self.app.add_handler(CommandHandler("alertas", cmd_alertas))
+        self.app.add_handler(CommandHandler("stats", cmd_stats))
+        self.app.add_handler(CallbackQueryHandler(button_handler))
+        
+        logger.info("✅ Handlers registrados")
+        
         self.running = True
         await self.app.initialize()
         await self.app.start()
         await self.app.updater.start_polling(drop_pending_updates=True)
-        logger.info("🚀 Bot iniciado")
+        logger.info("🚀 Bot iniciado y escuchando comandos")
         
         while self.running:
             await asyncio.sleep(1)
@@ -454,34 +646,6 @@ def run_setup_wizard():
         sys.stdout.flush()
         sys.exit(1)
     
-    # PASO 2: API KEYS (simplificado)
-    print("2️⃣ API Keys (opcional)\n")
-    sys.stdout.flush()
-    
-    use_apis = safe_input("   ¿Configurar APIs de búsqueda? (s/n): ").lower()
-    print()  # Línea vacía
-    sys.stdout.flush()
-    
-    if use_apis == 's':
-        print("   Configurando APIs...\n")
-        sys.stdout.flush()
-        
-        sk = safe_input("   Skyscanner API Key (Enter para saltar): ")
-        print()  # Línea vacía
-        sys.stdout.flush()
-        
-        if sk:
-            config.set('api_keys.skyscanner', sk)
-            print("   ✅ Skyscanner configurado\n")
-            sys.stdout.flush()
-        
-        config.set('features.demo_mode', not bool(sk))
-        print("   ✅ APIs configuradas\n")
-        sys.stdout.flush()
-    else:
-        print("   ⚠️ Modo DEMO activado (sin APIs reales)\n")
-        sys.stdout.flush()
-    
     # FINALIZACIÓN
     config.save()
     print("="*70)
@@ -494,7 +658,7 @@ def run_setup_wizard():
     sys.stdout.flush()
 
 # ===============================================================================
-#  MAIN - VERSIÓN SIN INPUT INTERACTIVO
+#  MAIN
 # ===============================================================================
 
 def show_help():
@@ -508,13 +672,13 @@ def show_help():
     print("   python vuelos_bot_unified.py setup  # Configuración inicial")
     print("\n❌ ERROR: Bot no configurado")
     print("\n💡 SOLUCIÓN:")
-    print("   1. Ejecuta: python vuelos_bot_unified.py setup")
-    print("   2. Ingresa tu token de Telegram de @BotFather")
+    print("   1. Edita: data/bot_config.json")
+    print("   2. Añade tu token en 'telegram.token'")
     print("   3. Ejecuta: python vuelos_bot_unified.py\n")
     print(f"📁 Archivo de config: {CONFIG_FILE}\n")
 
 def main():
-    """🎯 Función principal - SIN INPUT INTERACTIVO."""
+    """🎯 Función principal."""
     
     # Check for setup command
     if len(sys.argv) > 1 and sys.argv[1] == 'setup':
@@ -533,7 +697,7 @@ def main():
     
     config = ConfigManager()
     
-    # CHECK AUTOMÁTICO - SIN PREGUNTAR
+    # CHECK AUTOMÁTICO
     if not config.has_real_token:
         show_help()
         sys.exit(1)
