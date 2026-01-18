@@ -76,7 +76,7 @@ except ImportError:
 #  CONFIGURATION & CONSTANTS
 # ===============================================================================
 
-VERSION = "15.0.11"
+VERSION = "15.0.12"
 APP_NAME = "🛫 VuelosBot Unified"
 AUTHOR = "@Juanka_Spain"
 RELEASE_DATE = "2026-01-18"
@@ -111,76 +111,26 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ===============================================================================
-#  SAFE INPUT - COMPATIBLE CON WINDOWS/GIT BASH
+#  SAFE INPUT - SOLO READLINE (NO input())
 # ===============================================================================
 
-def safe_input(prompt: str, timeout: int = 30) -> str:
+def safe_input(prompt: str) -> str:
     """
-    Input seguro compatible con Windows/Git Bash/PowerShell.
-    
-    Intenta múltiples métodos para obtener input del usuario:
-    1. input() estándar
-    2. sys.stdin.readline() directo
-    3. Fallback a método específico de Windows (msvcrt)
+    Input usando SOLO readline - compatible con Git Bash.
+    NO usa input() que tiene problemas en Git Bash.
     """
-    # Flush antes de mostrar el prompt
     sys.stdout.write(prompt)
     sys.stdout.flush()
     
     try:
-        # Método 1: input() estándar con flush
-        result = input()
+        line = sys.stdin.readline()
         sys.stdout.flush()
-        return result.strip()
-        
-    except (EOFError, OSError, KeyboardInterrupt) as e:
-        # Si input() falla, intentar readline directo
-        sys.stdout.write("\n")
+        # readline() incluye el \n, lo quitamos
+        return line.rstrip('\n\r').strip()
+    except Exception as e:
+        sys.stdout.write(f"\n⚠️ Error leyendo: {e}\n")
         sys.stdout.flush()
-        
-        try:
-            # Método 2: readline directo
-            sys.stdout.write(prompt)
-            sys.stdout.flush()
-            result = sys.stdin.readline()
-            sys.stdout.flush()
-            return result.strip()
-            
-        except Exception as e2:
-            # Método 3: Fallback para Windows con msvcrt
-            if sys.platform == "win32":
-                try:
-                    import msvcrt
-                    sys.stdout.write(prompt)
-                    sys.stdout.flush()
-                    
-                    chars = []
-                    while True:
-                        if msvcrt.kbhit():
-                            char = msvcrt.getwche()
-                            if char == '\r':  # Enter
-                                sys.stdout.write('\n')
-                                sys.stdout.flush()
-                                break
-                            elif char == '\b':  # Backspace
-                                if chars:
-                                    chars.pop()
-                                    sys.stdout.write('\b \b')
-                                    sys.stdout.flush()
-                            else:
-                                chars.append(char)
-                        time.sleep(0.01)
-                    
-                    result = ''.join(chars)
-                    return result.strip()
-                    
-                except ImportError:
-                    pass
-            
-            # Si todo falla, devolver string vacío
-            print("\n⚠️ Error leyendo input - usando valor por defecto")
-            sys.stdout.flush()
-            return ""
+        return ""
 
 # ===============================================================================
 #  DATA MODELS (SIMPLIFICADO)
@@ -467,11 +417,11 @@ class VuelosBotUnified:
         logger.info("✅ Bot detenido")
 
 # ===============================================================================
-#  SETUP WIZARD - CON SAFE_INPUT
+#  SETUP WIZARD - SOLO READLINE
 # ===============================================================================
 
 def run_setup_wizard():
-    """Asistente de configuración inicial con safe_input."""
+    """Asistente de configuración - SOLO usa readline()."""
     print("\n" + "="*70)
     sys.stdout.flush()
     print(f"{APP_NAME} v{VERSION} - Setup Wizard".center(70))
@@ -489,7 +439,7 @@ def run_setup_wizard():
     print("   Obtén tu token de @BotFather\n")
     sys.stdout.flush()
     
-    # Usar safe_input en lugar de input()
+    # Usar safe_input (que ahora usa SOLO readline)
     token = safe_input("   Token: ")
     print()  # Línea vacía
     sys.stdout.flush()
@@ -504,8 +454,8 @@ def run_setup_wizard():
         sys.stdout.flush()
         sys.exit(1)
     
-    # PASO 2: API KEYS
-    print("2️⃣ API Keys (opcional - presiona Enter para saltar)\n")
+    # PASO 2: API KEYS (simplificado)
+    print("2️⃣ API Keys (opcional)\n")
     sys.stdout.flush()
     
     use_apis = safe_input("   ¿Configurar APIs de búsqueda? (s/n): ").lower()
@@ -516,7 +466,7 @@ def run_setup_wizard():
         print("   Configurando APIs...\n")
         sys.stdout.flush()
         
-        sk = safe_input("   Skyscanner API Key (o Enter para saltar): ")
+        sk = safe_input("   Skyscanner API Key (Enter para saltar): ")
         print()  # Línea vacía
         sys.stdout.flush()
         
