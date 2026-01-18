@@ -19,7 +19,7 @@
 ✅ MODO DEMO - Testing sin API keys
 ✅ CONFIGURACIÓN INTEGRADA - Setup wizard
 
-👨‍💻 Autor: @Juanka_Spain | 📅 2026-01-17 | 📋 MIT License
+👨‍💻 Autor: @Juanka_Spain | 📅 2026-01-18 | 📋 MIT License
 """
 
 # ===============================================================================
@@ -76,10 +76,10 @@ except ImportError:
 #  CONFIGURATION & CONSTANTS
 # ===============================================================================
 
-VERSION = "15.0.10"
+VERSION = "15.0.11"
 APP_NAME = "🛫 VuelosBot Unified"
 AUTHOR = "@Juanka_Spain"
-RELEASE_DATE = "2026-01-17"
+RELEASE_DATE = "2026-01-18"
 
 # Paths
 BASE_DIR = Path(__file__).parent
@@ -109,6 +109,78 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# ===============================================================================
+#  SAFE INPUT - COMPATIBLE CON WINDOWS/GIT BASH
+# ===============================================================================
+
+def safe_input(prompt: str, timeout: int = 30) -> str:
+    """
+    Input seguro compatible con Windows/Git Bash/PowerShell.
+    
+    Intenta múltiples métodos para obtener input del usuario:
+    1. input() estándar
+    2. sys.stdin.readline() directo
+    3. Fallback a método específico de Windows (msvcrt)
+    """
+    # Flush antes de mostrar el prompt
+    sys.stdout.write(prompt)
+    sys.stdout.flush()
+    
+    try:
+        # Método 1: input() estándar con flush
+        result = input()
+        sys.stdout.flush()
+        return result.strip()
+        
+    except (EOFError, OSError, KeyboardInterrupt) as e:
+        # Si input() falla, intentar readline directo
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+        
+        try:
+            # Método 2: readline directo
+            sys.stdout.write(prompt)
+            sys.stdout.flush()
+            result = sys.stdin.readline()
+            sys.stdout.flush()
+            return result.strip()
+            
+        except Exception as e2:
+            # Método 3: Fallback para Windows con msvcrt
+            if sys.platform == "win32":
+                try:
+                    import msvcrt
+                    sys.stdout.write(prompt)
+                    sys.stdout.flush()
+                    
+                    chars = []
+                    while True:
+                        if msvcrt.kbhit():
+                            char = msvcrt.getwche()
+                            if char == '\r':  # Enter
+                                sys.stdout.write('\n')
+                                sys.stdout.flush()
+                                break
+                            elif char == '\b':  # Backspace
+                                if chars:
+                                    chars.pop()
+                                    sys.stdout.write('\b \b')
+                                    sys.stdout.flush()
+                            else:
+                                chars.append(char)
+                        time.sleep(0.01)
+                    
+                    result = ''.join(chars)
+                    return result.strip()
+                    
+                except ImportError:
+                    pass
+            
+            # Si todo falla, devolver string vacío
+            print("\n⚠️ Error leyendo input - usando valor por defecto")
+            sys.stdout.flush()
+            return ""
 
 # ===============================================================================
 #  DATA MODELS (SIMPLIFICADO)
@@ -395,11 +467,11 @@ class VuelosBotUnified:
         logger.info("✅ Bot detenido")
 
 # ===============================================================================
-#  SETUP WIZARD - CON FLUSH AGRESIVO
+#  SETUP WIZARD - CON SAFE_INPUT
 # ===============================================================================
 
 def run_setup_wizard():
-    """Asistente de configuración inicial con flush agresivo."""
+    """Asistente de configuración inicial con safe_input."""
     print("\n" + "="*70)
     sys.stdout.flush()
     print(f"{APP_NAME} v{VERSION} - Setup Wizard".center(70))
@@ -417,29 +489,26 @@ def run_setup_wizard():
     print("   Obtén tu token de @BotFather\n")
     sys.stdout.flush()
     
-    # Input con flush inmediato después
-    token = input("   Token: ").strip()
-    sys.stdout.flush()
+    # Usar safe_input en lugar de input()
+    token = safe_input("   Token: ")
     print()  # Línea vacía
     sys.stdout.flush()
     
     if token:
         config.set('telegram.token', token)
         config.set('features.demo_mode', True)
-        print("   ✅ Token guardado correctamente")
+        print("   ✅ Token guardado correctamente\n")
         sys.stdout.flush()
     else:
-        print("   ❌ Token requerido - Configuración cancelada")
+        print("   ❌ Token requerido - Configuración cancelada\n")
         sys.stdout.flush()
         sys.exit(1)
     
     # PASO 2: API KEYS
-    print("\n2️⃣ API Keys (opcional - presiona Enter para saltar)\n")
+    print("2️⃣ API Keys (opcional - presiona Enter para saltar)\n")
     sys.stdout.flush()
     
-    # Input con flush inmediato después
-    use_apis = input("   ¿Configurar APIs de búsqueda? (s/n): ").strip().lower()
-    sys.stdout.flush()
+    use_apis = safe_input("   ¿Configurar APIs de búsqueda? (s/n): ").lower()
     print()  # Línea vacía
     sys.stdout.flush()
     
@@ -447,26 +516,25 @@ def run_setup_wizard():
         print("   Configurando APIs...\n")
         sys.stdout.flush()
         
-        sk = input("   Skyscanner API Key (o Enter para saltar): ").strip()
-        sys.stdout.flush()
+        sk = safe_input("   Skyscanner API Key (o Enter para saltar): ")
         print()  # Línea vacía
         sys.stdout.flush()
         
         if sk:
             config.set('api_keys.skyscanner', sk)
-            print("   ✅ Skyscanner configurado")
+            print("   ✅ Skyscanner configurado\n")
             sys.stdout.flush()
         
         config.set('features.demo_mode', not bool(sk))
-        print("\n   ✅ APIs configuradas")
+        print("   ✅ APIs configuradas\n")
         sys.stdout.flush()
     else:
-        print("   ⚠️ Modo DEMO activado (sin APIs reales)")
+        print("   ⚠️ Modo DEMO activado (sin APIs reales)\n")
         sys.stdout.flush()
     
     # FINALIZACIÓN
     config.save()
-    print("\n" + "="*70)
+    print("="*70)
     sys.stdout.flush()
     print("✅ Configuración completada exitosamente!".center(70))
     sys.stdout.flush()
