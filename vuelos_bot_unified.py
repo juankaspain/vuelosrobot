@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 """
 ===============================================================================
-   🚀 VUELOS BOT v16.0 - ULTRA PROFESSIONAL EDITION 🚀
+   🚀 VUELOS BOT v16.0.1 - ULTRA PROFESSIONAL EDITION 🚀
    Bot Premium de Telegram para Búsqueda de Vuelos
 ===============================================================================
 
-✨ CARACTERÍSTICAS v16.0:
+✨ CARACTERÍSTICAS v16.0.1:
 -------------------------------------------------------------------------------
 🎨 ULTRA PROFESSIONAL UI - Diseño visual impresionante
 ⚡ BÚSQUEDA INTERACTIVA - Paso a paso intuitivo
@@ -64,7 +64,7 @@ except ImportError:
 #  CONFIGURATION
 # ===============================================================================
 
-VERSION = "16.0.0"
+VERSION = "16.0.1"
 APP_NAME = "✈️ VuelosBot Ultra Pro"
 AUTHOR = "@Juanka_Spain"
 RELEASE_DATE = "2026-01-18"
@@ -284,10 +284,29 @@ class UserManager:
         return False
 
 # ===============================================================================
-#  HANDLERS - ULTRA PROFESSIONAL
+#  UTILITY FUNCTIONS
 # ===============================================================================
 
 user_manager = UserManager()
+
+async def send_or_edit(update: Update, text: str, reply_markup: InlineKeyboardMarkup = None):
+    """Envía o edita mensaje dependiendo del tipo de update"""
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            text=text,
+            reply_markup=reply_markup,
+            parse_mode=ParseMode.MARKDOWN
+        )
+    else:
+        await update.message.reply_text(
+            text=text,
+            reply_markup=reply_markup,
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+# ===============================================================================
+#  HANDLERS - ULTRA PROFESSIONAL
+# ===============================================================================
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Comando /start - Bienvenida Ultra Profesional"""
@@ -342,18 +361,11 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 👇 **Usa los botones para comenzar:**
     """
     
-    await update.message.reply_text(
-        text,
-        reply_markup=reply_markup,
-        parse_mode=ParseMode.MARKDOWN
-    )
-    
+    await send_or_edit(update, text, reply_markup)
     logger.info(f"✅ START - Usuario {user.id} ({user.first_name})")
 
 async def cmd_chollos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Comando /chollos - Mostrar chollos con diseño premium"""
-    
-    # Seleccionar 5 chollos aleatorios
     deals = random.sample(POPULAR_ROUTES, min(5, len(POPULAR_ROUTES)))
     
     text = """
@@ -369,7 +381,6 @@ async def cmd_chollos(update: Update, context: ContextTypes.DEFAULT_TYPE):
         discount = int(((deal["avg"] - deal["price"]) / deal["avg"]) * 100)
         savings = deal["avg"] - deal["price"]
         stars = "⭐" * min(5, discount // 10)
-        
         stops_text = "✈️ Directo" if deal["stops"] == 0 else f"🔄 {deal['stops']} escala(s)"
         
         text += f"""
@@ -394,28 +405,15 @@ async def cmd_chollos(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("« Volver al Menú", callback_data="menu_main")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
     text += "\n💡 _Datos actualizados cada 2 horas_"
     
-    if update.callback_query:
-        await update.callback_query.message.reply_text(
-            text,
-            reply_markup=reply_markup,
-            parse_mode=ParseMode.MARKDOWN
-        )
-    else:
-        await update.message.reply_text(
-            text,
-            reply_markup=reply_markup,
-            parse_mode=ParseMode.MARKDOWN
-        )
+    await send_or_edit(update, text, reply_markup)
 
 async def cmd_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Dashboard personal ultra completo"""
     user = update.effective_user
     user_data = user_manager.get_or_create(user.id, user.username, user.first_name)
     
-    # Calcular progreso al siguiente nivel
     current_level_points = (user_data["level"] - 1) * 100
     next_level_points = user_data["level"] * 100
     progress = user_data["points"] - current_level_points
@@ -423,7 +421,6 @@ async def cmd_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     filled = int((progress / 100) * progress_bar_length)
     bar = "█" * filled + "░" * (progress_bar_length - filled)
     
-    # Calcular días activo
     created = datetime.fromisoformat(user_data["created_at"])
     days_active = (datetime.now() - created).days + 1
     
@@ -454,7 +451,6 @@ async def cmd_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 """
     
-    # Mostrar últimos logros
     user_achievements = user_data["achievements"][-3:] if user_data["achievements"] else []
     if user_achievements:
         for ach_id in user_achievements:
@@ -473,18 +469,7 @@ async def cmd_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    if update.callback_query:
-        await update.callback_query.message.reply_text(
-            text,
-            reply_markup=reply_markup,
-            parse_mode=ParseMode.MARKDOWN
-        )
-    else:
-        await update.message.reply_text(
-            text,
-            reply_markup=reply_markup,
-            parse_mode=ParseMode.MARKDOWN
-        )
+    await send_or_edit(update, text, reply_markup)
 
 async def cmd_logros(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Mostrar sistema de logros"""
@@ -524,18 +509,7 @@ async def cmd_logros(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    if update.callback_query:
-        await update.callback_query.message.reply_text(
-            text,
-            reply_markup=reply_markup,
-            parse_mode=ParseMode.MARKDOWN
-        )
-    else:
-        await update.message.reply_text(
-            text,
-            reply_markup=reply_markup,
-            parse_mode=ParseMode.MARKDOWN
-        )
+    await send_or_edit(update, text, reply_markup)
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Ayuda profesional"""
@@ -597,18 +571,7 @@ Perfecto para probar todas las funciones.
     keyboard = [[InlineKeyboardButton("« Volver al Menú", callback_data="menu_main")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    if update.callback_query:
-        await update.callback_query.message.reply_text(
-            text,
-            reply_markup=reply_markup,
-            parse_mode=ParseMode.MARKDOWN
-        )
-    else:
-        await update.message.reply_text(
-            text,
-            reply_markup=reply_markup,
-            parse_mode=ParseMode.MARKDOWN
-        )
+    await send_or_edit(update, text, reply_markup)
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler para todos los botones"""
@@ -617,6 +580,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     data = query.data
     
+    # Enrutar a la función correcta
     if data == "menu_main":
         await cmd_start(update, context)
     elif data == "menu_chollos":
@@ -648,11 +612,7 @@ Estoy preparando una experiencia de búsqueda increíble paso a paso.
             [InlineKeyboardButton("🔥 Ver Chollos", callback_data="menu_chollos")],
             [InlineKeyboardButton("« Volver", callback_data="menu_main")]
         ]
-        await query.message.reply_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode=ParseMode.MARKDOWN
-        )
+        await send_or_edit(update, text, InlineKeyboardMarkup(keyboard))
     elif data == "menu_alertas":
         text = """
 🔔 **SISTEMA DE ALERTAS**
@@ -674,11 +634,7 @@ El sistema de alertas te permitirá:
             [InlineKeyboardButton("🔥 Ver Chollos", callback_data="menu_chollos")],
             [InlineKeyboardButton("« Volver", callback_data="menu_main")]
         ]
-        await query.message.reply_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode=ParseMode.MARKDOWN
-        )
+        await send_or_edit(update, text, InlineKeyboardMarkup(keyboard))
 
 # ===============================================================================
 #  BOT MAIN CLASS
