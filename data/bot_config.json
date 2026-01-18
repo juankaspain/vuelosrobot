@@ -1,0 +1,23 @@
+{
+  "telegram": {
+    "token": "",
+    "admin_users": []
+  },
+  "api_keys": {
+    "skyscanner": "",
+    "kiwi": "",
+    "google_flights": ""
+  },
+  "features": {
+    "demo_mode": true,
+    "max_alerts_per_user": 5,
+    "max_searches_per_day": 20,
+    "cache_ttl_hours": 6,
+    "alert_check_interval_hours": 2
+  },
+  "defaults": {
+    "currency": "EUR",
+    "language": "es",
+    "cabin_class": "economy"
+  }
+}
