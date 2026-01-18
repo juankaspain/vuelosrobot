@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 r"""
 ===============================================================================
-   🚀 VUELOS BOT v16.0.3 - ULTRA PROFESSIONAL EDITION 🚀
+   🚀 VUELOS BOT v16.0.4 - ULTRA PROFESSIONAL EDITION 🚀
    Bot Premium de Telegram para Búsqueda de Vuelos
 ===============================================================================
 
-✨ CARACTERÍSTICAS v16.0.3:
+✨ CARACTERÍSTICAS v16.0.4:
 -------------------------------------------------------------------------------
 🎨 ULTRA PROFESSIONAL UI - Diseño visual impresionante
 ⚡ BÚSQUEDA INTERACTIVA - Paso a paso intuitivo
@@ -64,7 +64,7 @@ except ImportError:
 #  CONFIGURATION
 # ===============================================================================
 
-VERSION = "16.0.3"
+VERSION = "16.0.4"
 APP_NAME = "✈️ VuelosBot Ultra Pro"
 AUTHOR = "@Juanka_Spain"
 RELEASE_DATE = "2026-01-18"
@@ -512,58 +512,46 @@ async def cmd_logros(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_or_edit(update, text, reply_markup)
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ayuda profesional"""
-    text = rf"""
-📖 **GUÍA COMPLETA** - {APP_NAME}
+    """Ayuda profesional - SIN Markdown complejo"""
+    text = f"""
+📖 GUÍA COMPLETA
+{APP_NAME}
 
 ━━━━━━━━━━━━━━━━━━━━
-⚡ **COMANDOS PRINCIPALES**
+⚡ COMANDOS PRINCIPALES
 ━━━━━━━━━━━━━━━━━━━━
 
 /start - Menú principal
-/buscar - Buscar vuelos
 /chollos - Ver mejores ofertas
-/alertas - Gestionar alertas
 /dashboard - Tu perfil y estadísticas
 /logros - Sistema de logros
 /help - Esta ayuda
 
 ━━━━━━━━━━━━━━━━━━━━
-🎯 **CÓMO FUNCIONA**
+🎯 CÓMO FUNCIONA
 ━━━━━━━━━━━━━━━━━━━━
 
-**Búsqueda Rápida**
-   Usa /buscar y sigue los pasos
-
-**Ver Chollos**
-   Revisa las mejores ofertas del momento
-
-**Crear Alertas**
-   Te notificamos cuando hay buenos precios
-
-**Ganar Puntos**
-   Sube de nivel y desbloquea logros
+• Busca vuelos ultra baratos
+• Detecta chollos automáticamente
+• Crea alertas personalizadas
+• Gana puntos y sube de nivel
+• Desbloquea logros
 
 ━━━━━━━━━━━━━━━━━━━━
-💡 **CONSEJOS PRO**
+💡 CONSEJOS PRO
 ━━━━━━━━━━━━━━━━━━━━
 
-• Activa varias alertas para no perder chollos
-• Busca con fechas flexibles para mejores precios
-• Los martes y miércoles suelen ser más baratos
-• Reserva con 2\-3 meses de antelación
-
-━━━━━━━━━━━━━━━━━━━━
-🎮 **MODO DEMO ACTIVO**
-━━━━━━━━━━━━━━━━━━━━
-
-Estás usando el modo demo con datos simulados\.
-Perfecto para probar todas las funciones\.
+• Martes y miércoles = mejores precios
+• Reserva con 2-3 meses de antelación
+• Vuelos nocturnos más baratos
+• Compara aeropuertos cercanos
+• Activa alertas para chollos
 
 ━━━━━━━━━━━━━━━━━━━━
 
+🎮 Modo: DEMO (datos simulados)
 📱 Versión: {VERSION}
-👨‍💻 Desarrollado por {AUTHOR}
+👨‍💻 Por: {AUTHOR}
 
 ¿Necesitas más ayuda? ¡Pregúntame!
     """
@@ -571,7 +559,17 @@ Perfecto para probar todas las funciones\.
     keyboard = [[InlineKeyboardButton("« Volver al Menú", callback_data="menu_main")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await send_or_edit(update, text, reply_markup)
+    # SIN ParseMode.MARKDOWN para evitar errores
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            text=text,
+            reply_markup=reply_markup
+        )
+    else:
+        await update.message.reply_text(
+            text=text,
+            reply_markup=reply_markup
+        )
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler para todos los botones"""
@@ -592,16 +590,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "menu_ayuda":
         await cmd_help(update, context)
     elif data == "menu_buscar":
-        text = r"""
-✈️ **BÚSQUEDA DE VUELOS**
+        text = """
+✈️ BÚSQUEDA DE VUELOS
 
 ━━━━━━━━━━━━━━━━━━━━
 
-🔍 **Próximamente: Búsqueda Interactiva**
+🔍 Próximamente: Búsqueda Interactiva
 
 Estoy preparando una experiencia de búsqueda increíble paso a paso.
 
-📝 **Por ahora, puedes:**
+📝 Por ahora, puedes:
 • Ver los mejores chollos activos
 • Crear alertas personalizadas
 • Explorar destinos populares
@@ -612,14 +610,14 @@ Estoy preparando una experiencia de búsqueda increíble paso a paso.
             [InlineKeyboardButton("🔥 Ver Chollos", callback_data="menu_chollos")],
             [InlineKeyboardButton("« Volver", callback_data="menu_main")]
         ]
-        await send_or_edit(update, text, InlineKeyboardMarkup(keyboard))
+        await query.edit_message_text(text=text, reply_markup=InlineKeyboardMarkup(keyboard))
     elif data == "menu_alertas":
         text = """
-🔔 **SISTEMA DE ALERTAS**
+🔔 SISTEMA DE ALERTAS
 
 ━━━━━━━━━━━━━━━━━━━━
 
-📢 **Próximamente: Alertas Personalizadas**
+📢 Próximamente: Alertas Personalizadas
 
 El sistema de alertas te permitirá:
 
@@ -634,7 +632,7 @@ El sistema de alertas te permitirá:
             [InlineKeyboardButton("🔥 Ver Chollos", callback_data="menu_chollos")],
             [InlineKeyboardButton("« Volver", callback_data="menu_main")]
         ]
-        await send_or_edit(update, text, InlineKeyboardMarkup(keyboard))
+        await query.edit_message_text(text=text, reply_markup=InlineKeyboardMarkup(keyboard))
 
 # ===============================================================================
 #  BOT MAIN CLASS
